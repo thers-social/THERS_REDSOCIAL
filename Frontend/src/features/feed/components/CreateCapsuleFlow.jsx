@@ -5,15 +5,19 @@ import Spinner from "@shared/components/Spinner";
 import { getErrorMessage } from "@shared/lib/api";
 import { useToast } from "@shared/components/Toast";
 import { useLanguage } from "@shared/i18n";
+import ImageAttachmentPicker from "@shared/components/ImageAttachmentPicker";
+import useImageAttachments from "@shared/hooks/useImageAttachments";
 
-// POST /api/posts (ADR-004-posts-minimal-model.md) acepta `content` y, desde
-// ADR-030, `is_sensitive` -- mood/imagen/ubicación que este composer ofrecía
-// antes no tienen dónde persistirse todavía, así que se quitan del formulario
-// en vez de dejar que la persona los llene y se pierdan en silencio (peor que
-// no mostrarlos). Vuelven cuando cada uno tenga su propio ADR/columna. Los
-// hashtags no necesitan campo: se escriben en el texto (`#viajes`) y es ahí
-// donde los reconocen los temas silenciados.
+// POST /api/posts (ADR-004-posts-minimal-model.md) acepta `content`, desde
+// ADR-030 `is_sensitive` y, desde ADR-039, hasta 4 imágenes -- mood/ubicación
+// que este composer ofrecía antes no tienen dónde persistirse todavía, así que
+// se quitan del formulario en vez de dejar que la persona los llene y se pierdan
+// en silencio (peor que no mostrarlos). Vuelven cuando cada uno tenga su propio
+// ADR/columna. Los hashtags no necesitan campo: se escriben en el texto
+// (`#viajes`) y es ahí donde los reconocen los temas silenciados.
 const MAX_CONTENT_LENGTH = 2000;
+const MAX_IMAGES = 4;
+const MAX_IMAGE_SIDE = 1600;
 
 export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
   const [content, setContent] = useState("");
@@ -24,15 +28,23 @@ export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
   const toast = useToast();
   const { t } = useLanguage();
 
+  const images = useImageAttachments({ max: MAX_IMAGES, maxSide: MAX_IMAGE_SIDE });
+
   const trimmedLength = content.trim().length;
-  const canPublish = trimmedLength > 0 && trimmedLength <= MAX_CONTENT_LENGTH && !isSubmitting;
+  // Con imágenes el texto es opcional (se puede publicar solo una foto).
+  const hasContent = trimmedLength > 0 || images.items.length > 0;
+  const canPublish =
+    hasContent &&
+    trimmedLength <= MAX_CONTENT_LENGTH &&
+    !isSubmitting &&
+    !images.processing;
 
   const handlePublish = async () => {
     if (!canPublish) return;
 
     setIsSubmitting(true);
     try {
-      await onSubmit(content.trim(), isSensitive);
+      await onSubmit(content.trim(), isSensitive, images.files);
     } catch (error) {
       toast.error(getErrorMessage(error, t));
     } finally {
@@ -78,6 +90,18 @@ export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
             className="w-full bg-transparent text-ink dark:text-ink-dark placeholder-muted resize-none focus:outline-none text-lg disabled:opacity-60"
           />
 
+          <div className="mt-3">
+            <ImageAttachmentPicker
+              items={images.items}
+              max={MAX_IMAGES}
+              processing={images.processing}
+              disabled={isSubmitting}
+              error={images.error}
+              onAdd={images.add}
+              onRemove={images.remove}
+            />
+          </div>
+
           <label className="flex items-start gap-2 mt-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -96,7 +120,7 @@ export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
 
           <div className="flex items-center justify-between mt-2">
             <p className="text-xs text-muted dark:text-muted-dark">
-              Fotos, video, música, mood y ubicación llegan pronto.
+              Video, música, mood y ubicación llegan pronto.
             </p>
             <span
               className={`text-xs shrink-0 ml-3 ${

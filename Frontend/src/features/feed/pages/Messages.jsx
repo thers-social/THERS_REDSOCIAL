@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
-import { IoSearchOutline, IoArrowBack, IoSend, IoChatbubblesOutline, IoTrashOutline, IoPencilOutline } from "react-icons/io5";
+import { IoSearchOutline, IoArrowBack, IoImageOutline, IoSend, IoChatbubblesOutline, IoTrashOutline, IoPencilOutline } from "react-icons/io5";
 import Avatar from "@shared/components/Avatar";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
+import ImageAttachmentPicker from "@shared/components/ImageAttachmentPicker";
+import ImageGrid from "@shared/components/ImageGrid";
+import useImageAttachments from "@shared/hooks/useImageAttachments";
+import { ACCEPTED_IMAGE_TYPES } from "@shared/lib/imageAttachments";
 import { api, getErrorMessage } from "@shared/lib/api";
 import { getStoredToken } from "@features/auth";
 import { useToast } from "@shared/components/Toast";
@@ -39,6 +43,9 @@ const THREAD_POLL_MS = 4000;
 // intervalo más corto para esto que para el hilo en sí.
 const TYPING_POLL_MS = 2000;
 const TYPING_PING_MIN_INTERVAL_MS = 2000;
+// Una imagen por mensaje (ADR-039), más chica que en una publicación.
+const MAX_MESSAGE_IMAGES = 1;
+const MAX_MESSAGE_IMAGE_SIDE = 1280;
 
 export default function Messages() {
   const { currentUser, conversations, onReloadConversations } = useOutletContext();
@@ -51,6 +58,8 @@ export default function Messages() {
   const [threadLoading, setThreadLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const imageInputRef = useRef(null);
+  const image = useImageAttachments({ max: MAX_MESSAGE_IMAGES, maxSide: MAX_MESSAGE_IMAGE_SIDE });
   const [search, setSearch] = useState("");
   // Mensaje pendiente de confirmar para borrar (ADR-014). `null` = diálogo
   // cerrado. Se guarda el id, no un booleano, para saber cuál borrar al confirmar.
@@ -167,6 +176,13 @@ export default function Messages() {
     threadEndRef.current?.scrollIntoView({ block: "end" });
   }, [thread]);
 
+  // Cambiar de conversación descarta la imagen que se estaba preparando: no
+  // debe viajar a otra persona por haber quedado en la barra (ADR-039).
+  const selectConversation = (id) => {
+    image.clear();
+    setActiveId(id);
+  };
+
   const handleDraftChange = (e) => {
     setDraft(e.target.value);
     if (!activeId) return;
@@ -183,17 +199,21 @@ export default function Messages() {
   const handleSend = async (e) => {
     e.preventDefault();
     const content = draft.trim();
-    if (!content || !active || sending) return;
+    // Con imagen el texto es opcional (ADR-039).
+    if ((!content && image.files.length === 0) || !active || sending || image.processing) return;
 
     setSending(true);
     try {
-      const res = await api.post(
-        `/users/${activeId}/messages`,
-        { content },
-        { headers: authHeaders() }
-      );
+      let body = { content };
+      if (image.files.length > 0) {
+        body = new FormData();
+        body.append("content", content);
+        image.files.forEach((file) => body.append("images", file));
+      }
+      const res = await api.post(`/users/${activeId}/messages`, body, { headers: authHeaders() });
       setThread((prev) => [...prev, res.data.message]);
       setDraft("");
+      image.clear();
       setDraftConversation(null);
       onReloadConversations();
     } catch (error) {
@@ -291,7 +311,7 @@ export default function Messages() {
             {filtered.map((conversation) => (
               <button
                 key={conversation.user.id}
-                onClick={() => setActiveId(conversation.user.id)}
+                onClick={() => selectConversation(conversation.user.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-canvas dark:hover:bg-canvas-dark transition ${
                   activeId === conversation.user.id ? "bg-pulse-50 dark:bg-pulse-900/20" : ""
                 }`}
@@ -306,7 +326,10 @@ export default function Messages() {
                       {formatRelativeTime(conversation.last_message.created_at)}
                     </span>
                   </div>
-                  <p className="text-muted text-xs truncate">{conversation.last_message.content}</p>
+                  <p className="text-muted text-xs truncate">
+                    {conversation.last_message.content ||
+                      (conversation.last_message.has_image ? "📷 Foto" : "")}
+                  </p>
                 </div>
                 {conversation.unread_count > 0 && (
                   <span className="shrink-0 w-5 h-5 rounded-full bg-pulse-600 text-white text-[10px] font-bold flex items-center justify-center">
@@ -323,7 +346,7 @@ export default function Messages() {
             <>
               <div className="flex items-center gap-3 px-4 py-3 border-b border-line dark:border-line-dark">
                 <button
-                  onClick={() => setActiveId(null)}
+                  onClick={() => selectConversation(null)}
                   aria-label="Volver a conversaciones"
                   className="md:hidden text-muted p-1 -ml-1"
                 >
@@ -433,7 +456,17 @@ export default function Messages() {
                                 : "bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark rounded-bl-md"
                             }`}
                           >
-                            {message.content}
+                            {/* Imagen adjunta (ADR-039). */}
+                            <ImageGrid
+                              images={message.images}
+                              alt="Imagen del mensaje"
+                              compact
+                            />
+                            {message.content && (
+                              <span className={message.images?.length ? "mt-2 block" : ""}>
+                                {message.content}
+                              </span>
+                            )}
                             {/* `edited` es un booleano en el contrato
                                 (ADR-021): se dice QUE se editó, no cuándo. */}
                             {message.edited && (
@@ -456,8 +489,43 @@ export default function Messages() {
                 <div ref={threadEndRef} />
               </div>
 
-              <form onSubmit={handleSend} className="flex items-center gap-2 px-4 py-3 border-t border-line dark:border-line-dark">
+              <form onSubmit={handleSend} className="flex flex-col gap-2 px-4 py-3 border-t border-line dark:border-line-dark">
+                {(image.items.length > 0 || image.error) && (
+                  <ImageAttachmentPicker
+                    compact
+                    hideButton
+                    items={image.items}
+                    max={MAX_MESSAGE_IMAGES}
+                    processing={image.processing}
+                    disabled={sending}
+                    error={image.error}
+                    onAdd={image.add}
+                    onRemove={image.remove}
+                  />
+                )}
+                <div className="flex items-center gap-2">
                 <Avatar name={currentUser.name} photo={currentUser.avatar_url} size="w-8 h-8" />
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                  onChange={(e) => {
+                    image.add(e.target.files);
+                    e.target.value = "";
+                  }}
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                />
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={sending || image.processing || image.items.length >= MAX_MESSAGE_IMAGES}
+                  aria-label="Adjuntar una foto"
+                  className="shrink-0 rounded-full p-2 text-muted transition hover:text-pulse-600 disabled:opacity-40"
+                >
+                  <IoImageOutline size={20} />
+                </button>
                 <input
                   type="text"
                   value={draft}
@@ -468,16 +536,17 @@ export default function Messages() {
                 />
                 <button
                   type="submit"
-                  disabled={!draft.trim() || sending}
+                  disabled={(!draft.trim() && image.files.length === 0) || sending || image.processing}
                   aria-label="Enviar mensaje"
                   className={`p-2.5 rounded-full transition ${
-                    draft.trim() && !sending
+                    (draft.trim() || image.files.length > 0) && !sending && !image.processing
                       ? "bg-pulse-600 text-white hover:bg-pulse-700"
                       : "bg-line dark:bg-line-dark text-muted"
                   }`}
                 >
                   <IoSend size={16} />
                 </button>
+                </div>
               </form>
             </>
           ) : (

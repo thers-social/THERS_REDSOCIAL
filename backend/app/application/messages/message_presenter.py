@@ -5,6 +5,7 @@
 
 
 from app.application.auth.user_presenter import to_author_summary
+from app.application.media.attachments import to_public_images
 
 
 def to_public_message(message):
@@ -13,6 +14,8 @@ def to_public_message(message):
         "sender_id": str(message.sender_id),
         "recipient_id": str(message.recipient_id),
         "content": message.content,
+        # Imagen adjunta (ADR-039): `[]` si no tiene.
+        "images": to_public_images(message.images),
         # Se expone como booleano, nunca como el timestamp `read_at` crudo
         # -- mismo criterio que `notifications.read` (ADR-008).
         "read": message.read_at is not None,
@@ -49,6 +52,9 @@ def to_public_conversation(conversation):
         },
         "last_message": {
             "content": last_message.content,
+            # Un mensaje de solo imagen tiene `content` vacío: la lista de
+            # conversaciones necesita saberlo para mostrar "Foto" (ADR-039).
+            "has_image": bool(last_message.images),
             "sender_id": str(last_message.sender_id),
             "created_at": last_message.created_at.isoformat(),
         },

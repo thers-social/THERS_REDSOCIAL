@@ -98,6 +98,12 @@ OTP_VERIFY = RateLimitRule("otp_verify", 15, 15 * _MINUTE, clear_on_success=True
 #: modera. `clear_on_success=False`: acá el acierto **es** el uso.
 REPORT_CREATE = RateLimitRule("report_create", 10, _HOUR, clear_on_success=False)
 
+#: Publicaciones y mensajes CON imágenes (ADR-039). Cada petición decodifica y
+#: re-codifica imágenes (CPU) y escribe en el almacenamiento (coste), así que el
+#: acierto es el abuso: `clear_on_success=False`, por cuenta. 40 por hora deja
+#: publicar con holgura y frena a quien intente saturar el servidor de imágenes.
+IMAGE_UPLOAD = RateLimitRule("image_upload", 40, _HOUR, clear_on_success=False)
+
 #: `POST /api/reports` con motivo `child_safety` (ADR-038). Límite PROPIO y más holgado que
 #: `REPORT_CREATE`: una persona que ya hizo varios reportes comunes no debe quedarse sin poder
 #: denunciar una explotación de menores. Sigue existiendo (no es ilimitado) para que no se use

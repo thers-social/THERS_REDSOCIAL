@@ -179,12 +179,19 @@ export default function AppShell() {
   // patrón que AuthContext.updateProfile()/Profile.jsx (getErrorMessage +
   // Toast, formulario abierto para reintentar).
   // `isSensitive` (ADR-030): lo que el autor declara al publicar.
-  const handleCreateCapsule = async (content, isSensitive = false) => {
-    const res = await api.post(
-      "/posts",
-      { content, is_sensitive: isSensitive },
-      { headers: authHeaders() }
-    );
+  //
+  // `images` (ADR-039): sin imágenes se manda JSON, como siempre; con ellas,
+  // multipart/form-data (el navegador pone el boundary solo, por eso no se fija
+  // `Content-Type` a mano).
+  const handleCreateCapsule = async (content, isSensitive = false, images = []) => {
+    let body = { content, is_sensitive: isSensitive };
+    if (images.length > 0) {
+      body = new FormData();
+      body.append("content", content);
+      body.append("is_sensitive", String(isSensitive));
+      images.forEach((file) => body.append("images", file));
+    }
+    const res = await api.post("/posts", body, { headers: authHeaders() });
     setCapsules((prev) => [res.data.post, ...prev]);
     setComposerOpen(false);
   };
