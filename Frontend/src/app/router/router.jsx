@@ -1,5 +1,10 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
+// Pantallas de entrada (landing y flujo de auth): van en el bundle inicial porque
+// son lo primero que ve un visitante. Todo lo demás se descarga al navegar
+// (Core Web Vitals, LAUNCH_CHECKLIST §3): la app tras el login, las páginas
+// públicas, la ayuda, los textos legales y la moderación no pesan en la primera carga.
 import {
   AuthPage,
   Login,
@@ -11,43 +16,70 @@ import {
   TwoFactorChallenge,
   CompleteProfile,
 } from "@features/auth";
-import { Terms, Privacy, Cookies, ChildSafety } from "@features/legal";
-import { DeleteAccount } from "@features/account";
-import { Moderation } from "@features/moderation";
-import {
-  Information,
-  HowItWorks,
-  Community,
-  Security,
-  Faq,
-  Blog,
-  Locations,
-  Popular,
-  ImportContacts,
-} from "@features/public";
-import { HelpLayout, HelpCenter, HelpCategoryPage, HelpArticlePage, HelpSearchPage } from "@features/help";
-import {
-  Home,
-  Search,
-  Videos,
-  Capsules,
-  Radar,
-  Messages,
-  Notifications,
-  Profile,
-  SettingsLayout,
-  SettingsSectionPage,
-} from "@features/feed";
-import AppShell from "@/app/layout/AppShell";
-import PublicLayout from "@/app/layout/PublicLayout";
+import Spinner from "@shared/components/Spinner";
 import ProtectedRoute from "./ProtectedRoute";
 import RouteSeo from "@/shared/seo/RouteSeo";
 import NotFound from "@/shared/seo/NotFound";
+
+// Cada barril `@features/*` se convierte en su propio chunk. `named` toma un
+// export con nombre del barril y lo adapta a lo que espera React.lazy.
+const named = (load, name) => lazy(() => load().then((m) => ({ default: m[name] })));
+
+const loadLegal = () => import("@features/legal");
+const loadPublic = () => import("@features/public");
+const loadHelp = () => import("@features/help");
+const loadFeed = () => import("@features/feed");
+
+const Terms = named(loadLegal, "Terms");
+const Privacy = named(loadLegal, "Privacy");
+const Cookies = named(loadLegal, "Cookies");
+const ChildSafety = named(loadLegal, "ChildSafety");
+const DeleteAccount = named(() => import("@features/account"), "DeleteAccount");
+const Moderation = named(() => import("@features/moderation"), "Moderation");
+
+const Information = named(loadPublic, "Information");
+const HowItWorks = named(loadPublic, "HowItWorks");
+const Community = named(loadPublic, "Community");
+const Security = named(loadPublic, "Security");
+const Faq = named(loadPublic, "Faq");
+const Blog = named(loadPublic, "Blog");
+const Locations = named(loadPublic, "Locations");
+const Popular = named(loadPublic, "Popular");
+const ImportContacts = named(loadPublic, "ImportContacts");
+
+const HelpLayout = named(loadHelp, "HelpLayout");
+const HelpCenter = named(loadHelp, "HelpCenter");
+const HelpCategoryPage = named(loadHelp, "HelpCategoryPage");
+const HelpArticlePage = named(loadHelp, "HelpArticlePage");
+const HelpSearchPage = named(loadHelp, "HelpSearchPage");
+
+const Home = named(loadFeed, "Home");
+const Search = named(loadFeed, "Search");
+const Videos = named(loadFeed, "Videos");
+const Capsules = named(loadFeed, "Capsules");
+const Radar = named(loadFeed, "Radar");
+const Messages = named(loadFeed, "Messages");
+const Notifications = named(loadFeed, "Notifications");
+const Profile = named(loadFeed, "Profile");
+const SettingsLayout = named(loadFeed, "SettingsLayout");
+const SettingsSectionPage = named(loadFeed, "SettingsSectionPage");
+
+const AppShell = lazy(() => import("@/app/layout/AppShell"));
+const PublicLayout = lazy(() => import("@/app/layout/PublicLayout"));
+
+function RouteFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-canvas dark:bg-canvas-dark">
+      <Spinner />
+    </div>
+  );
+}
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <RouteSeo />
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         {/* AUTH */}
         <Route path="/" element={<AuthPage />} />
@@ -132,6 +164,7 @@ export default function AppRouter() {
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

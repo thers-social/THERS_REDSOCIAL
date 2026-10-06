@@ -1,0 +1,12 @@
+# Configuración de gitleaks para el CI (job `security`).
+# Se extiende la configuración por defecto y solo se excluyen las contraseñas de
+# prueba de la suite del backend (p. ej. "brandnewpass123"), que el detector
+# genérico confunde con claves de API. Revisado el 2026-10-05: 4 hallazgos,
+# todos falsos positivos en backend/tests/. Cualquier otro hallazgo debe tratarse
+# como real: rotar la credencial antes de tocar este archivo.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Contraseñas de prueba de la suite del backend"
+paths = ['''backend/tests/.*''']
