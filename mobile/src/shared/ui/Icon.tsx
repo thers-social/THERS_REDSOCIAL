@@ -34,7 +34,10 @@ export type IconName =
   | 'archive'
   | 'link'
   | 'grid'
-  | 'userAdd';
+  | 'userAdd'
+  | 'pin'
+  | 'locate'
+  | 'phone';
 
 type Props = {
   name: IconName;
@@ -215,6 +218,21 @@ export function Icon({ name, size = 24, color, filled = false }: Props) {
           <Circle cx="9" cy="8" r="4" {...line} />
           <Path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6" {...line} />
         </>
+      ) : null}
+      {name === 'pin' ? (
+        <>
+          <Path d="M12 21s7-6.2 7-11.5a7 7 0 1 0-14 0C5 14.8 12 21 12 21z" {...line} />
+          <Circle cx="12" cy="9.5" r="2.5" {...line} />
+        </>
+      ) : null}
+      {name === 'locate' ? (
+        <>
+          <Circle cx="12" cy="12" r="4" {...line} />
+          <Path d="M12 2v3M12 19v3M2 12h3M19 12h3" {...line} />
+        </>
+      ) : null}
+      {name === 'phone' ? (
+        <Path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" {...line} />
       ) : null}
     </Svg>
   );

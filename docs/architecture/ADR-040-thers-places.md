@@ -281,3 +281,32 @@ Antes de abrir el PR, `develop` había avanzado con el PR #89 (lockfile del móv
 - **Dos cabezas de Alembic:** `a9b4c7e2d815` (imágenes) y `a7c3e9d1b504` → `b8d4f1a6c295` (Places) compartían padre `e5b8c3a7d912`. Se unieron con la migración de fusión `65a6decd96ab` (no toca el esquema), el mismo mecanismo que `f8c2d6a4b190`. **Cabeza única actual: `65a6decd96ab`.** Una base que ya tenía las migraciones de Places aplica primero la de imágenes y luego la de fusión.
 - **Un conflicto de texto** en `backend/tests/conftest.py` (lista de tablas que se vacían entre pruebas): se combinaron `media_attachments` y las tablas de Places. `policy.py` y `models.py` se fusionaron sin intervención.
 - **Móvil:** el PR #89 ya está en `develop`, así que el bloqueo del `package-lock.json` desapareció. Sigue pendiente la compilación nativa Android (§10) y la clave de MapTiler propia del móvil (§14).
+
+## 16. Fase 3 — móvil (código escrito 2026-10-08, sin verificar en un teléfono, sin commit)
+
+**Hecho (rama `feature/places-mobile`, apilada sobre `feature/places-phase1`):**
+- Dependencias nativas con las versiones que Expo fija para el SDK 57: `@maplibre/maplibre-react-native` 11.5.0 (BSD-3) y `expo-location` ~57.0.20. Plugins en `app.json`; el de ubicación con un texto de permiso que explica que solo se usa al pulsar el botón y que no se guarda.
+- `mobile/src/features/places/`: `types`, `api` (todas las llamadas autenticadas; coordenadas redondeadas a 3 decimales antes de salir), `coordinates` y `viewState` (puros, probados), `mapConfig` (`EXPO_PUBLIC_MAP_STYLE_URL`), `useGeolocation` (una lectura, precisión equilibrada, sin seguimiento ni almacenamiento), `usePlaces`, `usePlaceDetail`, `PlacesMap`, `PlaceCard`, `CategoryChips`, `ReportPlaceModal`.
+- Pantallas `app/places/index.tsx` (mapa arriba, lista abajo, búsqueda, filtro, «Buscar en esta zona», botón de ubicación) y `app/places/[id].tsx` (ficha con guardar y reportar). Entrada desde «Explorar» con una tarjeta «Lugares cerca de ti». Dos iconos nuevos (`pin`, `locate`).
+- Estados `loading / offline / error / empty / success`; en el móvil «sin red» sale de `ApiError.isNetworkError` (no hay `navigator.onLine`). La ubicación denegada es un aviso, no rompe la lista.
+
+**Verificado:** `tsc --noEmit` sin errores; `npm test` 57 pruebas (la nueva incluye la **paridad de motivos de reporte y del radio máximo con `backend/.../kinds.py`**); `expo-doctor` 20/21 (el mismo desajuste de 4 parches de Expo que ya existía; `maplibre` y `expo-location` no aparecen); `expo export --platform android` genera el bundle (1528 módulos, 3,4 MB).
+
+**NO verificado — requiere una build nativa en un teléfono:** que el mapa dibuje, que los toques sobre los pines funcionen, el permiso de ubicación real y el rendimiento. MapLibre es un módulo nativo: **no funciona en Expo Go**. Las pruebas sobre el código fuente no sustituyen esa comprobación.
+
+**Riesgos conocidos antes de compilar:**
+1. **Clave propia para el móvil.** La app nativa no envía `Origin`; la clave de la web (restringida por dominio) daría 403. Hay que crear otra clave en el proveedor y ponerla en `mobile/.env` (`EXPO_PUBLIC_MAP_STYLE_URL`, ver `mobile/.env.example`). Si el estilo no carga, la pantalla muestra «No pudimos mostrar el mapa» y la lista sigue funcionando.
+2. **Compilación Android en Windows.** Con la unidad `subst` falla el *codegen* de los módulos nativos («different roots»); el lock de `develop` ya instala `react-native-gesture-handler`, `reanimated` y `worklets`, que lo provocan. Plan: compilar desde una **copia en una ruta corta real** (sin `subst`), no editar nada del repositorio. Necesita memoria libre (la compilación anterior fue detenida por el sistema con ~1 GB libres).
+3. **Cambio nativo:** hay que regenerar `android/` (`expo prebuild`); el directorio no se versiona.
+4. **Atribución:** el mapa conserva el botón de atribución de MapLibre (requisito de la ODbL de OpenStreetMap); la prueba falla si se oculta.
+5. **El plan gratuito de MapTiler es solo no comercial** (D1): publicar exige un plan de pago o cambiar de proveedor.
+
+### 16.1 Verificación en un teléfono real (Moto Z3, Android, 2026-10-08)
+
+Build de desarrollo compilada **desde una copia en una ruta corta (`C:\th`), sin `subst`**: `BUILD SUCCESSFUL` en 6 min 42 s con Gradle limitado a 1,5 GB, solo `arm64-v8a` y 2 trabajos. La copia no incluyó `react-native-gesture-handler`, `reanimated` ni `worklets` (opcionales, sin uso, muy pesados); el lock de `develop` sí los instala, pero con la ruta corta ya no hace falta el parche del *codegen*. Se instaló, abrió y cargó el JavaScript desde Metro (1640 módulos).
+
+**Comprobado en pantalla (capturas por `adb`):** inicio de sesión; la tarjeta «Lugares cerca de ti» en «Explorar»; el mapa de MapTiler con calles reales, los pines, el botón de atribución y el logo de MapLibre; la lista con distancias y «Verificado»; la ficha del lugar; **guardar** (la base de datos pasó de 0 a 1 y volvió a 0 al quitarlo); el modal de **reporte** con sus 8 motivos y «Enviar» desactivado hasta elegir uno (no se envió ninguno); y la **búsqueda sin tildes** (`nandu` deja un solo pin y una sola tarjeta, «Ñandú»).
+
+**Hallazgos:** (1) el botón flotante con un engranaje que aparece en todas las pantallas **no es de THERS**: es el del cliente de desarrollo de Expo y desaparece en una build de producción; en esta pantalla tapa en parte el botón de ubicación. (2) La ficha usaba el icono de un enlace para el teléfono; se añadió el icono `phone`. (3) MapTiler registra avisos del estilo en la consola nativa («layer … doesn't support property»): son propiedades del estilo más nuevas que la librería, sin efecto visible. (4) **La clave de MapTiler del plan gratuito solo admite una clave:** se reutiliza la de la web añadiendo `?` a sus orígenes permitidos (la app nativa no envía `Origin`); se comprobó que sin origen y desde `localhost` responde 200, y desde un origen no permitido 403.
+
+**No comprobado:** el permiso y la lectura real de la **ubicación** (es una decisión de privacidad de la persona; no se concedió por ella), el filtro por categoría en el teléfono, el estado «sin conexión» y el comportamiento con muchos lugares.
