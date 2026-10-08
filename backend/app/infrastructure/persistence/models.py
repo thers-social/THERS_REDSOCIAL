@@ -266,6 +266,17 @@ class Post(db.Model):
     # separado.
     author = db.relationship("User", lazy="joined")
 
+    # Imágenes adjuntas (ADR-039). `selectin`: una sola consulta extra para TODA la
+    # página de posts, no una por post. El borrado lo hace PostgreSQL con
+    # ON DELETE CASCADE; la relación es de solo lectura.
+    images = db.relationship(
+        "MediaAttachment",
+        primaryjoin="Post.id == MediaAttachment.post_id",
+        order_by="MediaAttachment.position",
+        lazy="selectin",
+        viewonly=True,
+    )
+
     def __repr__(self):
         return f"<Post id={self.id} author_id={self.author_id}>"
 
@@ -568,6 +579,15 @@ class Message(db.Model):
     sender = db.relationship("User", foreign_keys=[sender_id], lazy="joined")
     recipient = db.relationship("User", foreign_keys=[recipient_id], lazy="joined")
 
+    # Imagen adjunta (ADR-039); misma estrategia de carga que `Post.images`.
+    images = db.relationship(
+        "MediaAttachment",
+        primaryjoin="Message.id == MediaAttachment.message_id",
+        order_by="MediaAttachment.position",
+        lazy="selectin",
+        viewonly=True,
+    )
+
     __table_args__ = (
         # Sin UNIQUE: dos mensajes entre las mismas dos personas son eventos
         # legítimos e independientes, no un duplicado a impedir (mismo
@@ -600,6 +620,62 @@ class Message(db.Model):
 
     def __repr__(self):
         return f"<Message sender_id={self.sender_id} recipient_id={self.recipient_id}>"
+
+
+class MediaAttachment(db.Model):
+    __tablename__ = "media_attachments"
+
+    # Imagen adjunta a una publicación o a un mensaje (ADR-039). Una sola tabla
+    # para los dos casos: cada fila pertenece a EXACTAMENTE uno (CHECK). El
+    # archivo vive en el almacenamiento de medios; aquí solo su clave.
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+
+    # Quién la subió. Permite borrar sus archivos al eliminar la cuenta sin
+    # recorrer posts y mensajes (ADR-031). ON DELETE CASCADE como el resto.
+    owner_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    post_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    message_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+
+    # Nombre de objeto aleatorio e impredecible (`posts/<uuid4>.webp`). Único.
+    storage_key = db.Column(db.Text, nullable=False, unique=True)
+    width = db.Column(db.Integer, nullable=False)
+    height = db.Column(db.Integer, nullable=False)
+    # Orden dentro de la publicación (0 = primera).
+    position = db.Column(db.SmallInteger, nullable=False, server_default=text("0"))
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "(post_id IS NOT NULL AND message_id IS NULL) "
+            "OR (post_id IS NULL AND message_id IS NOT NULL)",
+            name="ck_media_attachments_one_parent",
+        ),
+        db.Index("ix_media_attachments_post_id", "post_id"),
+        db.Index("ix_media_attachments_message_id", "message_id"),
+        db.Index("ix_media_attachments_owner_id", "owner_id"),
+    )
+
+    def __repr__(self):
+        return f"<MediaAttachment id={self.id} key={self.storage_key}>"
 
 
 class PasswordResetToken(db.Model):

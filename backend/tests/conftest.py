@@ -160,6 +160,7 @@ def _clean_tables(app):
                 "account_deletion_codes, "
                 "user_identities, notifications, messages, mentions, muted_keywords, "
                 "sessions, two_factor_recovery_codes, rate_limit_buckets, data_exports, user_restrictions, muted_topics, "
+                "media_attachments, "
                 "comments, likes, follows, posts, reports, saved_places, place_reports, admin_audit_log, places, users"
             )
         )

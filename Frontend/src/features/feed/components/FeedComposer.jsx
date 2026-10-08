@@ -6,17 +6,17 @@ import Icon from "@shared/components/Icon";
  * Reproduce la tarjeta de la referencia: avatar, campo de texto y barra de
  * acciones con Foto, Cápsula, Audio, Lugar y Publicar, en ese orden.
  *
- * ESTADO REAL DE CADA ACCIÓN: solo «Publicar» está conectada (POST /api/posts,
- * ADR-004). Foto, Cápsula, Audio y Lugar están dibujadas en la referencia pero
- * no tienen endpoint: se muestran deshabilitadas con una explicación
- * accesible, en vez de simular que funcionan (archivo maestro §9.4 y §7.1:
- * "disabled tiene explicación accesible cuando sea necesaria").
+ * ESTADO REAL DE CADA ACCIÓN: «Publicar» y «Foto» están conectadas
+ * (POST /api/posts, ADR-004; imágenes, ADR-039): ambas abren el compositor, que
+ * es donde se eligen las fotos. Cápsula, Audio y Lugar están dibujadas en la
+ * referencia pero no tienen endpoint: se muestran deshabilitadas con una
+ * explicación accesible, en vez de simular que funcionan (archivo maestro §9.4
+ * y §7.1: "disabled tiene explicación accesible cuando sea necesaria").
  */
 export default function FeedComposer({ currentUser, onOpenComposer }) {
   const firstName = (currentUser?.name || "").split(" ")[0];
 
   const actions = [
-    { id: "photo", icon: "image", label: "Foto" },
     { id: "capsule", icon: "layers", label: "Cápsula" },
     { id: "audio", icon: "graphic_eq", label: "Audio" },
     { id: "place", icon: "near_me", label: "Lugar" },
@@ -40,6 +40,15 @@ export default function FeedComposer({ currentUser, onOpenComposer }) {
 
       <div className="flex items-center justify-between gap-2 border-t border-th-border-subtle pt-3">
         <div className="flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            onClick={onOpenComposer}
+            className="flex min-h-[44px] items-center gap-1.5 rounded-th-input px-2.5 py-2 text-label-lg text-th-fg-muted transition-colors th-focus-ring hover:bg-th-surface-subtle"
+          >
+            <Icon name="image" size={20} />
+            <span className="hidden sm:inline">Foto</span>
+            <span className="sr-only sm:hidden">Foto</span>
+          </button>
           {actions.map((action) => (
             <button
               key={action.id}

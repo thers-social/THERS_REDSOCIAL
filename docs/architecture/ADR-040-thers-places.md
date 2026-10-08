@@ -272,3 +272,12 @@ Pendientes o por fijar al implementar:
 - Peso: el chunk de Places es ~290 KB comprimido; solo lo descarga quien abre la página.
 
 **D1 resuelta para desarrollo (2026-10-08): MapTiler.** `VITE_MAP_STYLE_URL` apunta a un estilo de MapTiler (`.../style.json?key=...`, **con `/style.json` al final**: sin él devuelve una página web, no el estilo). La clave se restringe por origen (`localhost`, `thersweb.com`, `*.thersweb.com`). Verificado en un Chrome real: desde un origen permitido el estilo y los 16 tiles dan HTTP 200; desde uno no permitido (`127.0.0.1`) MapTiler responde 403, es decir, la restricción funciona. `https://api.maptiler.com` está en el `connect-src` del CSP. **El plan gratuito de MapTiler es solo no comercial (con excepción de I+D): antes de publicar hace falta un plan de pago** (Flex, 25 USD/mes según su página a 2026-10-08) o cambiar de proveedor. La app móvil no envía cabecera `Origin`, así que necesitará una clave aparte (fase móvil). La atribución «© MapTiler © OpenStreetMap contributors» la dibuja el propio mapa y cumple la ODbL.
+
+## 15. Integración con `develop` (2026-10-08)
+
+Antes de abrir el PR, `develop` había avanzado con el PR #89 (lockfile del móvil) y el PR #90 (imágenes en publicaciones y mensajes, `ADR-039`). Consecuencias, ya resueltas en la rama:
+
+- **Numeración:** este ADR pasó de `ADR-039` a **`ADR-040`** (82 referencias en 47 archivos, ninguna del PR #90 se tocó).
+- **Dos cabezas de Alembic:** `a9b4c7e2d815` (imágenes) y `a7c3e9d1b504` → `b8d4f1a6c295` (Places) compartían padre `e5b8c3a7d912`. Se unieron con la migración de fusión `65a6decd96ab` (no toca el esquema), el mismo mecanismo que `f8c2d6a4b190`. **Cabeza única actual: `65a6decd96ab`.** Una base que ya tenía las migraciones de Places aplica primero la de imágenes y luego la de fusión.
+- **Un conflicto de texto** en `backend/tests/conftest.py` (lista de tablas que se vacían entre pruebas): se combinaron `media_attachments` y las tablas de Places. `policy.py` y `models.py` se fusionaron sin intervención.
+- **Móvil:** el PR #89 ya está en `develop`, así que el bloqueo del `package-lock.json` desapareció. Sigue pendiente la compilación nativa Android (§10) y la clave de MapTiler propia del móvil (§14).

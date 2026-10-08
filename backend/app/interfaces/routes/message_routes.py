@@ -13,8 +13,25 @@
 import re
 from datetime import datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
+
+from app.application.rate_limiting import rate_limit_guard
+from app.domain.media.attachments import MAX_MESSAGE_IMAGES
+from app.domain.rate_limiting import policy
+from app.domain.rate_limiting.exceptions import RateLimitExceededError
+from app.infrastructure.persistence.repositories.media_attachment_repository import (
+    SQLAlchemyMediaAttachmentRepository,
+)
+from app.infrastructure.persistence.repositories.rate_limit_repository import (
+    SQLAlchemyRateLimitRepository,
+)
+from app.interfaces.image_upload import (
+    process_files,
+    read_request_data,
+    too_many_images_response,
+)
+from app.interfaces.rate_limited_response import rate_limited_response
 
 from app.application.messages.delete_message_use_case import delete_message
 from app.application.messages.get_typing_status_use_case import get_typing_status
@@ -29,7 +46,11 @@ from app.domain.messages.exceptions import (
     MessageNotFoundError,
     MessagesNotAllowedError,
 )
-from app.domain.messages.validators import MAX_CONTENT_LENGTH, is_valid_content
+from app.domain.messages.validators import (
+    MAX_CONTENT_LENGTH,
+    is_valid_content,
+    is_valid_content_with_images,
+)
 from app.interfaces.profile_gate import profile_completed_required
 from app.infrastructure.persistence.repositories.follow_repository import (
     SQLAlchemyFollowRepository,
@@ -105,6 +126,9 @@ _typing_repository = InMemoryTypingIndicatorRepository()
 _follow_repository = SQLAlchemyFollowRepository()
 # ADR-029-blocked-and-restricted-accounts.md: un bloqueo corta la mensajería.
 _restriction_repository = SQLAlchemyRestrictionRepository()
+# ADR-039: imagen adjunta y su límite de subidas.
+_media_repository = SQLAlchemyMediaAttachmentRepository()
+_rate_limit_repository = SQLAlchemyRateLimitRepository()
 
 
 @messages_bp.route("/users/<uuid:user_id>/messages", methods=["POST"])
@@ -115,18 +139,26 @@ def create(user_id):
     # que el resto de endpoints protegidos).
     sender_id = get_jwt_identity()
 
-    data = request.get_json(silent=True)
-    if not data:
+    # JSON (como siempre) o multipart con la imagen en el campo `images` (ADR-039).
+    data, files = read_request_data()
+    if not data and not files:
         return jsonify({"msg": "No se enviaron datos"}), 400
+    data = data or {}
+
+    if len(files) > MAX_MESSAGE_IMAGES:
+        return too_many_images_response(MAX_MESSAGE_IMAGES)
 
     # Whitelist explícita: solo `content` se lee del body -- nunca
     # `sender_id`/`recipient_id`/`id` (recipient_id viene de la URL, no del
     # body; mismo principio anti mass-assignment que POST /api/posts).
+    # Con imagen el texto puede ir vacío; sin ella sigue siendo obligatorio.
     content = data.get("content")
-    if not is_valid_content(content):
+    content_ok = is_valid_content_with_images(content) if files else is_valid_content(content)
+    if not content_ok:
         return jsonify(
             {"msg": f"El contenido debe tener entre 1 y {MAX_CONTENT_LENGTH} caracteres"}
         ), 400
+    content = (content or "").strip()
 
     # ADR-035: identificador opcional que hace el envío idempotente. Se valida
     # estrictamente: es una clave de una tabla, no texto libre.
@@ -138,11 +170,28 @@ def create(user_id):
             {"msg": "client_id debe tener entre 1 y 64 caracteres: letras, números, - o _"}
         ), 400
 
+    prepared = []
+    if files:
+        # Decodificar imágenes cuesta CPU: se cuenta cada envío con imagen.
+        try:
+            rate_limit_guard.enforce(
+                policy.IMAGE_UPLOAD, f"user:{sender_id}", _rate_limit_repository
+            )
+        except RateLimitExceededError as error:
+            return rate_limited_response(error)
+
+        prepared, error_response = process_files(files, "message")
+        if error_response:
+            return error_response
+
     try:
         message, created = send_message(
-            sender_id, str(user_id), content.strip(), _user_repository,
+            sender_id, str(user_id), content, _user_repository,
             _message_repository, _follow_repository, _restriction_repository,
             client_id=client_id,
+            prepared_images=prepared,
+            media_repository=_media_repository,
+            media_storage=current_app.extensions["media_storage"],
         )
     except CannotMessageSelfError:
         return jsonify({"msg": "No podés mandarte un mensaje a vos mismo"}), 400
@@ -233,7 +282,10 @@ def delete(message_id):
     sender_id = get_jwt_identity()
 
     try:
-        result = delete_message(str(message_id), sender_id, _message_repository)
+        result = delete_message(
+            str(message_id), sender_id, _message_repository,
+            _media_repository, current_app.extensions["media_storage"],
+        )
     except MessageNotFoundError:
         # Mismo mensaje/código tanto si el id no existe como si existe pero
         # es de otro usuario -- no revela cuál de los dos ocurrió (mismo
