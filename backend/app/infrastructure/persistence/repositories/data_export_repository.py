@@ -221,6 +221,36 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
             )
         ]
 
+        # THERS Places (ADR-040): lugares guardados y reportes de datos que la persona hizo.
+        saved_places = [
+            {"place": name, "slug": slug, "saved_at": _iso(saved_at)}
+            for name, slug, saved_at in db.session.execute(
+                db.text(
+                    "SELECT p.name, p.slug, s.created_at FROM saved_places s "
+                    "JOIN places p ON p.id = s.place_id WHERE s.user_id = :u "
+                    "ORDER BY s.created_at"
+                ),
+                {"u": str(user_id)},
+            )
+        ]
+        place_reports = [
+            {
+                "place": name,
+                "reason": reason,
+                "details": details,
+                "status": status,
+                "created_at": _iso(created_at),
+            }
+            for name, reason, details, status, created_at in db.session.execute(
+                db.text(
+                    "SELECT p.name, r.reason, r.details, r.status, r.created_at "
+                    "FROM place_reports r JOIN places p ON p.id = r.place_id "
+                    "WHERE r.reporter_id = :u ORDER BY r.created_at"
+                ),
+                {"u": str(user_id)},
+            )
+        ]
+
         return {
             "profile": profile,
             "posts": posts,
@@ -234,6 +264,8 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
             "muted_topics": muted_topics,
             "restrictions": restrictions,
             "sessions": sessions,
+            "saved_places": saved_places,
+            "place_reports": place_reports,
         }
 
     def create(self, user_id, file_name, content, expires_at):

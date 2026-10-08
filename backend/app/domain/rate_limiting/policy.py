@@ -123,3 +123,12 @@ ACCOUNT_DELETION_REQUEST = RateLimitRule(
 ACCOUNT_DELETION_CONFIRM = RateLimitRule(
     "account_deletion_confirm", 5, 15 * _MINUTE, clear_on_success=True
 )
+
+# Lecturas públicas del catálogo de lugares (ADR-040, D7): por IP, sin identidad de
+# usuario. Generoso a propósito -- mover el mapa dispara varias consultas -- pero con
+# tope, para que un script no pueda recorrer el catálogo sin freno.
+PLACES_READ = RateLimitRule("places_read", 120, _MINUTE, clear_on_success=False)
+# Guardar/quitar de guardados y reportar datos incorrectos (ADR-040 fase 2): por CUENTA, no
+# por IP. Un reporte cuesta tiempo de quien modera, por eso su tope es bajo.
+PLACES_SAVE = RateLimitRule("places_save", 60, _MINUTE, clear_on_success=False)
+PLACE_REPORT = RateLimitRule("place_report", 10, _HOUR, clear_on_success=False)

@@ -32,7 +32,8 @@
     "hasUnread": "Tienes elementos sin leer",
     "openMenu": "Abrir menú de navegación",
     "closeMenu": "Cerrar menú de navegación",
-    "messagesUnread": "Mensajes, {{count}} sin leer"
+    "messagesUnread": "Mensajes, {{count}} sin leer",
+    "places": "Lugares"
   },
   "auth": {
     "close": "Cerrar",
@@ -340,5 +341,82 @@
     "contactWarning": "No envíes ni reenvíes material ilegal por correo. Este correo es un medio de contacto; el mecanismo principal de denuncia es el sistema de reportes de THERS.",
     "legalTitle": "Cumplimiento legal",
     "legal": "THERS cumple la legislación aplicable en materia de seguridad infantil y colabora con las autoridades competentes cuando exista una obligación legal válida de hacerlo."
+  },
+  "places": {
+    "title": "Lugares",
+    "subtitle": "Descubre qué hay cerca de ti.",
+    "verified": "Verificado",
+    "panel": {
+      "aria": "Lista de lugares"
+    },
+    "search": {
+      "aria": "Buscar lugares",
+      "placeholder": "Buscar un lugar por nombre…"
+    },
+    "filters": {
+      "all": "Todas",
+      "categoryAria": "Filtrar por categoría"
+    },
+    "location": {
+      "use": "Usar mi ubicación",
+      "location_denied": "No tenemos permiso para usar tu ubicación. Puedes seguir buscando por nombre o moviendo el mapa.",
+      "location_unavailable": "No pudimos obtener tu ubicación. Puedes seguir buscando por nombre o moviendo el mapa.",
+      "location_timeout": "Tu ubicación tardó demasiado en responder. Inténtalo de nuevo o mueve el mapa."
+    },
+    "map": {
+      "aria": "Mapa de lugares",
+      "searchHere": "Buscar en esta zona",
+      "unavailableTitle": "No pudimos mostrar el mapa",
+      "unavailableBody": "Tu navegador no permite mostrar mapas. La lista de lugares sigue funcionando.",
+      "devStyle": "Mapa de demostración (solo desarrollo)"
+    },
+    "results": {
+      "count": "{{count}} lugares encontrados"
+    },
+    "state": {
+      "loading": "Buscando lugares…",
+      "offlineTitle": "Sin conexión",
+      "offlineBody": "Revisa tu conexión a internet e inténtalo de nuevo.",
+      "errorTitle": "No pudimos cargar los lugares",
+      "emptyTitle": "No hay lugares en esta zona",
+      "emptyBody": "Prueba con otra categoría, amplía la zona o mueve el mapa.",
+      "emptySearchTitle": "Sin resultados",
+      "emptySearchBody": "No encontramos lugares con ese nombre. Revisa la escritura o prueba otra palabra.",
+      "retry": "Reintentar"
+    },
+    "saved": {
+      "badge": "Guardado",
+      "save": "Guardar",
+      "saved": "Guardado",
+      "added": "Lugar guardado",
+      "removed": "Lugar quitado de guardados"
+    },
+    "detail": {
+      "back": "Volver a la lista",
+      "notFound": "Este lugar no existe o ya no está disponible.",
+      "verifiedOn": "el {{date}}"
+    },
+    "report": {
+      "open": "Reportar",
+      "title": "Reportar datos de {{name}}",
+      "reasonLabel": "¿Qué está mal?",
+      "reasonPlaceholder": "Elige un motivo",
+      "reasons": {
+        "wrong_location": "Ubicación incorrecta",
+        "wrong_hours": "Horario incorrecto",
+        "wrong_phone": "Teléfono incorrecto",
+        "closed": "El negocio cerró",
+        "duplicate": "Lugar duplicado",
+        "wrong_name": "Nombre incorrecto",
+        "inappropriate": "Contenido inapropiado",
+        "other": "Otro"
+      },
+      "detailsOptional": "Detalles (opcional)",
+      "detailsRequired": "Cuéntanos qué pasa",
+      "cancel": "Cancelar",
+      "send": "Enviar reporte",
+      "sending": "Enviando…",
+      "thanks": "Gracias, revisaremos este lugar."
+    }
   }
 }

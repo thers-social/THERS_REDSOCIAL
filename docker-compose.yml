@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # PostGIS 16 sobre alpine: misma base y versión mayor que la imagen anterior
+    # (postgres:16-alpine), así que el volumen existente se conserva (ADR-040 R1).
+    image: postgis/postgis:16-3.5-alpine
     container_name: thers_postgres_dev
     restart: unless-stopped
     environment:

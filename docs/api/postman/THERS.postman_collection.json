@@ -629,6 +629,1317 @@
         }
       ],
       "description": "POST /api/auth/google (ADR-012-google-sign-in.md). Los tres primeros casos se pueden probar directo por Postman (no dependen de una credencial real de Google); el último exige un ID Token real obtenido desde el navegador -- ver la descripción de esa request para el procedimiento exacto. El flujo completo (cuenta nueva, cuenta existente, account linking) está cubierto por backend/tests/test_google_auth.py, que sí corre en CI sin depender de Google."
+    },
+    {
+      "name": "04_PLACES",
+      "description": "THERS Places, fase 1 (ADR-040). Lectura pública: ninguna petición lleva token. Requiere haber sembrado datos (`python scripts/seed_places.py`). Búsqueda, guardados y reportes son de la fase 2. Fase 2 (guardados, reportes, búsqueda): las peticiones con sesión usan {{jwt_token}} de 01_AUTH.",
+      "item": [
+        {
+          "name": "Categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"categories is a non-empty array of {id, slug, name}\", function () {",
+                  "    pm.expect(json.categories).to.be.an(\"array\").that.is.not.empty;",
+                  "    json.categories.forEach((c) => [\"id\", \"slug\", \"name\"].forEach((f) => pm.expect(c).to.have.property(f)));",
+                  "});",
+                  "pm.environment.set(\"place_category_slug\", json.categories[0].slug);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/categories",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "categories"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "All Places",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"places is an array\", function () { pm.expect(json.places).to.be.an(\"array\"); });",
+                  "pm.test(\"Each place has the summary fields\", function () {",
+                  "    json.places.forEach((p) => [\"id\", \"name\", \"slug\", \"category\", \"latitude\", \"longitude\", \"verification_status\"].forEach((f) => pm.expect(p).to.have.property(f)));",
+                  "});",
+                  "pm.test(\"No invented fields (rating, reviews_count, is_open)\", function () {",
+                  "    const list = json.places || [json.place];",
+                  "    list.forEach((p) => [\"rating\", \"reviews_count\", \"is_open\"].forEach((f) => pm.expect(p).to.not.have.property(f)));",
+                  "});",
+                  "pm.test(\"List has no distance (no origin point)\", function () {",
+                  "    json.places.forEach((p) => pm.expect(p).to.not.have.property(\"distance_meters\"));",
+                  "});",
+                  "if (json.places.length) { pm.environment.set(\"place_id\", json.places[0].id); }"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places?limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Nearby",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"places is an array\", function () { pm.expect(json.places).to.be.an(\"array\"); });",
+                  "pm.test(\"Each place has the summary fields\", function () {",
+                  "    json.places.forEach((p) => [\"id\", \"name\", \"slug\", \"category\", \"latitude\", \"longitude\", \"verification_status\"].forEach((f) => pm.expect(p).to.have.property(f)));",
+                  "});",
+                  "pm.test(\"No invented fields (rating, reviews_count, is_open)\", function () {",
+                  "    const list = json.places || [json.place];",
+                  "    list.forEach((p) => [\"rating\", \"reviews_count\", \"is_open\"].forEach((f) => pm.expect(p).to.not.have.property(f)));",
+                  "});",
+                  "pm.test(\"Every place has an integer distance within the radius\", function () {",
+                  "    json.places.forEach((p) => { pm.expect(p.distance_meters).to.be.a(\"number\"); pm.expect(p.distance_meters).to.be.at.most(3000); });",
+                  "});",
+                  "pm.test(\"Ordered by distance, nearest first\", function () {",
+                  "    const d = json.places.map((p) => p.distance_meters);",
+                  "    pm.expect(d).to.eql([...d].sort((a, b) => a - b));",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/nearby?lat=13.6929&lng=-89.2182&radius=3000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "nearby"
+              ],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "13.6929"
+                },
+                {
+                  "key": "lng",
+                  "value": "-89.2182"
+                },
+                {
+                  "key": "radius",
+                  "value": "3000"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Nearby By Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Every result belongs to the requested category\", function () {",
+                  "    json.places.forEach((p) => pm.expect(p.category.slug).to.eql(pm.environment.get(\"place_category_slug\")));",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/nearby?lat=13.6929&lng=-89.2182&radius=5000&category={{place_category_slug}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "nearby"
+              ],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "13.6929"
+                },
+                {
+                  "key": "lng",
+                  "value": "-89.2182"
+                },
+                {
+                  "key": "radius",
+                  "value": "5000"
+                },
+                {
+                  "key": "category",
+                  "value": "{{place_category_slug}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Nearby - missing lat (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Error uses the msg key only\", function () { pm.expect(Object.keys(json)).to.eql([\"msg\"]); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/nearby?lng=-89.2182",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "nearby"
+              ],
+              "query": [
+                {
+                  "key": "lng",
+                  "value": "-89.2182"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Nearby - radius too large (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Message names the limit\", function () { pm.expect(json.msg).to.include(\"50000\"); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/nearby?lat=13.6929&lng=-89.2182&radius=50001",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "nearby"
+              ],
+              "query": [
+                {
+                  "key": "lat",
+                  "value": "13.6929"
+                },
+                {
+                  "key": "lng",
+                  "value": "-89.2182"
+                },
+                {
+                  "key": "radius",
+                  "value": "50001"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Place Detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"place has detail fields\", function () {",
+                  "    [\"id\", \"name\", \"category\", \"latitude\", \"longitude\", \"source\", \"coordinate_source\", \"last_verified_at\"].forEach((f) => pm.expect(json.place).to.have.property(f));",
+                  "});",
+                  "pm.test(\"No invented fields (rating, reviews_count, is_open)\", function () {",
+                  "    const list = json.places || [json.place];",
+                  "    list.forEach((p) => [\"rating\", \"reviews_count\", \"is_open\"].forEach((f) => pm.expect(p).to.not.have.property(f)));",
+                  "});",
+                  "pm.test(\"Never exposes internal fields\", function () {",
+                  "    [\"is_active\", \"location\", \"created_by_user_id\", \"verified_by_user_id\"].forEach((f) => pm.expect(json.place).to.not.have.property(f));",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/{{place_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "{{place_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Place Detail - unknown id (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"msg is Lugar no encontrado\", function () { pm.expect(json.msg).to.eql(\"Lugar no encontrado\"); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/00000000-0000-4000-8000-000000000000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "00000000-0000-4000-8000-000000000000"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"places is an array with distance\", function () { pm.expect(json.places).to.be.an(\"array\"); json.places.forEach((p) => pm.expect(p).to.have.property(\"distance_meters\")); });",
+                  "pm.test(\"Every place exposes is_saved as boolean\", function () { json.places.forEach((p) => pm.expect(p.is_saved).to.be.a(\"boolean\")); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/search?q=cafe&lat=13.6929&lng=-89.2182",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "cafe"
+                },
+                {
+                  "key": "lat",
+                  "value": "13.6929"
+                },
+                {
+                  "key": "lng",
+                  "value": "-89.2182"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search - q too short (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Error uses the msg key only\", function () { pm.expect(Object.keys(json)).to.eql([\"msg\"]); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/search?q=a",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "a"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Saved Places",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Every saved place is marked is_saved\", function () { pm.expect(json.places).to.be.an(\"array\"); json.places.forEach((p) => pm.expect(p.is_saved).to.eql(true)); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/saved",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "saved"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Saved Places - no token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () { pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/saved",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "saved"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Save",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"saved is true\", function () { pm.expect(json.saved).to.eql(true); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/{{place_id}}/save",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "{{place_id}}",
+                "save"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unsave",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"saved is false\", function () { pm.expect(json.saved).to.eql(false); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/places/{{place_id}}/save",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "{{place_id}}",
+                "save"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status is 201 (new) or 200 (already open)\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "pm.test(\"report has the confirmation fields only\", function () { pm.expect(Object.keys(json.report).sort()).to.eql([\"created_at\", \"id\", \"place_id\", \"reason\", \"status\"]); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"wrong_phone\",\n  \"details\": \"El teléfono no contesta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/places/{{place_id}}/report",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "{{place_id}}",
+                "report"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Report - invalid reason (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"msg names the field\", function () { pm.expect(json.msg).to.include(\"reason\"); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"inventado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/places/{{place_id}}/report",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "places",
+                "{{place_id}}",
+                "report"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05_PLACES_ADMIN",
+      "description": "Moderación de lugares (ADR-040 fase 2, D3). Requiere un entorno con `moderator_token` (JWT de una cuenta con `flask set-moderator`). Un usuario normal recibe 404, no 403.",
+      "item": [
+        {
+          "name": "Summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"summary has counters\", function () { [\"places_by_status\", \"places_inactive\", \"open_reports\"].forEach((f) => pm.expect(json.summary).to.have.property(f)); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{moderator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places/summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places",
+                "summary"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Normal user gets 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Same body as a missing route\", function () { pm.expect(json.msg).to.eql(\"Recurso no encontrado\"); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places/summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places",
+                "summary"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Report Queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"reports is an array and never exposes the reporter\", function () { pm.expect(json.reports).to.be.an(\"array\"); json.reports.forEach((r) => { pm.expect(r).to.not.have.property(\"reporter_id\"); }); });",
+                  "if (json.reports.length) { pm.environment.set(\"place_report_id\", json.reports[0].id); }"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{moderator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places/reports?status=open",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places",
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "open"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve Report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200 (closed now) or 409 (already closed)\", function () { pm.expect(pm.response.code).to.be.oneOf([200, 409]); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{moderator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\",\n  \"note\": \"Revisado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places/reports/{{place_report_id}}/resolve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places",
+                "reports",
+                "{{place_report_id}}",
+                "resolve"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Place",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"New places are pending and not public\", function () { pm.expect(json.place.verification_status).to.eql(\"pending\"); });",
+                  "pm.environment.set(\"admin_place_id\", json.place.id);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{moderator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lugar de Postman\",\n  \"category\": \"cafes\",\n  \"latitude\": 13.7,\n  \"longitude\": -89.2,\n  \"address\": \"Calle de prueba\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Place - bad coordinates (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"msg explains the range\", function () { pm.expect(json.msg).to.include(\"latitude\"); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{moderator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mal\",\n  \"category\": \"cafes\",\n  \"latitude\": 95,\n  \"longitude\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Edit Place",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"name changed\", function () { pm.expect(json.place.name).to.eql(\"Lugar de Postman (editado)\"); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{moderator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lugar de Postman (editado)\",\n  \"phone\": \"+503 2222-0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places/{{admin_place_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places",
+                "{{admin_place_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Place",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"verified with who and when\", function () { pm.expect(json.place.verification_status).to.eql(\"verified\"); pm.expect(json.place.verified_by_user_id).to.be.a(\"string\"); pm.expect(json.place.last_verified_at).to.be.a(\"string\"); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{moderator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verification_status\": \"verified\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places/{{admin_place_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places",
+                "{{admin_place_id}}",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Status - invalid (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"msg names the field\", function () { pm.expect(json.msg).to.include(\"verification_status\"); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{moderator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verification_status\": \"borrador\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places/{{admin_place_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places",
+                "{{admin_place_id}}",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate Place",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"is_active is false\", function () { pm.expect(json.place.is_active).to.eql(false); });"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{moderator_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/moderation/places/{{admin_place_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "moderation",
+                "places",
+                "{{admin_place_id}}",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

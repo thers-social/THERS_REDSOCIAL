@@ -25,6 +25,9 @@ export const PRIMARY_NAV = [
     labelKey: "nav.capsules",
   },
   { id: "radar", to: "/radar", icon: "radar", labelKey: "nav.radar" },
+  // THERS Places (ADR-040, fase 3): catálogo de lugares con mapa. `radar` ("Ubicación") sigue siendo el
+  // marcador de posición anterior; fusionar ambos destinos es una decisión de producto pendiente.
+  { id: "places", to: "/places", icon: "location_on", labelKey: "nav.places" },
   { id: "messages", to: "/messages", icon: "forum", labelKey: "nav.messages", badge: "count" },
   {
     id: "notifications",

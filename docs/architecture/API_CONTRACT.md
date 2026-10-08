@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.35 (Propuesta) |
+| Versión | 0.37 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -44,6 +44,8 @@
 >
 > **v0.14 — recuperación de contraseña y verificación de email vía Resend (`ADR-009-password-reset-and-email-verification.md`):** se agregan `POST /api/forgot-password`, `POST /api/reset-password`, `POST /api/send-verification-email` y `POST /api/verify-email` (§4.8) — séptima y octava entidad del alcance objetivo del producto (`DATABASE_ARCHITECTURE.md` §4.B, candidata "Verificación de correo, Recuperación de contraseña") en pasar a implementadas. Rutas planas bajo `/api`, sin prefijo `/auth/` — mismo criterio que `/api/register`/`/api/login`. `forgot-password` nunca revela si un email está registrado (mismo mensaje `200` siempre); `reset-password`/`verify-email` usan tokens de un solo uso, expirables, con hash SHA-256 persistido (nunca el valor crudo). `GET`/`PATCH /api/users/me` y `register`/`login` se extienden de forma aditiva con `email_verified` (§4.2, §5) — no rompe el contrato existente. Nuevo servicio de correo centralizado (Resend, SDK oficial) detrás de un `EmailSender` abstracto — ningún endpoint llama a Resend directamente. Verificado con 30 pruebas nuevas + la suite completa (175/175, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`), más una prueba manual end-to-end contra el backend real (los cuatro endpoints, con `NullEmailSender` en desarrollo sin `RESEND_API_KEY`).
 >
+> **v0.37 — THERS Places, fase 2 (`ADR-040`, **PROPUESTO**):** `GET /api/places/search`, `GET /api/places/saved`, `POST|DELETE /api/places/<id>/save`, `POST /api/places/<id>/report` y las rutas de moderación `/api/moderation/places/*` (§4.24). **Cambio en el contrato de la fase 1:** los resúmenes y el detalle de lugares ganan `is_saved` (siempre presente; `false` para quien no ha iniciado sesión). Un token ausente, vencido o inválido en el catálogo público se trata como anónimo, no como error. Las rutas de moderación de lugares reutilizan `is_moderator`: quien no lo es recibe el mismo `404` que una ruta inexistente. Tablas nuevas `saved_places`, `place_reports` y `admin_audit_log` (`DATABASE_ARCHITECTURE.md` v0.29).
+> **v0.36 — THERS Places, fase 1 (`ADR-040-thers-places.md`, **PROPUESTO**):** `GET /api/places/categories`, `GET /api/places`, `GET /api/places/nearby` y `GET /api/places/<id>` (§4.23). **Lectura pública, sin JWT**, con límite de uso por IP (`places_read`, 120/min). Solo devuelven lugares activos y `verified`. Cambios aditivos: ningún cliente actual se rompe. Tablas nuevas `place_categories` y `places` (`DATABASE_ARCHITECTURE.md` v0.28). Los guardados, reportes, administración y búsqueda de texto son de la fase 2.
 > **v0.35 — moderación de la plataforma (`ADR-032`, fase 2):** `GET /api/moderation/reports` y `POST /api/moderation/reports/<id>/resolve` (§4.22), solo para cuentas con `is_moderator` (cualquier otra recibe el mismo `404` que una ruta inexistente). El objeto `user` propio gana `is_moderator`. `POST /api/login`, `POST /api/auth/google` y `POST /api/2fa/verify` responden `403` con `suspended: true` y `suspension_reason` a una cuenta suspendida. Cambios aditivos.
 >
 > **v0.34 — sincronización del chat (`ADR-035-chat-sync.md`, **PROPUESTO**):** `POST /api/users/<id>/messages` acepta `client_id` opcional (envío idempotente por remitente: `201` la primera vez, `200` si ya existía); `GET /api/users/<id>/messages` acepta `limit`, `before` y `after` (instantes ISO 8601 con zona horaria) y devuelve `has_more`. El mensaje público gana `client_id`. Cambios aditivos y compatibles (§4.10).
@@ -2150,3 +2152,117 @@ Con una contraseña incorrecta sigue siendo `401`: la suspensión no sirve para 
 #### Línea de comandos (no es API)
 
 `flask set-moderator <correo> [--revoke]` concede o retira el rol (avisa si la cuenta no tiene 2FA) y `flask unsuspend-user <correo>` levanta una suspensión.
+
+## 4.23 THERS Places — catálogo de lugares (`ADR-040-thers-places.md`, fase 1)
+
+Lectura **pública**: no exige `Authorization` (ADR-040 D4). Todas las rutas comparten el límite de uso `places_read`
+(120 peticiones por minuto y por IP, `ADR-027`); al superarlo responden `429` con `Retry-After`. Solo se devuelven lugares
+`is_active` con `verification_status = "verified"`, de una categoría activa. Los errores usan `{"msg": "..."}`.
+
+No se exponen `rating`, `reviews_count` ni `is_open`: no existen reseñas ni horarios todavía. `is_saved` existe desde la v0.37.
+`cover_image_url` es siempre `null` hasta que haya fotos de lugares.
+
+### `GET /api/places/categories`
+
+`200` → `{"categories": [{"id": "uuid", "slug": "cafes", "name": "Cafés"}, ...]}`, ordenadas por `sort_order`.
+Iniciales: `restaurantes`, `cafes`, `supermercados`, `farmacias`, `gasolineras`, `hospitales`, `universidades`,
+`centros-comerciales`, `parques`, `entretenimiento`, `hoteles`, `otros`.
+
+### `GET /api/places`
+
+| Query | Obligatorio | Regla |
+|---|---|---|
+| `category` | no | `slug` de una categoría existente |
+| `limit` | no | entero 1–50 (predeterminado 20) |
+| `offset` | no | entero 0–10000 (predeterminado 0) |
+
+`200` → `{"places": [<resumen>]}`, ordenado por nombre e id. **Sin `distance_meters`**: no hay punto de origen.
+`400` → `{"msg": "limit no puede superar 50"}` (o `offset`, o `"Categoría inválida"`).
+
+### `GET /api/places/nearby`
+
+| Query | Obligatorio | Regla |
+|---|---|---|
+| `lat` | sí | número finito entre -90 y 90 |
+| `lng` | sí | número finito entre -180 y 180 |
+| `radius` | no | metros, mayor que 0 y hasta 50000 (predeterminado 5000) |
+| `category` | no | `slug` de una categoría existente |
+| `limit` | no | entero 1–50 (predeterminado 20) |
+
+`200` → `{"places": [<resumen con distance_meters>]}`, del más cercano al más lejano. `distance_meters` es un entero.
+`400` → `{"msg": "lat debe estar entre -90 y 90"}` y equivalentes (`lat es obligatorio`, `radius no puede superar 50000`, ...).
+
+**Privacidad:** la ubicación consultada **no se guarda**. Pero `lat`/`lng` viajan en la URL y pueden quedar en los registros
+de acceso del proxy o de una herramienta de errores (`ADR-040` §4.4, R5): el cliente debe redondear a ~3 decimales (~110 m)
+antes de enviarlas.
+
+### `GET /api/places/<id>`
+
+`200` → `{"place": <detalle>}`. `404` → `{"msg": "Lugar no encontrado"}`, **idéntico** si el id no existe, el lugar no es
+público o está inactivo (no revela que existe). Un `<id>` que no es UUID también da `404`.
+
+### Objetos
+
+Resumen (lista y `nearby`):
+
+```json
+{
+  "id": "291dc513-e8b5-4a7b-bf9d-8b9a85fc3389",
+  "name": "Café Aurora",
+  "slug": "seed-cafe-aurora",
+  "category": {"id": "…", "slug": "cafes", "name": "Cafés"},
+  "latitude": 13.69745,
+  "longitude": -89.2182,
+  "verification_status": "verified",
+  "address": "Colonia Escalón, San Salvador",
+  "cover_image_url": null,
+  "is_saved": false,
+  "distance_meters": 500
+}
+```
+
+Detalle: el resumen más `description`, `municipality`, `department`, `phone`, `website`, `source`
+(`thers_field | business | community | osm | official`), `coordinate_source`
+(`gps | map_selected | geocoded | imported`) y `last_verified_at` (ISO 8601 o `null`). Nunca incluye `is_active`, la
+geometría cruda ni los ids de quien creó o verificó el lugar.
+
+## 4.24 THERS Places — búsqueda, guardados, reportes y moderación (`ADR-040`, fase 2)
+
+### Búsqueda y `is_saved` (públicas)
+
+`GET /api/places/search?q=&category=&lat=&lng=&limit=` — texto en el **nombre**, sin importar mayúsculas ni tildes
+(`nandu` encuentra «Ñandú»; `%` y `_` se tratan como texto, no como comodines). `q` obligatorio, 2–80 caracteres.
+`lat`/`lng` opcionales pero **juntos**; con ellos cada resultado lleva `distance_meters`. Orden: parecido del texto, luego
+cercanía. Mismas reglas de `category` y `limit` que `nearby`. `400` con `{"msg": ...}`.
+
+Con `Authorization: Bearer <token>`, `GET /api/places`, `/nearby`, `/search` y `/<id>` marcan `is_saved: true` en los lugares que
+la persona guardó. Sin token, o con uno inválido o vencido, la respuesta es la misma pero con `is_saved: false` (nunca `401`).
+
+### Con sesión (`401` sin token válido; límites por cuenta, `ADR-027`)
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/places/saved?limit=&offset=` | Tus guardados que siguen siendo públicos, el más reciente primero. `{"places": [...]}` con `is_saved: true` |
+| `POST /api/places/<id>/save` | `200 {"saved": true}`. **Idempotente**: guardar dos veces no duplica. `404` si el lugar no existe o no es público. Límite 60/min |
+| `DELETE /api/places/<id>/save` | `200 {"saved": false}`. **Idempotente**. Funciona aunque el lugar ya no sea público; `404` solo si no existe |
+| `POST /api/places/<id>/report` | Cuerpo `{"reason": "...", "details": "..."}`. `201 {"report": {id, place_id, reason, status, created_at}}`; `200` con el mismo reporte si ya tenías uno **abierto** igual. `400` si el motivo es inválido o `other` sin `details`; `404` si el lugar no es público. Límite 10/hora |
+
+Motivos (`reason`): `wrong_location`, `wrong_hours`, `wrong_phone`, `closed`, `duplicate`, `wrong_name`, `inappropriate`, `other`.
+`details`: hasta 500 caracteres. `reporter_id` y `status` del cuerpo se ignoran: la identidad sale solo del token.
+
+### Moderación (`/api/moderation/places/*`; solo `is_moderator`, el resto recibe `404`)
+
+| Ruta | Descripción |
+|---|---|
+| `GET /summary` | `{"summary": {"places_by_status": {...}, "places_inactive": n, "open_reports": n}}` |
+| `GET /reports?status=open&limit=&offset=` | Cola (los más antiguos primero). `status`: `open` (predeterminado), `reviewing`, `resolved`, `dismissed`. `{"reports": [...], "has_more": bool}`. **No muestra quién reportó** |
+| `POST /reports/<id>/resolve` | `{"status": "resolved" \| "dismissed", "note": "..."}`. `404` si no existe; `409` si ya estaba cerrado |
+| `GET /?status=&q=&limit=&offset=` | Todos los lugares, en cualquier estado |
+| `POST /` | Crea un lugar. Obligatorios: `name`, `category` (slug), `latitude`, `longitude`. Opcionales: `description`, `address`, `municipality`, `department`, `phone`, `website` (http/https), `source` (predeterminado `thers_field`), `coordinate_source` (predeterminado `map_selected`). Nace `pending` y **no público**. `201 {"place": ...}` |
+| `GET /<id>` | Detalle de moderación (con `is_active`, ids de quien creó y verificó, fechas) |
+| `PATCH /<id>` | Edición parcial de los campos anteriores; si cambian las coordenadas deben venir `latitude` y `longitude` juntas. **No cambia el estado** |
+| `PATCH /<id>/status` | `{"verification_status": "...", "is_active": bool}` (al menos uno). Al pasar a `verified` registra quién y cuándo |
+
+Validación en el servidor: longitudes máximas, sin caracteres de control, `phone` con formato telefónico, `website` solo `http(s)://`,
+coordenadas en rango. **PostGIS corrige en silencio las coordenadas fuera de rango**, por eso toda escritura las valida antes.
+Cada creación, edición, cambio de estado y resolución de reporte queda en `admin_audit_log` (en la misma transacción), sin secretos.
