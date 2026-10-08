@@ -1,7 +1,8 @@
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 type Props = Omit<TextInputProps, 'style'> & {
   label: string;
@@ -30,7 +31,7 @@ export function TextField({ label, hint, error, ...inputProps }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   wrapper: { marginBottom: space[4] },
   label: { fontSize: fontSize.labelLg, fontWeight: '600', color: colors.fg, marginBottom: space[1] },
   hint: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginBottom: space[1] },
@@ -46,4 +47,4 @@ const styles = StyleSheet.create({
   },
   inputError: { borderColor: colors.dangerAccent },
   error: { color: colors.dangerFg, fontSize: fontSize.labelMd, marginTop: space[1] },
-});
+}));

@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApiError } from '@shared/lib/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
 
@@ -143,8 +144,8 @@ export function ReportModal({ visible, targetType, targetId, targetLabel, onClos
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(15, 23, 42, 0.45)' },
+const styles = themedStyles(() => ({
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.scrim },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.dialog,
@@ -166,7 +167,7 @@ const styles = StyleSheet.create({
   },
   reasonSelected: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
   reasonText: { fontSize: fontSize.bodyMd, color: colors.fg },
-  reasonTextSelected: { color: colors.brand, fontWeight: '700' },
+  reasonTextSelected: { color: colors.brandText, fontWeight: '700' },
   details: {
     minHeight: 80,
     borderWidth: 1,
@@ -179,4 +180,4 @@ const styles = StyleSheet.create({
   },
   buttons: { flexDirection: 'row', gap: space[2], marginTop: space[3] },
   flex: { flex: 1 },
-});
+}));

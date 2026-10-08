@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 
 import { addMutedKeyword, fetchMutedKeywords, removeMutedKeyword } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
@@ -98,7 +99,7 @@ export default function Muted() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   title: { fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.fg, marginTop: space[6], marginBottom: space[3] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
   chip: {
@@ -109,5 +110,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: space[3],
     paddingVertical: space[2],
   },
-  chipText: { fontSize: fontSize.bodySm, color: colors.brand, fontWeight: '600' },
-});
+  chipText: { fontSize: fontSize.bodySm, color: colors.brandText, fontWeight: '600' },
+}));

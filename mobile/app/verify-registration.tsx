@@ -1,9 +1,10 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Text } from 'react-native';
 
 import { ApiError, request } from '@shared/lib/api';
 import { colors, fontSize, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
 import { Screen } from '@shared/ui/Screen';
@@ -116,8 +117,8 @@ export default function VerifyRegistration() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   intro: { fontSize: fontSize.bodyMd, color: colors.fgSecondary, marginBottom: space[4] },
   strong: { fontWeight: '700', color: colors.fg },
   resend: { marginTop: space[2] },
-});
+}));

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import { acceptFollowRequest, fetchFollowRequests, rejectFollowRequest } from '@features/settings/api';
 import type { FollowRequest } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
 import { formatRelativeTime } from '@shared/lib/time';
 import { Avatar } from '@shared/ui/Avatar';
@@ -87,7 +88,7 @@ export default function FollowRequests() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   row: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
@@ -103,4 +104,4 @@ const styles = StyleSheet.create({
   meta: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginTop: 2 },
   buttons: { flexDirection: 'row', gap: space[2], marginTop: space[3] },
   flex: { flex: 1, paddingHorizontal: space[2] },
-});
+}));

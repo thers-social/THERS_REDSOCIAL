@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { buildCanonicalUrl, getSeoForPath } from "./seoRoutes";
+import { buildCanonicalUrl, buildJsonLd, getSeoForPath } from "./seoRoutes";
 
 // Aplica título, descripción, robots y canonical de la ruta actual
 // (ADR-033-seo-foundation.md). Se monta una sola vez dentro del Router.
@@ -36,6 +36,22 @@ function upsertCanonical(href) {
   el.setAttribute("href", href);
 }
 
+// JSON-LD solo en la home indexable (Organization + WebSite); en el resto se retira.
+function upsertJsonLd(data) {
+  let el = document.head.querySelector('script[data-thers-jsonld]');
+  if (!data) {
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement("script");
+    el.setAttribute("type", "application/ld+json");
+    el.setAttribute("data-thers-jsonld", "");
+    document.head.appendChild(el);
+  }
+  el.textContent = JSON.stringify(data);
+}
+
 export default function RouteSeo() {
   const { pathname } = useLocation();
 
@@ -45,6 +61,7 @@ export default function RouteSeo() {
     upsertMeta("description", seo.description);
     upsertMeta("robots", seo.index ? "index, follow" : "noindex, nofollow");
     upsertCanonical(seo.index ? buildCanonicalUrl(SITE_URL, seo.path) : null);
+    upsertJsonLd(seo.index && seo.path === "/" ? buildJsonLd(SITE_URL) : null);
   }, [pathname]);
 
   return null;

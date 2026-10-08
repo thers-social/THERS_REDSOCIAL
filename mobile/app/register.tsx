@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import {
   MIN_AGE_MESSAGE,
@@ -16,6 +16,7 @@ import {
 } from '@features/auth/lib/validators';
 import { ApiError, request } from '@shared/lib/api';
 import { colors, fontSize, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { Banner } from '@shared/ui/Banner';
 import { BirthDateInput } from '@shared/ui/BirthDateInput';
 import { Button } from '@shared/ui/Button';
@@ -209,7 +210,7 @@ export default function Register() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   intro: {
     fontSize: fontSize.bodyMd,
     color: colors.fgSecondary,
@@ -224,4 +225,4 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginBottom: space[4],
   },
-});
+}));

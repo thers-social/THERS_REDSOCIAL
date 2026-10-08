@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { fetchBlocks, unblockUser } from '@features/safety/api';
 import type { BlockedAccount } from '@features/safety/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { ApiError, request } from '@shared/lib/api';
 import { Avatar } from '@shared/ui/Avatar';
 import { Banner } from '@shared/ui/Banner';
@@ -120,7 +121,7 @@ export default function Blocked() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   title: { fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.fg, marginTop: space[6], marginBottom: space[3] },
   row: {
     flexDirection: 'row',
@@ -136,4 +137,4 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   name: { fontSize: fontSize.bodyMd, fontWeight: '700', color: colors.fg },
   username: { fontSize: fontSize.labelMd, color: colors.fgMuted },
-});
+}));

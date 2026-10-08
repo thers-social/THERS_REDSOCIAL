@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { fetchSuggestions, followUser, unfollowUser } from '@features/posts/api';
@@ -10,7 +10,9 @@ import { searchPosts } from '@features/posts/searchPosts';
 import type { SearchSort } from '@features/posts/searchPosts';
 import { usePostMenu } from '@features/posts/usePostMenu';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { Avatar } from '@shared/ui/Avatar';
+import { Icon } from '@shared/ui/Icon';
 import { Screen } from '@shared/ui/Screen';
 import { StateMessage } from '@shared/ui/StateMessage';
 
@@ -34,7 +36,7 @@ export default function Search() {
   if (!user) return null;
 
   return (
-    <Screen title="Buscar" scroll={false} withBottomInset={false}>
+    <Screen title="Explorar" back scroll={false} withBottomInset={false}>
       <FlatList
         data={searching ? results : []}
         keyExtractor={(post) => post.id}
@@ -42,18 +44,21 @@ export default function Search() {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
-            <TextInput
-              style={styles.input}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Buscar publicaciones o personas"
-              placeholderTextColor={colors.fgDisabled}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
-              accessibilityLabel="Buscar"
-              clearButtonMode="while-editing"
-            />
+            <View style={styles.inputBox}>
+              <Icon name="search" size={18} color={colors.fgMuted} />
+              <TextInput
+                style={styles.input}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Buscar creadores, etiquetas o contenido…"
+                placeholderTextColor={colors.fgDisabled}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                accessibilityLabel="Buscar"
+                clearButtonMode="while-editing"
+              />
+            </View>
             <Text style={styles.scope}>
               Busca entre las {posts.posts.length} publicaciones cargadas. THERS todavía no tiene un
               buscador de servidor.
@@ -65,7 +70,18 @@ export default function Search() {
                 <SortChip label="Más me gusta" active={sort === 'likes'} onPress={() => setSort('likes')} />
               </View>
             ) : (
-              <Suggestions />
+              <>
+                <View style={styles.discover}>
+                  <Icon name="grid" size={22} color={colors.brandText} />
+                  <View style={styles.discoverText}>
+                    <Text style={styles.discoverTitle}>Explorar contenido</Text>
+                    <Text style={styles.discoverHint}>
+                      Próximamente: la cuadrícula de fotos, videos y tendencias.
+                    </Text>
+                  </View>
+                </View>
+                <Suggestions />
+              </>
             )}
           </View>
         }
@@ -179,18 +195,33 @@ function Suggestions() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   list: { padding: space[4], paddingBottom: space[8] },
-  input: {
-    minHeight: 48,
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space[2],
     borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
+    borderColor: colors.border,
+    borderRadius: radius.input,
     backgroundColor: colors.surface,
-    paddingHorizontal: space[4],
-    fontSize: fontSize.bodyMd,
-    color: colors.fg,
+    paddingHorizontal: space[3],
   },
+  input: { flex: 1, minHeight: 48, fontSize: fontSize.bodyMd, color: colors.fg, padding: 0 },
+  discover: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space[3],
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    padding: space[4],
+    marginBottom: space[4],
+  },
+  discoverText: { flex: 1 },
+  discoverTitle: { fontSize: fontSize.bodyMd, fontWeight: '700', color: colors.fg },
+  discoverHint: { fontSize: fontSize.bodySm, color: colors.fgMuted, marginTop: 2 },
   scope: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginTop: space[2], marginBottom: space[3] },
   sortRow: { flexDirection: 'row', gap: space[2], marginBottom: space[3] },
   chip: {
@@ -228,6 +259,6 @@ const styles = StyleSheet.create({
     paddingVertical: space[2],
   },
   followBtnOn: { borderColor: colors.borderStrong, backgroundColor: colors.bgSubtle },
-  followText: { fontSize: fontSize.labelLg, fontWeight: '700', color: colors.brand },
+  followText: { fontSize: fontSize.labelLg, fontWeight: '700', color: colors.brandText },
   followTextOn: { color: colors.fgSecondary },
-});
+}));

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import { closeOtherSessions, closeSession, fetchSessions } from '@features/settings/api';
 import type { ActiveSession } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
 import { formatRelativeTime } from '@shared/lib/time';
 import { Banner } from '@shared/ui/Banner';
@@ -137,7 +138,7 @@ export default function Sessions() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -154,4 +155,4 @@ const styles = StyleSheet.create({
   meta: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginTop: 2, lineHeight: 17 },
   closeAll: { marginTop: space[4] },
   note: { fontSize: fontSize.bodySm, color: colors.fgMuted, marginTop: space[4], textAlign: 'center' },
-});
+}));

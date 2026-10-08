@@ -157,6 +157,14 @@ class Config:
         if origin.strip()
     ]
 
+    # Registro de errores (app/observability.py). Sin SENTRY_DSN no se activa nada.
+    SENTRY_DSN = os.environ.get("SENTRY_DSN") or None
+    SENTRY_ENVIRONMENT = os.environ.get("SENTRY_ENVIRONMENT") or "development"
+    try:
+        SENTRY_TRACES_SAMPLE_RATE = float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE") or 0.0)
+    except ValueError:
+        SENTRY_TRACES_SAMPLE_RATE = 0.0
+
     if not ALLOWED_WEB_ORIGINS:
         print(
             "[config] CORS_ORIGINS no está definida; la API acepta peticiones de navegador "

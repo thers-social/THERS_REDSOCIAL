@@ -1,4 +1,5 @@
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Link } from 'expo-router';
+import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { Composer } from '@features/posts/Composer';
@@ -6,6 +7,10 @@ import { PostCard } from '@features/posts/PostCard';
 import { messageOf, usePosts } from '@features/posts/PostsContext';
 import { usePostMenu } from '@features/posts/usePostMenu';
 import { colors, fontSize, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
+import { comingSoon } from '@shared/lib/comingSoon';
+import { Avatar } from '@shared/ui/Avatar';
+import { Icon } from '@shared/ui/Icon';
 import { Screen } from '@shared/ui/Screen';
 import { StateMessage } from '@shared/ui/StateMessage';
 
@@ -22,7 +27,26 @@ export default function Home() {
   if (!user) return null;
 
   return (
-    <Screen title="Inicio" scroll={false} withBottomInset={false}>
+    <Screen
+      title="Inicio"
+      scroll={false}
+      withBottomInset={false}
+      headerRight={
+        <View style={styles.headerLinks}>
+          <Link href="/search" accessibilityRole="link" accessibilityLabel="Buscar" style={styles.headerLink}>
+            <Icon name="search" color={colors.fg} />
+          </Link>
+          <Link
+            href="/notifications"
+            accessibilityRole="link"
+            accessibilityLabel="Avisos"
+            style={styles.headerLink}
+          >
+            <Icon name="bell" color={colors.fg} />
+          </Link>
+        </View>
+      }
+    >
       <FlatList
         data={posts.status === 'ready' ? posts.posts : []}
         keyExtractor={(post) => post.id}
@@ -37,6 +61,22 @@ export default function Home() {
         }
         ListHeaderComponent={
           <View>
+            <View style={styles.stories}>
+              <Pressable
+                onPress={() => comingSoon('Las historias')}
+                style={styles.story}
+                accessibilityRole="button"
+                accessibilityLabel="Tu historia (próximamente)"
+              >
+                <View>
+                  <Avatar name={user.name} uri={user.avatar_url} size={56} />
+                  <View style={styles.storyPlus}>
+                    <Icon name="plus" size={12} color={colors.onBrand} />
+                  </View>
+                </View>
+                <Text style={styles.storyLabel}>Tu historia</Text>
+              </Pressable>
+            </View>
             {user.profile_completed ? (
               <Composer
                 onPublish={async (content, sensitive) => {
@@ -94,8 +134,26 @@ export default function Home() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
+  headerLinks: { flexDirection: 'row', gap: space[4] },
+  headerLink: { padding: space[2] },
   list: { padding: space[4], paddingBottom: space[8] },
+  stories: { flexDirection: 'row', marginBottom: space[4] },
+  story: { alignItems: 'center', width: 72 },
+  storyPlus: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.brand,
+    borderWidth: 2,
+    borderColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storyLabel: { fontSize: fontSize.labelSm, color: colors.fgMuted, marginTop: space[1] },
   notice: {
     backgroundColor: colors.brandSoft,
     borderRadius: 12,
@@ -104,4 +162,4 @@ const styles = StyleSheet.create({
   },
   noticeText: { fontSize: fontSize.bodySm, color: colors.fgSecondary, lineHeight: 18 },
   stale: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginBottom: space[3] },
-});
+}));

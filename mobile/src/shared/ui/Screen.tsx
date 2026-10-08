@@ -10,7 +10,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, fontSize, space } from '@shared/design/tokens';
+import { colors, fontSize, fonts, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
+
+import { BrandEmblem } from './BrandEmblem';
 
 type Props = {
   title?: string;
@@ -52,7 +55,11 @@ export function Screen({
           >
             <Text style={styles.backText}>‹</Text>
           </Pressable>
-        ) : null}
+        ) : (
+          <View style={styles.emblem}>
+            <BrandEmblem />
+          </View>
+        )}
         {title ? (
           <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
             {title}
@@ -85,7 +92,7 @@ export function Screen({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   flex: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row',
@@ -94,11 +101,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: space[4],
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bg,
   },
+  emblem: { marginRight: space[3] },
   back: { marginRight: space[2], paddingRight: space[2] },
   backText: { fontSize: 32, lineHeight: 34, color: colors.fg },
-  title: { flex: 1, fontSize: fontSize.headlineSm, fontWeight: '700', color: colors.fg },
+  title: { flex: 1, fontSize: fontSize.headlineSm, fontFamily: fonts.display, color: colors.fg },
   headerRight: { marginLeft: space[2] },
   content: { padding: space[4] },
-});
+}));

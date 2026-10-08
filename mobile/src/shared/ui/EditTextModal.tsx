@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 import { Banner } from './Banner';
 import { Button } from './Button';
@@ -99,8 +100,8 @@ export function EditTextModal({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(15, 23, 42, 0.45)' },
+const styles = themedStyles(() => ({
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.scrim },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.dialog,
@@ -121,4 +122,4 @@ const styles = StyleSheet.create({
   counter: { alignSelf: 'flex-end', fontSize: fontSize.labelMd, color: colors.fgMuted, marginTop: space[1] },
   buttons: { flexDirection: 'row', gap: space[2], marginTop: space[3] },
   flex: { flex: 1 },
-});
+}));

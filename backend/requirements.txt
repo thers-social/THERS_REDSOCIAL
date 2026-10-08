@@ -59,3 +59,7 @@ python-dotenv==1.2.3
 # infrastructure/media/ (mismo principio que confina `resend` a infrastructure/email/).
 Pillow==12.3.0
 boto3==1.43.103
+
+# Registro de errores en producción (app/observability.py). Opcional en runtime:
+# solo se importa si SENTRY_DSN está definida.
+sentry-sdk[flask]==2.19.2

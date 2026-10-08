@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { AppState, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
 import {
   describeNotification,
@@ -9,6 +9,7 @@ import {
 } from '@features/notifications/api';
 import type { AppNotification } from '@features/notifications/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
 import { formatRelativeTime } from '@shared/lib/time';
 import { Avatar } from '@shared/ui/Avatar';
@@ -65,6 +66,7 @@ export default function Notifications() {
 
   return (
     <Screen
+      back
       title="Avisos"
       scroll={false}
       withBottomInset={false}
@@ -122,9 +124,9 @@ export default function Notifications() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   list: { padding: space[4], paddingBottom: space[8] },
-  unread: { fontSize: fontSize.labelMd, color: colors.brand, fontWeight: '700' },
+  unread: { fontSize: fontSize.labelMd, color: colors.brandText, fontWeight: '700' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -142,4 +144,4 @@ const styles = StyleSheet.create({
   actor: { fontWeight: '700' },
   time: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginTop: 2 },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand },
-});
+}));
