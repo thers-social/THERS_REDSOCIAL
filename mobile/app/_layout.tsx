@@ -11,6 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@features/auth/context/AuthContext';
 import { PostsProvider } from '@features/posts/PostsContext';
+import { TeroProvider } from '@features/tero/context/TeroContext';
 import { colors, setColorScheme } from '@shared/design/tokens';
 
 /**
@@ -43,14 +44,17 @@ export default function RootLayout() {
       <AuthProvider>
         {/* Las publicaciones se cargan al iniciar sesión y se vacían al cerrarla. */}
         <PostsProvider>
-          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-          <Stack
-            key={scheme}
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.bg },
-            }}
-          />
+          {/* Preferencias de Tero: las leen la burbuja (pestañas) y app/tero/*. */}
+          <TeroProvider>
+            <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+            <Stack
+              key={scheme}
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.bg },
+              }}
+            />
+          </TeroProvider>
         </PostsProvider>
       </AuthProvider>
     </SafeAreaProvider>
