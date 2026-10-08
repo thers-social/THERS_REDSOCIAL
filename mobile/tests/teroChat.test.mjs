@@ -9,7 +9,29 @@ import {
   makeMessage,
   MAX_TERO_MESSAGE_LENGTH,
   mockReply,
+  statusLabel,
+  withStatus,
 } from '../src/features/tero/lib/teroChat.ts';
+
+describe('estados de los mensajes propios', () => {
+  it('withStatus cambia solo el mensaje indicado y no muta la lista', () => {
+    const now = new Date('2026-10-08T12:00:00.000Z');
+    const a = { ...makeMessage('user', 'a', now), status: 'sending' };
+    const b = makeMessage('tero', 'b', now);
+    const list = [a, b];
+    const next = withStatus(list, a.id, 'failed');
+    assert.equal(next[0].status, 'failed');
+    assert.equal(next[1], b);
+    assert.equal(list[0].status, 'sending');
+  });
+
+  it('cada estado tiene su texto; sin estado, ninguno', () => {
+    assert.equal(statusLabel('sending'), 'Enviando…');
+    assert.equal(statusLabel('sent'), 'Enviado');
+    assert.equal(statusLabel('failed'), 'No se pudo enviar');
+    assert.equal(statusLabel(undefined), null);
+  });
+});
 
 describe('checkMessage', () => {
   it('rechaza vacío y solo espacios', () => {

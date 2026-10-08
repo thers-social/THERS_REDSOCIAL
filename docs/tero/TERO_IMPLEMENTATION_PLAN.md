@@ -10,3 +10,10 @@
 8. Voz después del MVP.
 
 **No rehacer:** feed, auth, navbar, theme, API client.
+
+## Estado (2026-10-08)
+
+- Fase 1 (UI con mocks): implementada en `feature/tero-phase1-ui`, probada en el moto z3.
+- Fase 2: se hizo como **animaciones e interactividad** con `Animated` + SVG, no como Rive (no hay
+  `.riv`). Detalle y propuesta de Rive en `TERO_PHASE2.md`; reglas de comportamiento en
+  `TERO_PERSONALITY.md`.
