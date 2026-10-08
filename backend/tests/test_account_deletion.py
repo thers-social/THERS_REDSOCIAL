@@ -472,7 +472,13 @@ class TestEveryTableThatPointsToUsersIsDeleted:
         assert rows, "no se encontraron claves foráneas hacia users"
         # Excepción EXPLÍCITA y documentada (ADR-032 §1): un reporte debe SOBREVIVIR a la
         # eliminación de las cuentas involucradas, así que `reports` usa SET NULL ('n').
-        set_null_on_purpose = {"reports"}
+        # Y `places` (ADR-040 §4.2): un lugar del catálogo debe SOBREVIVIR a quien lo creó o
+        # verificó. `created_by_user_id`/`verified_by_user_id` quedan en NULL al borrar la cuenta,
+        # así que no se conserva ningún dato de esa persona (la intención de ADR-031).
+        # También `place_reports` y `admin_audit_log` (ADR-040 fase 2): el reporte de un lugar
+        # y el registro de auditoría deben sobrevivir a la cuenta de quien los generó; la
+        # referencia a la persona queda en NULL.
+        set_null_on_purpose = {"reports", "places", "place_reports", "admin_audit_log"}
         not_cascading = [
             (t, n) for t, n, d in rows if d != "c" and not (t in set_null_on_purpose and d == "n")
         ]

@@ -7,9 +7,10 @@
 # infraestructura/persistencia, no a `domain/`. `domain/auth/auth_service.py`
 # no debe importar SQLAlchemy ni este módulo directamente.
 
-from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import CITEXT
+from sqlalchemy import CheckConstraint, Index, text
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.types import UserDefinedType
 
 from app.extensions import db
 
@@ -1410,4 +1411,210 @@ class AccountDeletionCode(db.Model):
             unique=True,
             postgresql_where=text("used_at IS NULL"),
         ),
+    )
+
+
+# --- THERS Places (ADR-040-thers-places.md, fase 1) ---
+
+
+class Geography(UserDefinedType):
+    """`geography(Point, 4326)` de PostGIS, sin depender de `geoalchemy2`
+    (ADR-040 R3: su compatibilidad con Python 3.14 no está verificada).
+
+    El ORM solo necesita conocer la columna; las lecturas y escrituras de la
+    ubicación se hacen con SQL `ST_*` explícito en el repositorio
+    (`place_repository.py`) y en el seed."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw):
+        return "geography(Point,4326)"
+
+
+class PlaceCategory(db.Model):
+    __tablename__ = "place_categories"
+
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    slug = db.Column(db.String(60), nullable=False, unique=True)
+    name = db.Column(db.String(80), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, server_default=text("0"))
+    is_active = db.Column(db.Boolean, nullable=False, server_default=text("true"))
+
+
+class Place(db.Model):
+    __tablename__ = "places"
+
+    # Los valores permitidos de `verification_status`, `source` y
+    # `coordinate_source` viven en `domain/places/kinds.py`. La base los
+    # refuerza con un CHECK (no un ENUM): agregar uno exige tocar el CHECK, pero
+    # un valor inválido nunca llega a guardarse.
+    __table_args__ = (
+        CheckConstraint(
+            "verification_status IN ('pending','verified','needs_review','rejected','inactive')",
+            name="ck_places_verification_status",
+        ),
+        CheckConstraint(
+            "source IN ('thers_field','business','community','osm','official')",
+            name="ck_places_source",
+        ),
+        CheckConstraint(
+            "coordinate_source IN ('gps','map_selected','geocoded','imported')",
+            name="ck_places_coordinate_source",
+        ),
+        Index("ix_places_location", "location", postgresql_using="gist"),
+        Index("ix_places_category_id", "category_id"),
+        Index("ix_places_public", "is_active", "verification_status"),
+    )
+
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    name = db.Column(db.String(160), nullable=False)
+    slug = db.Column(db.String(180), nullable=False, unique=True)
+    description = db.Column(db.Text, nullable=True)
+    category_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("place_categories.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    # Punto geográfico (WGS 84). Índice GiST: las búsquedas por distancia
+    # (`ST_DWithin`) y el orden por cercanía lo aprovechan.
+    location = db.Column(Geography(), nullable=False)
+
+    address = db.Column(db.String(255), nullable=True)
+    municipality = db.Column(db.String(100), nullable=True)
+    department = db.Column(db.String(100), nullable=True)
+    phone = db.Column(db.String(40), nullable=True)
+    website = db.Column(db.String(255), nullable=True)
+
+    verification_status = db.Column(
+        db.String(20), nullable=False, server_default=text("'pending'")
+    )
+    source = db.Column(db.String(20), nullable=False)
+    coordinate_source = db.Column(db.String(20), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, server_default=text("true"))
+
+    # SET NULL: si quien creó o verificó elimina su cuenta (ADR-031), el lugar
+    # sigue; solo se pierde la referencia a la persona.
+    created_by_user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    verified_by_user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    last_verified_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+# --- THERS Places, fase 2 (ADR-040-thers-places.md) ---
+
+
+class SavedPlace(db.Model):
+    __tablename__ = "saved_places"
+
+    # PK compuesta: la base impide guardar dos veces el mismo lugar. CASCADE en
+    # ambas FKs: al borrar la cuenta (ADR-031) desaparecen sus guardados.
+    user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("places.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class PlaceReport(db.Model):
+    __tablename__ = "place_reports"
+
+    # Los motivos y estados permitidos viven en `domain/places/kinds.py`; la base
+    # los refuerza con CHECK.
+    __table_args__ = (
+        CheckConstraint(
+            "reason IN ('wrong_location','wrong_hours','wrong_phone','closed','duplicate',"
+            "'wrong_name','inappropriate','other')",
+            name="ck_place_reports_reason",
+        ),
+        CheckConstraint(
+            "status IN ('open','reviewing','resolved','dismissed')",
+            name="ck_place_reports_status",
+        ),
+    )
+
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("places.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # SET NULL, no CASCADE: el reporte sobrevive a quien lo hizo (mismo criterio
+    # que `reports`, ADR-032). Queda sin autor; no se conserva dato de esa persona.
+    reporter_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reason = db.Column(db.String(20), nullable=False)
+    details = db.Column(db.String(500), nullable=True)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'open'"))
+    resolved_by_user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    resolution_note = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class AdminAuditLog(db.Model):
+    __tablename__ = "admin_audit_log"
+
+    # Registro de acciones de moderación sobre lugares. NUNCA guarda secretos,
+    # tokens ni contraseñas: `changes` solo lleva los campos públicos que cambiaron.
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    # SET NULL: el registro debe sobrevivir a la cuenta de quien actuó.
+    actor_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action = db.Column(db.String(40), nullable=False)
+    resource_type = db.Column(db.String(30), nullable=False)
+    resource_id = db.Column(PG_UUID(as_uuid=True), nullable=True)
+    changes = db.Column(JSONB, nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

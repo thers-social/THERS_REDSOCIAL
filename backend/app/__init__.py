@@ -119,6 +119,14 @@ def create_app():
     from app.interfaces.routes.moderation_routes import moderation_bp
     app.register_blueprint(moderation_bp, url_prefix="/api")
 
+    # THERS Places (ADR-040): catálogo público de lugares, solo lectura en la fase 1.
+    from app.interfaces.routes.place_routes import places_bp
+    app.register_blueprint(places_bp, url_prefix="/api")
+
+    # Moderación de lugares (ADR-040 fase 2, D3): solo cuentas con `is_moderator`.
+    from app.interfaces.routes.place_moderation_routes import place_moderation_bp
+    app.register_blueprint(place_moderation_bp, url_prefix="/api")
+
     # Comandos de línea de comandos (flask set-moderator, flask unsuspend-user).
     from app.interfaces.cli import register_cli
     register_cli(app)

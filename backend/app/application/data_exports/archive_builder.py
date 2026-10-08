@@ -26,6 +26,8 @@ Contenido (un archivo JSON por sección):
   muted_topics.json    Temas que silenciaste.
   restrictions.json    Cuentas que bloqueaste o restringiste.
   sessions.json        Dispositivos desde los que iniciaste sesión.
+  saved_places.json    Lugares que guardaste.
+  place_reports.json   Reportes de datos incorrectos de lugares que hiciste.
 
 Qué NO incluye, a propósito:
   - Tu contraseña (ni su hash) ni el secreto de tu autenticación en dos pasos.
