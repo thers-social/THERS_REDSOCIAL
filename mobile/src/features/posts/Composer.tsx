@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
+import { comingSoon } from '@shared/lib/comingSoon';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
+import { Icon } from '@shared/ui/Icon';
 
 import { MAX_POST_LENGTH } from './types';
 
@@ -45,7 +48,7 @@ export function Composer({ onPublish }: Props) {
         style={styles.input}
         value={text}
         onChangeText={setText}
-        placeholder="¿Qué quieres compartir?"
+        placeholder="¿Qué estás creando hoy?"
         placeholderTextColor={colors.fgDisabled}
         multiline
         maxLength={MAX_POST_LENGTH}
@@ -64,16 +67,34 @@ export function Composer({ onPublish }: Props) {
           />
           <Text style={styles.sensitiveText}>Contenido sensible</Text>
         </View>
-        <Text style={styles.counter}>
-          {text.length}/{MAX_POST_LENGTH}
-        </Text>
+        <View style={styles.tools}>
+          <Pressable
+            onPress={() => comingSoon('Los atajos de IA')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Asistente de IA (próximamente)"
+          >
+            <Icon name="sparkle" size={20} color={colors.brandText} />
+          </Pressable>
+          <Pressable
+            onPress={() => comingSoon('Adjuntar fotos y videos')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Adjuntar imagen (próximamente)"
+          >
+            <Icon name="image" size={20} color={colors.fgSecondary} />
+          </Pressable>
+          <Text style={styles.counter}>
+            {text.length}/{MAX_POST_LENGTH}
+          </Text>
+        </View>
       </View>
       <Button label="Publicar" onPress={publish} loading={busy} disabled={!trimmed} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   box: {
     backgroundColor: colors.surface,
     borderRadius: radius.card,
@@ -93,5 +114,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space[3] },
   sensitive: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
   sensitiveText: { fontSize: fontSize.bodySm, color: colors.fgSecondary },
+  tools: { flexDirection: 'row', alignItems: 'center', gap: space[3] },
   counter: { fontSize: fontSize.labelMd, color: colors.fgMuted },
-});
+}));

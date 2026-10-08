@@ -1,6 +1,7 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 
 import { colors, fontSize, radius } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 type Props = { name: string; uri?: string | null; size?: number };
 
@@ -27,8 +28,8 @@ export function Avatar({ name, uri, size = 40 }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   image: { backgroundColor: colors.bgSubtle },
   fallback: { backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   initial: { color: colors.onBrand, fontWeight: '800', fontSize: fontSize.bodyLg },
-});
+}));

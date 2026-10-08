@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@features/auth/context/AuthContext';
@@ -10,6 +10,7 @@ import { useChat } from '@features/messages/useChat';
 import { blockUser } from '@features/safety/api';
 import { ReportModal } from '@features/safety/ReportModal';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { formatClock } from '@shared/lib/time';
 import { ActionSheet } from '@shared/ui/ActionSheet';
 import type { SheetAction } from '@shared/ui/ActionSheet';
@@ -347,7 +348,7 @@ function Bubble({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   headerMenu: { fontSize: 26, color: colors.fgMuted, lineHeight: 28, paddingHorizontal: space[1] },
   list: { padding: space[3], flexGrow: 1 },
   flip: { transform: [{ scaleY: -1 }] },
@@ -365,7 +366,7 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: fontSize.bodyLg, color: colors.fg, lineHeight: 22 },
   bubbleTextMine: { color: colors.onBrand },
   meta: { fontSize: fontSize.labelSm, color: colors.fgMuted, marginTop: 2, alignSelf: 'flex-end' },
-  metaMine: { color: colors.brandSoftStrong },
+  metaMine: { color: colors.onBrandMuted },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -399,4 +400,4 @@ const styles = StyleSheet.create({
   },
   sendDisabled: { opacity: 0.4 },
   sendText: { color: colors.onBrand, fontWeight: '700', fontSize: fontSize.bodyMd },
-});
+}));

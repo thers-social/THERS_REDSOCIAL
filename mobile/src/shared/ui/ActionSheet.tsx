@@ -1,7 +1,8 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 export type SheetAction = {
   label: string;
@@ -69,8 +70,8 @@ export function ActionSheet({ visible, title, actions, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)' },
+const styles = themedStyles(() => ({
+  backdrop: { flex: 1, backgroundColor: colors.scrim },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.dialog,
@@ -89,4 +90,4 @@ const styles = StyleSheet.create({
   itemText: { fontSize: fontSize.bodyLg, color: colors.fg },
   destructive: { color: colors.dangerAccent, fontWeight: '600' },
   cancel: { borderTopWidth: 1, borderTopColor: colors.borderSubtle, marginTop: space[1] },
-});
+}));

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { User } from '@features/auth/types';
 import type { ProfilePatch } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 import { Banner } from './Banner';
 import { Button } from './Button';
@@ -118,8 +119,8 @@ export function EditProfileModal({ visible, user, onSave, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(15, 23, 42, 0.45)' },
+const styles = themedStyles(() => ({
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.scrim },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.dialog,
@@ -130,4 +131,4 @@ const styles = StyleSheet.create({
   title: { fontSize: fontSize.headlineSm, fontWeight: '700', color: colors.fg, marginBottom: space[3] },
   buttons: { flexDirection: 'row', gap: space[2], marginTop: space[3] },
   flex: { flex: 1 },
-});
+}));

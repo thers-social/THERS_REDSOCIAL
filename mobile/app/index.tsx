@@ -1,9 +1,10 @@
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 /**
  * Puerta de entrada: decide a dónde va la app según la sesión.
@@ -71,7 +72,7 @@ export default function Index() {
   return <Redirect href={user ? '/home' : '/login'} />;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   container: {
     flex: 1,
     alignItems: 'center',
@@ -105,4 +106,4 @@ const styles = StyleSheet.create({
   linkButton: { marginTop: space[4], padding: space[3] },
   linkPressed: { opacity: 0.6 },
   linkText: { color: colors.fgSecondary, fontSize: fontSize.bodyMd, fontWeight: '600' },
-});
+}));
