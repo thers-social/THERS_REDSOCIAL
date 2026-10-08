@@ -72,9 +72,17 @@ docker compose up -d
 docker compose ps          # esperar STATUS = healthy
 ```
 
-Esto levanta `thers_postgres_dev` (PostgreSQL 16-alpine) y crea, la primera vez que
+Esto levanta `thers_postgres_dev` (PostgreSQL 16 con **PostGIS 3.5**, imagen
+`postgis/postgis:16-3.5-alpine`; `ADR-040`) y crea, la primera vez que
 el volumen está vacío, **dos** bases: `thers_dev` (desarrollo) y `thers_test`
 (tests, vía `docker/postgres-init/01-create-test-db.sql`).
+
+> **Si ya tenías el contenedor de antes** (`postgres:16-alpine`): al hacer `git pull` y `docker compose up -d`
+> Docker descarga la imagen nueva y recrea el contenedor. **Tus datos se conservan** (viven en el volumen
+> `thers_redsocial_thers_postgres_data`; la imagen nueva tiene la misma base alpine y la misma versión mayor 16).
+> Sin la imagen nueva la migración de Places falla en `CREATE EXTENSION postgis`. Antes de actualizar puedes hacer un
+> respaldo: `docker exec thers_postgres_dev pg_dump -U thers -d thers_dev -Fc > respaldo.dump`.
+> Después aplica las migraciones en **ambas** bases (`thers_dev` y `thers_test`).
 
 ### 2.3 Backend
 
