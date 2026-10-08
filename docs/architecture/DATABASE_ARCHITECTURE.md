@@ -4,7 +4,7 @@
 |---|---|
 | Documento | `docs/architecture/DATABASE_ARCHITECTURE.md` |
 | Identificador propuesto | `DB-001` (sigue el patrón `HB-001`/`ARC-001`/`DS-001`/`WF-001`/`PV-001`/`FAS-001`) — **pendiente de ratificación formal** |
-| Versión | 0.27 |
+| Versión | 0.29 |
 | Estado | **Borrador / Contrato técnico — pendiente de aprobación del equipo** |
 | Depende de | `HB-001` (organización, gobernanza, git flow, seguridad), `REPOSITORY_STRUCTURE.md` (ubicación del backend y carpeta futura `database/`) |
 | Motivo | El `CLAUDE.md` maestro (§4, §14) identificó que la arquitectura de Base de Datos no estaba formalmente documentada |
@@ -125,7 +125,7 @@ Este documento cubre:
 | Aspecto | Valor | Fuente |
 |---|---|---|
 | Motor | **PostgreSQL** | `HB-001` (portada del stack) y `REPOSITORY_STRUCTURE.md` §4 |
-| Versión | **PostgreSQL 16** (imagen `postgres:16-alpine`) — entorno de desarrollo local estandarizado vía Docker Compose (`docker-compose.yml`, raíz del repo), reproducible para los 4 integrantes. Reemplaza la nota de v0.2 sobre una instalación nativa de PostgreSQL 17.11 verificada solo en una máquina — esa instancia no era reproducible por el equipo y ya no es la referencia. Versión oficial para un entorno compartido/producción sigue sin ratificación formal (DevOps, `CLAUDE.md` §5) | `docker-compose.yml`; verificado end-to-end en esta tarea (migración, UUID, CITEXT, trigger, downgrade/upgrade, reconstrucción desde volumen vacío) |
+| Versión | **PostgreSQL 16** (imagen `postgis/postgis:16-3.5-alpine` desde `ADR-040`; antes `postgres:16-alpine`) — entorno de desarrollo local estandarizado vía Docker Compose (`docker-compose.yml`, raíz del repo), reproducible para los 4 integrantes. Reemplaza la nota de v0.2 sobre una instalación nativa de PostgreSQL 17.11 verificada solo en una máquina — esa instancia no era reproducible por el equipo y ya no es la referencia. Versión oficial para un entorno compartido/producción sigue sin ratificación formal (DevOps, `CLAUDE.md` §5) | `docker-compose.yml`; verificado end-to-end en esta tarea (migración, UUID, CITEXT, trigger, downgrade/upgrade, reconstrucción desde volumen vacío) |
 | Driver / adaptador Python | **`psycopg` (v3), `psycopg[binary]==3.3.4`** — agregado a `backend/requirements.txt` junto con `Flask-SQLAlchemy` y `Flask-Migrate` | Implementado en código (`BACKEND_ARCHITECTURE.md` §2). **Ratificación formal por el Comité Técnico pendiente de confirmar** (`HB-001` §11.1) — decisión indicada directamente por el Tech Lead Backend, no consensuada por los 4 integrantes en esta tarea |
 
 > ⚠️ **Hallazgo de entorno local (no un cambio de arquitectura, una nota operativa).** En al menos una máquina del equipo, un servicio nativo de PostgreSQL instalado en Windows ya ocupa el puerto `5432` del host, en conflicto con el mapeo de puertos de `docker-compose.yml`. `docker compose ps`/`healthcheck` reportan el contenedor como saludable igualmente (el healthcheck corre *dentro* del contenedor, no prueba el puerto del host), pero cualquier cliente conectando a `localhost:5432` desde el host puede terminar hablando con el Postgres nativo en vez del de Docker, con errores de autenticación confusos. `docker-compose.yml` ya soporta este caso sin modificarse: `ports: "${POSTGRES_PORT:-5432}:5432"` permite fijar `POSTGRES_PORT` (p. ej. `5433`) para evitar el choque, ajustando `DATABASE_URL`/`TEST_DATABASE_URL` al mismo puerto. Ver el informe de la tarea que agregó esta nota para el procedimiento exacto.
@@ -921,6 +921,43 @@ Todas las lecturas que significan "relación efectiva" (`is_following`, `followe
 **Pendiente (no decidido):** cuánto tiempo se conserva un reporte ya resuelto, y el esquema de la fase 2 (`is_moderator`, `suspended_at`, `suspension_reason`). Ver `ADR-032`.
 
 ---
+
+### 5.18 `place_categories` y `places` (`ADR-040-thers-places.md`, fase 1, **PROPUESTO**)
+
+Requieren la extensión **PostGIS** (la migración `a7c3e9d1b504` ejecuta `CREATE EXTENSION IF NOT EXISTS postgis`; el
+`downgrade` no la borra).
+
+**`place_categories`:** `id` (UUID), `slug` (único), `name`, `sort_order`, `is_active`. Las 12 categorías iniciales se
+siembran en la propia migración: son datos de referencia, no de prueba.
+
+**`places`:** `id` (UUID), `name`, `slug` (único), `description`, `category_id` (FK `RESTRICT`), `location`
+(`geography(Point, 4326)`), `address`, `municipality`, `department`, `phone`, `website`, `verification_status`,
+`source`, `coordinate_source`, `is_active`, `created_by_user_id` y `verified_by_user_id` (FK a `users`, `SET NULL`),
+`last_verified_at`, `created_at`, `updated_at`.
+
+- `CHECK` (no `ENUM`) sobre `verification_status`, `source` y `coordinate_source`; los valores viven en
+  `domain/places/kinds.py`.
+- Índices: **GiST** sobre `location` (`ix_places_location`), `category_id` y `(is_active, verification_status)`.
+- **PostGIS no rechaza coordenadas fuera de rango:** `geography` guarda una latitud 95 como 85 y una longitud 190 como
+  -170, sin error. Ninguna restricción de la base lo detecta, así que **toda escritura debe validar antes** con
+  `validators.parse_coordinates`.
+- Rendimiento verificado con 1016 lugares: `nearby` usa `ix_places_location` (`Bitmap Index Scan`), ~17 ms
+  (`EXPLAIN ANALYZE`, detalle en `ADR-040` §12).
+- No incluye todavía etiquetas, guardados, reportes, fotos ni cambios (fases siguientes).
+
+### 5.19 `saved_places`, `place_reports` y `admin_audit_log` (`ADR-040`, fase 2, **PROPUESTO**)
+
+Migración `b8d4f1a6c295` (aditiva). También crea la función `thers_unaccent` (inmutable) y el índice GIN trigram
+`ix_places_name_search` para la búsqueda por nombre; activa `pg_trgm` y `unaccent` (el `downgrade` no las borra).
+
+- **`saved_places`:** PK compuesta `(user_id, place_id)` (la base impide duplicados), `created_at`. FK a `users` y `places` con `CASCADE`.
+- **`place_reports`:** `id`, `place_id` (`CASCADE`), `reporter_id` (`SET NULL`: el reporte sobrevive a quien lo hizo, como `reports`),
+  `reason` y `status` con `CHECK`, `details`, `resolved_by_user_id` (`SET NULL`), `resolved_at`, `resolution_note`, `created_at`.
+  Índice único parcial `(reporter_id, place_id, reason) WHERE status IN ('open','reviewing')`.
+- **`admin_audit_log`:** `actor_id` (`SET NULL`: el registro sobrevive a la cuenta), `action`, `resource_type`, `resource_id`, `changes` (JSONB),
+  `created_at`. Nunca guarda secretos.
+- `ADR-031`: `places`, `place_reports` y `admin_audit_log` son excepciones documentadas (`SET NULL`) en la guardia de claves foráneas hacia `users`.
+- `ADR-028`: la exportación de datos incluye `saved_places.json` y `place_reports.json`.
 
 ## 6. Relaciones entre entidades
 
