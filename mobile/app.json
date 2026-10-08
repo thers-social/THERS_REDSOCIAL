@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "thers",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.thers.app",
       "adaptiveIcon": {
@@ -24,6 +24,10 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-router", "expo-secure-store"]
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font"
+    ]
   }
 }

@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@features/auth/context/AuthContext';
@@ -12,6 +12,7 @@ import type { PostComment } from '@features/posts/types';
 import { usePostMenu } from '@features/posts/usePostMenu';
 import { ReportModal } from '@features/safety/ReportModal';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { formatRelativeTime } from '@shared/lib/time';
 import { ActionSheet } from '@shared/ui/ActionSheet';
 import type { SheetAction } from '@shared/ui/ActionSheet';
@@ -254,7 +255,7 @@ export default function PostDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   list: { padding: space[4], paddingBottom: space[6] },
   commentsTitle: { fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.fg, marginBottom: space[3] },
   comment: {
@@ -305,4 +306,4 @@ const styles = StyleSheet.create({
   },
   sendDisabled: { opacity: 0.4 },
   sendText: { color: colors.onBrand, fontWeight: '700' },
-});
+}));

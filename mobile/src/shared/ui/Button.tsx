@@ -1,7 +1,8 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Pressable, Text } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themed, themedStyles } from '@shared/design/theme';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -57,10 +58,10 @@ export function Button({
   );
 }
 
-const PALETTE: Record<
+const PALETTE = themed((): Record<
   Variant,
   { bg: string; bgPressed: string; border: string; fg: string }
-> = {
+> => ({
   primary: {
     bg: colors.brand,
     bgPressed: colors.brandHover,
@@ -75,7 +76,7 @@ const PALETTE: Record<
   },
   danger: {
     bg: colors.dangerAccent,
-    bgPressed: colors.dangerFg,
+    bgPressed: colors.dangerPressed,
     border: colors.dangerAccent,
     fg: colors.onBrand,
   },
@@ -83,11 +84,11 @@ const PALETTE: Record<
     bg: 'transparent',
     bgPressed: colors.bgSubtle,
     border: 'transparent',
-    fg: colors.brand,
+    fg: colors.brandText,
   },
-};
+}));
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   base: {
     minHeight: 48,
     borderRadius: radius.input,
@@ -98,4 +99,4 @@ const styles = StyleSheet.create({
   },
   label: { fontSize: fontSize.bodyMd, fontWeight: '700' },
   disabled: { opacity: 0.5 },
-});
+}));

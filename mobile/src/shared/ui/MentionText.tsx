@@ -1,7 +1,8 @@
-import { StyleSheet, Text } from 'react-native';
+import { Text } from 'react-native';
 import type { StyleProp, TextStyle } from 'react-native';
 
 import { colors } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 type Props = {
   text: string;
@@ -36,6 +37,6 @@ export function MentionText({ text, usernames, style }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  mention: { color: colors.brand, fontWeight: '600' },
-});
+const styles = themedStyles(() => ({
+  mention: { color: colors.brandText, fontWeight: '600' },
+}));

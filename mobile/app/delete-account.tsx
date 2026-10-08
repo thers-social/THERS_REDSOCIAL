@@ -1,10 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { ApiError, request } from '@shared/lib/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
 import { Screen } from '@shared/ui/Screen';
@@ -244,7 +245,7 @@ export default function DeleteAccount() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   body: { fontSize: fontSize.bodyMd, color: colors.fgSecondary, marginBottom: space[4], lineHeight: 22 },
   strong: { fontWeight: '700', color: colors.fg },
   card: {
@@ -259,4 +260,4 @@ const styles = StyleSheet.create({
   cardTitleSpaced: { marginTop: space[3] },
   cardText: { fontSize: fontSize.bodySm, color: colors.fgSecondary, marginTop: space[1], lineHeight: 19 },
   resend: { marginTop: space[2] },
-});
+}));

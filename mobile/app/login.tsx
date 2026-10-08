@@ -17,6 +17,7 @@ import { useAuth } from '@features/auth/context/AuthContext';
 import { isValidEmail } from '@features/auth/lib/validators';
 import { ApiError } from '@shared/lib/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 export default function Login() {
   const { login } = useAuth();
@@ -182,7 +183,7 @@ export default function Login() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   flex: { flex: 1, backgroundColor: colors.bg },
   scroll: {
     flexGrow: 1,
@@ -192,7 +193,7 @@ const styles = StyleSheet.create({
   brand: {
     fontSize: fontSize.headlineXl,
     fontWeight: '800',
-    color: colors.brand,
+    color: colors.brandText,
     textAlign: 'center',
     letterSpacing: 1,
   },
@@ -247,7 +248,7 @@ const styles = StyleSheet.create({
   },
   linkRow: { alignItems: 'center', marginTop: space[4], padding: space[3] },
   linkPressed: { opacity: 0.6 },
-  linkText: { color: colors.brand, fontSize: fontSize.bodyMd, fontWeight: '600' },
+  linkText: { color: colors.brandText, fontSize: fontSize.bodyMd, fontWeight: '600' },
   note: {
     fontSize: fontSize.bodySm,
     color: colors.fgMuted,
@@ -255,4 +256,4 @@ const styles = StyleSheet.create({
     marginTop: space[6],
     lineHeight: 18,
   },
-});
+}));

@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themed, themedStyles } from '@shared/design/theme';
 
 type Props = { tone?: 'error' | 'info' | 'success'; children: string };
 
@@ -18,13 +19,13 @@ export function Banner({ tone = 'info', children }: Props) {
   );
 }
 
-const PALETTE = {
+const PALETTE = themed(() => ({
   error: { bg: colors.dangerSurface, border: colors.dangerBorder, fg: colors.dangerFg },
   info: { bg: colors.brandSoft, border: colors.brandSoftStrong, fg: colors.fgSecondary },
   success: { bg: colors.successSurface, border: colors.successAccent, fg: colors.successFg },
-} as const;
+}));
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   box: { borderWidth: 1, borderRadius: radius.sm, padding: space[3], marginBottom: space[4] },
   text: { fontSize: fontSize.bodySm, lineHeight: 18 },
-});
+}));

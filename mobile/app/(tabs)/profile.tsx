@@ -1,24 +1,30 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Image, Linking, Pressable, Text, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { PostCard } from '@features/posts/PostCard';
 import { usePosts } from '@features/posts/PostsContext';
 import { usePostMenu } from '@features/posts/usePostMenu';
 import { patchProfile } from '@features/settings/api';
-import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { colors, fontSize, fonts, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { messageOf } from '@features/posts/PostsContext';
+import { comingSoon } from '@shared/lib/comingSoon';
 import { Avatar } from '@shared/ui/Avatar';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
 import { EditProfileModal } from '@shared/ui/EditProfileModal';
+import { Icon } from '@shared/ui/Icon';
 import { Screen } from '@shared/ui/Screen';
+
+type Tab = 'posts' | 'mentions';
 
 /**
  * Perfil propio: datos reales de `GET /api/users/me` y las publicaciones propias,
  * que salen de la misma lista del feed (el servidor no tiene «publicaciones de un
- * usuario»; igual que en la web se filtra por autor). Ver perfiles AJENOS no existe
+ * usuario»; igual que en la web se filtra por autor). «Menciones» filtra, de las
+ * publicaciones cargadas, las que te mencionan. Ver perfiles AJENOS no existe
  * todavía en el servidor (no hay `GET /api/users/<id>`), así que no se inventa.
  */
 export default function Profile() {
@@ -27,9 +33,14 @@ export default function Profile() {
   const posts = usePosts();
   const menu = usePostMenu();
   const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState<Tab>('posts');
 
   const mine = useMemo(
     () => posts.posts.filter((post) => post.author.id === user?.id),
+    [posts.posts, user?.id],
+  );
+  const mentioned = useMemo(
+    () => posts.posts.filter((post) => post.mentions.some((m) => m.id === user?.id)),
     [posts.posts, user?.id],
   );
 
@@ -40,16 +51,59 @@ export default function Profile() {
     router.replace('/login');
   }
 
+  const data = tab === 'posts' ? mine : mentioned;
+
   return (
-    <Screen title="Perfil" scroll={false} withBottomInset={false}>
+    <Screen
+      title={`@${user.username}`}
+      scroll={false}
+      withBottomInset={false}
+      headerRight={
+        <Pressable
+          onPress={() => router.push('/settings')}
+          hitSlop={10}
+          style={styles.gear}
+          accessibilityRole="button"
+          accessibilityLabel="Ajustes"
+        >
+          <Icon name="settings" size={22} color={colors.fg} />
+        </Pressable>
+      }
+    >
       <FlatList
-        data={mine}
+        data={data}
         keyExtractor={(post) => post.id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View>
-            <View style={styles.header}>
+            {user.cover_url ? (
+              <Image
+                source={{ uri: user.cover_url }}
+                style={styles.cover}
+                accessibilityIgnoresInvertColors
+                accessibilityLabel="Portada de tu perfil"
+              />
+            ) : null}
+
+            <View style={styles.identity}>
               <Avatar name={user.name} uri={user.avatar_url} size={88} />
+              <View style={styles.statsRow}>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{mine.length}</Text>
+                  <Text style={styles.statLabel}>Publicaciones</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{user.followers_count}</Text>
+                  <Text style={styles.statLabel}>Seguidores</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{user.following_count}</Text>
+                  <Text style={styles.statLabel}>Siguiendo</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.header}>
               <Text style={styles.name}>{user.name}</Text>
               <Text style={styles.username}>
                 @{user.username}
@@ -65,27 +119,12 @@ export default function Profile() {
                     )
                   }
                   accessibilityRole="link"
+                  style={styles.linkRow}
                 >
+                  <Icon name="link" size={14} color={colors.brandText} />
                   <Text style={styles.link}>{user.website}</Text>
                 </Pressable>
               ) : null}
-            </View>
-
-            <View style={styles.statsRow}>
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{user.followers_count}</Text>
-                <Text style={styles.statLabel}>Seguidores</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{user.following_count}</Text>
-                <Text style={styles.statLabel}>Siguiendo</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{mine.length}</Text>
-                <Text style={styles.statLabel}>Publicaciones</Text>
-              </View>
             </View>
 
             {!user.profile_completed ? (
@@ -97,15 +136,65 @@ export default function Profile() {
 
             <View style={styles.buttons}>
               <Button label="Editar perfil" variant="secondary" onPress={() => setEditing(true)} style={styles.flex} />
-              <Button label="Ajustes" variant="secondary" onPress={() => router.push('/settings')} style={styles.flex} />
+              <Button
+                label="Compartir"
+                variant="secondary"
+                onPress={() => comingSoon('Compartir perfil')}
+                style={styles.flex}
+              />
+              <Pressable
+                onPress={() => comingSoon('Las sugerencias de amigos')}
+                style={styles.iconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Sugerencias de amigos (próximamente)"
+              >
+                <Icon name="userAdd" size={20} color={colors.fg} />
+              </Pressable>
             </View>
 
-            <Text style={styles.sectionTitle}>Mis publicaciones</Text>
-            {mine.length === 0 ? (
+            <Pressable
+              onPress={() => comingSoon('Las historias destacadas')}
+              style={styles.highlights}
+              accessibilityRole="button"
+              accessibilityLabel="Historias destacadas (próximamente)"
+            >
+              <View style={styles.highlightNew}>
+                <Icon name="plus" size={22} color={colors.fgSecondary} />
+              </View>
+              <View style={styles.flexText}>
+                <Text style={styles.highlightTitle}>Historias destacadas</Text>
+                <Text style={styles.highlightHint}>Próximamente</Text>
+              </View>
+              <Icon name="chevron" size={18} color={colors.fgDisabled} />
+            </Pressable>
+
+            <View style={styles.tabs}>
+              {(
+                [
+                  ['posts', 'Posts', 'grid'],
+                  ['mentions', 'Menciones', 'at'],
+                ] as const
+              ).map(([id, label, icon]) => (
+                <Pressable
+                  key={id}
+                  onPress={() => setTab(id)}
+                  style={[styles.tab, tab === id && styles.tabOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: tab === id }}
+                >
+                  <Icon name={icon} size={18} color={tab === id ? colors.brandText : colors.fgMuted} />
+                  <Text style={[styles.tabText, tab === id && styles.tabTextOn]}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {data.length === 0 ? (
               <Text style={styles.empty}>
-                {posts.status === 'ready'
-                  ? 'Todavía no has publicado nada reciente.'
-                  : 'Cargando publicaciones…'}
+                {posts.status !== 'ready'
+                  ? 'Cargando publicaciones…'
+                  : tab === 'posts'
+                    ? 'Todavía no has publicado nada reciente.'
+                    : 'Ninguna publicación reciente te menciona.'}
               </Text>
             ) : null}
           </View>
@@ -141,30 +230,76 @@ export default function Profile() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   list: { padding: space[4], paddingBottom: space[8] },
-  header: { alignItems: 'center', marginBottom: space[4] },
-  name: { fontSize: fontSize.headlineMd, fontWeight: '700', color: colors.fg, marginTop: space[3] },
+  gear: { padding: space[1] },
+  cover: { width: '100%', height: 140, borderRadius: radius.card, marginBottom: space[4], backgroundColor: colors.surface },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: space[4], marginBottom: space[3] },
+  header: { marginBottom: space[4] },
+  name: { fontSize: fontSize.headlineSm, fontFamily: fonts.display, color: colors.fg },
   username: { fontSize: fontSize.bodyMd, color: colors.fgMuted, marginTop: space[1] },
-  bio: { fontSize: fontSize.bodyMd, color: colors.fg, textAlign: 'center', marginTop: space[3], lineHeight: 21 },
+  bio: { fontSize: fontSize.bodyMd, color: colors.fg, marginTop: space[3], lineHeight: 21 },
   meta: { fontSize: fontSize.bodySm, color: colors.fgMuted, marginTop: space[2] },
-  link: { fontSize: fontSize.bodySm, color: colors.brand, marginTop: space[1], fontWeight: '600' },
-  statsRow: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.card,
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: space[1], marginTop: space[2] },
+  link: { fontSize: fontSize.bodySm, color: colors.brandText, fontWeight: '600' },
+  statsRow: { flex: 1, flexDirection: 'row' },
+  stat: { flex: 1, alignItems: 'center' },
+  statValue: { fontSize: fontSize.headlineSm, fontFamily: fonts.display, color: colors.fg },
+  statLabel: { fontSize: fontSize.labelSm, color: colors.fgMuted, marginTop: space[1] },
+  buttons: { flexDirection: 'row', gap: space[2], marginBottom: space[4], alignItems: 'center' },
+  flex: { flex: 1, paddingHorizontal: space[2] },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.input,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: space[4],
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  highlights: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space[3],
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    padding: space[3],
     marginBottom: space[4],
   },
-  stat: { flex: 1, alignItems: 'center' },
-  statDivider: { width: 1, backgroundColor: colors.borderSubtle },
-  statValue: { fontSize: fontSize.headlineSm, fontWeight: '700', color: colors.fg },
-  statLabel: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginTop: space[1] },
-  buttons: { flexDirection: 'row', gap: space[2], marginBottom: space[4] },
-  flex: { flex: 1, paddingHorizontal: space[2] },
-  sectionTitle: { fontSize: fontSize.bodyLg, fontWeight: '700', color: colors.fg, marginBottom: space[3] },
+  highlightNew: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flexText: { flex: 1 },
+  highlightTitle: { fontSize: fontSize.bodyMd, fontWeight: '700', color: colors.fg },
+  highlightHint: { fontSize: fontSize.labelMd, color: colors.brandText, marginTop: 2 },
+  tabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    marginBottom: space[3],
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space[2],
+    paddingVertical: space[3],
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabOn: { borderBottomColor: colors.brandText },
+  tabText: { fontSize: fontSize.bodyMd, fontWeight: '600', color: colors.fgMuted },
+  tabTextOn: { color: colors.brandText },
   empty: { fontSize: fontSize.bodySm, color: colors.fgMuted, marginBottom: space[4] },
   logout: { marginTop: space[4] },
-});
+}));

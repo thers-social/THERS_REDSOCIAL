@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
 
 import { fetchPrivacy, patchPrivacy } from '@features/settings/api';
 import type { Audience, PrivacyPatch, PrivacySettings } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
 import { Banner } from '@shared/ui/Banner';
 import { Screen } from '@shared/ui/Screen';
@@ -175,7 +176,7 @@ function ChoiceGroup({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -203,5 +204,5 @@ const styles = StyleSheet.create({
   },
   choiceSelected: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
   choiceText: { fontSize: fontSize.bodyMd, color: colors.fg },
-  choiceTextSelected: { color: colors.brand, fontWeight: '700' },
-});
+  choiceTextSelected: { color: colors.brandText, fontWeight: '700' },
+}));

@@ -1,10 +1,13 @@
 import { useRouter } from 'expo-router';
 import { memo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
+import { comingSoon } from '@shared/lib/comingSoon';
 import { formatRelativeTime } from '@shared/lib/time';
 import { Avatar } from '@shared/ui/Avatar';
+import { Icon } from '@shared/ui/Icon';
 import { MentionText } from '@shared/ui/MentionText';
 
 import type { Post } from './types';
@@ -78,7 +81,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           accessibilityRole="button"
           accessibilityLabel="Más opciones"
         >
-          <Text style={styles.menuText}>⋯</Text>
+          <Icon name="more" size={20} color={colors.fgMuted} />
         </Pressable>
       </View>
 
@@ -109,9 +112,13 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           accessibilityLabel={post.liked_by_me ? 'Quitar me gusta' : 'Me gusta'}
           accessibilityState={{ selected: post.liked_by_me }}
         >
-          <Text style={[styles.actionText, post.liked_by_me && styles.liked]}>
-            {post.liked_by_me ? '♥' : '♡'} {post.likes_count}
-          </Text>
+          <Icon
+            name="heart"
+            size={22}
+            filled={post.liked_by_me}
+            color={post.liked_by_me ? colors.brandText : colors.fgSecondary}
+          />
+          <Text style={[styles.actionText, post.liked_by_me && styles.liked]}>{post.likes_count}</Text>
         </Pressable>
         <Pressable
           onPress={openDetail}
@@ -119,7 +126,25 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           accessibilityRole="button"
           accessibilityLabel={`Comentarios: ${post.comments_count}`}
         >
-          <Text style={styles.actionText}>💬 {post.comments_count}</Text>
+          <Icon name="comment" size={22} color={colors.fgSecondary} />
+          <Text style={styles.actionText}>{post.comments_count}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => comingSoon('Compartir')}
+          style={styles.action}
+          accessibilityRole="button"
+          accessibilityLabel="Compartir (próximamente)"
+        >
+          <Icon name="share" size={22} color={colors.fgSecondary} />
+        </Pressable>
+        <View style={styles.spacer} />
+        <Pressable
+          onPress={() => comingSoon('Guardar publicaciones')}
+          style={styles.action}
+          accessibilityRole="button"
+          accessibilityLabel="Guardar (próximamente)"
+        >
+          <Icon name="bookmark" size={22} color={colors.fgSecondary} />
         </Pressable>
       </View>
     </View>
@@ -128,12 +153,12 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
 
 export const PostCard = memo(PostCardBase);
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     padding: space[4],
     marginBottom: space[3],
   },
@@ -150,7 +175,7 @@ const styles = StyleSheet.create({
     marginRight: space[1],
   },
   followOn: { borderColor: colors.borderStrong, backgroundColor: colors.bgSubtle },
-  followText: { fontSize: fontSize.labelMd, fontWeight: '700', color: colors.brand },
+  followText: { fontSize: fontSize.labelMd, fontWeight: '700', color: colors.brandText },
   followTextOn: { color: colors.fgSecondary },
   menu: { paddingHorizontal: space[2] },
   menuText: { fontSize: 22, color: colors.fgMuted, lineHeight: 24 },
@@ -165,9 +190,10 @@ const styles = StyleSheet.create({
     gap: space[3],
   },
   sensitiveText: { flex: 1, fontSize: fontSize.bodySm, color: colors.fgSecondary },
-  sensitiveAction: { color: colors.brand, fontWeight: '700', fontSize: fontSize.bodySm },
-  actions: { flexDirection: 'row', marginTop: space[3], gap: space[6] },
-  action: { minHeight: 36, justifyContent: 'center' },
+  sensitiveAction: { color: colors.brandText, fontWeight: '700', fontSize: fontSize.bodySm },
+  actions: { flexDirection: 'row', alignItems: 'center', marginTop: space[3], gap: space[4] },
+  action: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: space[2] },
+  spacer: { flex: 1 },
   actionText: { fontSize: fontSize.bodyMd, color: colors.fgSecondary },
-  liked: { color: colors.dangerAccent, fontWeight: '700' },
-});
+  liked: { color: colors.brandText, fontWeight: '700' },
+}));

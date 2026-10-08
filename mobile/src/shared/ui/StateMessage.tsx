@@ -1,6 +1,7 @@
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 import { colors, fontSize, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 import { Button } from './Button';
 
@@ -40,7 +41,7 @@ export function StateMessage({ kind, title, message, actionLabel, onAction }: Pr
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   box: { alignItems: 'center', justifyContent: 'center', padding: space[8] },
   title: { fontSize: fontSize.headlineSm, fontWeight: '700', color: colors.fg, textAlign: 'center' },
   message: {
@@ -51,4 +52,4 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   action: { marginTop: space[4], alignSelf: 'stretch' },
-});
+}));

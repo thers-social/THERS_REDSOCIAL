@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@features/auth/context/AuthContext';
 import { ApiError } from '@shared/lib/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
+import { themedStyles } from '@shared/design/theme';
 
 /**
  * Segundo paso del login para cuentas con 2FA (`ADR-026`).
@@ -171,7 +172,7 @@ export default function TwoFactor() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   flex: { flex: 1, backgroundColor: colors.bg },
   scroll: {
     flexGrow: 1,
@@ -181,7 +182,7 @@ const styles = StyleSheet.create({
   brand: {
     fontSize: fontSize.headlineXl,
     fontWeight: '800',
-    color: colors.brand,
+    color: colors.brandText,
     textAlign: 'center',
     letterSpacing: 1,
   },
@@ -244,4 +245,4 @@ const styles = StyleSheet.create({
   linkButton: { marginTop: space[4], padding: space[3], alignItems: 'center' },
   linkPressed: { opacity: 0.6 },
   linkText: { color: colors.fgSecondary, fontSize: fontSize.bodyMd, fontWeight: '600' },
-});
+}));
