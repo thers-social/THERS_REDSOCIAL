@@ -36,6 +36,9 @@ const Cookies = named(loadLegal, "Cookies");
 const ChildSafety = named(loadLegal, "ChildSafety");
 const DeleteAccount = named(() => import("@features/account"), "DeleteAccount");
 const Moderation = named(() => import("@features/moderation"), "Moderation");
+// THERS Places (ADR-040, fase 3): mapa de lugares. Su propio chunk: MapLibre pesa y solo
+// lo necesita quien abre esta página.
+const Places = named(() => import("@features/places"), "Places");
 
 const Information = named(loadPublic, "Information");
 const HowItWorks = named(loadPublic, "HowItWorks");
@@ -119,6 +122,9 @@ export default function AppRouter() {
             {/* Moderación (ADR-032 fase 3). Sin enlace en la navegación a propósito: la página
                 se oculta sola a quien no es moderador y el servidor rechaza sus peticiones. */}
             <Route path="/moderation" element={<Moderation />} />
+            {/* THERS Places (ADR-040, fase 3). `/places/:placeId` es la ficha de un lugar. */}
+            <Route path="/places" element={<Places />} />
+            <Route path="/places/:placeId" element={<Places />} />
             {/* Configuración: las 12 secciones son rutas reales, cada una
                 con su URL propia para poder enlazarla y recargarla
                 (archivo maestro §6.3). */}

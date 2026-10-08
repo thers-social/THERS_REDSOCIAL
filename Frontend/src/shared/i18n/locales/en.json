@@ -32,7 +32,8 @@
     "hasUnread": "You have unread items",
     "openMenu": "Open navigation menu",
     "closeMenu": "Close navigation menu",
-    "messagesUnread": "Messages, {{count}} unread"
+    "messagesUnread": "Messages, {{count}} unread",
+    "places": "Places"
   },
   "auth": {
     "close": "Close",
@@ -340,5 +341,82 @@
     "contactWarning": "Do not send or forward illegal material by email. This address is a contact channel; the primary reporting mechanism is the THERS reporting system.",
     "legalTitle": "Legal compliance",
     "legal": "THERS complies with the applicable child safety legislation and cooperates with the competent authorities when there is a valid legal obligation to do so."
+  },
+  "places": {
+    "title": "Places",
+    "subtitle": "Discover what's near you.",
+    "verified": "Verified",
+    "panel": {
+      "aria": "Places list"
+    },
+    "search": {
+      "aria": "Search places",
+      "placeholder": "Search for a place by name…"
+    },
+    "filters": {
+      "all": "All",
+      "categoryAria": "Filter by category"
+    },
+    "location": {
+      "use": "Use my location",
+      "location_denied": "We don't have permission to use your location. You can keep searching by name or moving the map.",
+      "location_unavailable": "We couldn't get your location. You can keep searching by name or moving the map.",
+      "location_timeout": "Your location took too long to respond. Try again or move the map."
+    },
+    "map": {
+      "aria": "Places map",
+      "searchHere": "Search this area",
+      "unavailableTitle": "We couldn't show the map",
+      "unavailableBody": "Your browser can't display maps. The places list still works.",
+      "devStyle": "Demo map (development only)"
+    },
+    "results": {
+      "count": "{{count}} places found"
+    },
+    "state": {
+      "loading": "Looking for places…",
+      "offlineTitle": "You're offline",
+      "offlineBody": "Check your internet connection and try again.",
+      "errorTitle": "We couldn't load the places",
+      "emptyTitle": "No places in this area",
+      "emptyBody": "Try another category, widen the area or move the map.",
+      "emptySearchTitle": "No results",
+      "emptySearchBody": "We couldn't find places with that name. Check the spelling or try another word.",
+      "retry": "Try again"
+    },
+    "saved": {
+      "badge": "Saved",
+      "save": "Save",
+      "saved": "Saved",
+      "added": "Place saved",
+      "removed": "Place removed from saved"
+    },
+    "detail": {
+      "back": "Back to the list",
+      "notFound": "This place doesn't exist or is no longer available.",
+      "verifiedOn": "on {{date}}"
+    },
+    "report": {
+      "open": "Report",
+      "title": "Report details of {{name}}",
+      "reasonLabel": "What's wrong?",
+      "reasonPlaceholder": "Choose a reason",
+      "reasons": {
+        "wrong_location": "Wrong location",
+        "wrong_hours": "Wrong hours",
+        "wrong_phone": "Wrong phone number",
+        "closed": "The business closed",
+        "duplicate": "Duplicate place",
+        "wrong_name": "Wrong name",
+        "inappropriate": "Inappropriate content",
+        "other": "Other"
+      },
+      "detailsOptional": "Details (optional)",
+      "detailsRequired": "Tell us what's wrong",
+      "cancel": "Cancel",
+      "send": "Send report",
+      "sending": "Sending…",
+      "thanks": "Thanks, we'll review this place."
+    }
   }
 }

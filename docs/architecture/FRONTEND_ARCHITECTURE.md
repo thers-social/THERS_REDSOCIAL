@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/FRONTEND_ARCHITECTURE.md` |
-| Versión | 0.4 (Propuesta) |
+| Versión | 0.5 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `HB-001` (Manual de Organización), `REPOSITORY_STRUCTURE.md` §3/§5, `BACKEND_ARCHITECTURE.md`, `DATABASE_ARCHITECTURE.md`, `API_CONTRACT.md`, `CLAUDE.md`, código real de `Frontend/` |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -439,3 +439,15 @@ Ninguno de estos conflictos se resuelve por iniciativa propia de este documento 
 ## 27. Cierre
 
 Este documento **no modifica** el código de `Frontend/`, el backend, la base de datos ni el Handbook: define el contrato de arquitectura Frontend que la implementación futura deberá respetar, separando explícitamente **lo implementado**, **lo propuesto** y **lo pendiente de aprobación** (§24). Cualquier cambio a este contrato sigue el proceso de decisiones de impacto medio/alto de `HB-001` §11–12 (ADR), no el criterio individual de quien implementa.
+
+---
+
+## 28. THERS Places en la web (`ADR-040-thers-places.md`, fase 3) — v0.5
+
+- **Feature nueva** `features/places/` (`pages/Places.jsx`, `components/`, `hooks/`, `lib/`, `index.js`), con las rutas `/places` y `/places/:placeId` dentro de `AppShell` (protegidas, como el resto del shell) y un destino «Lugares» en la barra lateral real (`app/layout/thers/navigation.js`; `NavRail.jsx` ya no se usa). La página es un **chunk propio** (`places-*.js`, ~1,07 MB / 290 KB comprimido) porque MapLibre pesa.
+- **Dependencia nueva:** `maplibre-gl` 6.13.0 (BSD-3-Clause). Sin `react-map-gl`: se usa directamente.
+- **Proveedor de tiles abstraído:** `VITE_MAP_STYLE_URL` (§17). Sin ella se usa el estilo de demostración de MapLibre, que se rotula en pantalla («Mapa de demostración») y se advierte por consola. **La decisión del proveedor (D1) sigue pendiente.**
+- **Worker de MapLibre.** MapLibre 6 busca su Web Worker junto al script que lo carga; empaquetado con Vite ese archivo no existe y el mapa queda vacío. `vite-maplibre-worker.js` lo sirve desde `/maplibre/maplibre-gl-worker.mjs` (en `dev` y `build`), leyéndolo de `node_modules` (no se copia código de terceros al repositorio), y `PlacesMap.jsx` lo conecta con `setWorkerUrl()`.
+- **Privacidad de la ubicación (ADR-040 §4.4/§6):** la ubicación se pide solo al pulsar «Usar mi ubicación» (una lectura, sin `watchPosition`), se redondea a 3 decimales antes de salir y vive solo en memoria. Rechazarla no desactiva nada. `public/_headers` tenía `Permissions-Policy: geolocation=()`, que **bloqueaba la geolocalización en la web desplegada**: ahora es `geolocation=(self)`. El CSP (aún en modo informe) admite `worker-src blob:`; al elegir proveedor hay que añadir su dominio a `connect-src`.
+- **Estados de la vista:** `loading`, `offline`, `error`, `empty` y `success` se resuelven en `lib/placesState.js` (puro, probado); `location_denied` es un aviso, no un estado que rompa la lista. Un fallo de red o del servidor nunca deja la pantalla rota.
+- **Pruebas:** `tests/places.test.mjs` (`npm test`, `node --test`, 24 pruebas; 64 en total con las de otras features) cubre la lógica pura, las traducciones completas es/en, la privacidad y la integración. **Además se verificó a mano en un Chrome real** (headless, vía DevTools) con el build de producción y la API de desarrollo: lista, mapa con pines, ficha, guardar (persiste tras recargar), reportar, búsqueda sin tildes, filtro, sin resultados y ubicación denegada. Esa verificación **no está automatizada**: la web sigue sin framework de pruebas de navegador.
