@@ -11,7 +11,7 @@ from app.domain.account_deletion.repositories import (
     AccountDeletionCodeRepository,
 )
 from app.extensions import db
-from app.infrastructure.persistence.models import AccountDeletionCode, User
+from app.infrastructure.persistence.models import AccountDeletionCode, MediaAttachment, User
 
 # Mismo razonamiento que password_reset_repository: dos "pedir código"
 # simultáneos pueden chocar con el índice único parcial; se reintenta.
@@ -93,6 +93,13 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
             return {"media_keys": []}
 
         media_keys = [key for key in (user.avatar_path, user.cover_path) if key]
+        # Imágenes de sus publicaciones y mensajes (ADR-039): las filas caen en
+        # cascada con la cuenta, pero los archivos no -- hay que recogerlos antes.
+        media_keys += list(
+            db.session.execute(
+                select(MediaAttachment.storage_key).where(MediaAttachment.owner_id == user_id)
+            ).scalars()
+        )
 
         # Un solo DELETE: las 22 claves foráneas hacia `users` son ON DELETE
         # CASCADE (publicaciones, comentarios, me gusta, seguidos, notificaciones,

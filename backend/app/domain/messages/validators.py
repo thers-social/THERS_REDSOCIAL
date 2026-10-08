@@ -6,6 +6,16 @@
 MAX_CONTENT_LENGTH = 2000
 
 
+def is_valid_content_with_images(value):
+    """Texto de un mensaje que lleva una imagen (ADR-039): puede estar vacío
+    (solo foto), pero no pasar del mismo límite. Un texto ausente cuenta como vacío."""
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    return len(value.strip()) <= MAX_CONTENT_LENGTH
+
+
 def is_valid_content(value):
     """No vacío tras trim() y dentro del límite máximo. Mismo límite que
     posts (ADR-004) -- un mensaje directo no tiene motivo para ser más

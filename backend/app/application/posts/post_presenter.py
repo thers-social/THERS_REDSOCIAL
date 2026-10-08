@@ -1,3 +1,4 @@
+from app.application.media.attachments import to_public_images
 from app.application.mentions.mention_presenter import to_public_mentions
 from app.domain.follows.follow_status import ACCEPTED
 
@@ -39,6 +40,8 @@ def to_public_post(
             "is_private": post.author.is_private,
         },
         "content": post.content,
+        # Imágenes adjuntas (ADR-039): `[]` si no tiene. Solo URL y dimensiones.
+        "images": to_public_images(post.images),
         # Lo que el AUTOR declaró al publicar (ADR-030-content-preferences.md);
         # no es una clasificación del servidor.
         "is_sensitive": post.is_sensitive,

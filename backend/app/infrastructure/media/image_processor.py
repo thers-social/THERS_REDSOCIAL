@@ -22,7 +22,9 @@ TARGET_SIZES = {
 }
 
 
-def process_image(raw, kind):
+def _decode(raw, transform):
+    """Decodifica `raw` por contenido, aplica EXIF y le pasa la imagen RGB a
+    `transform`. Cualquier fallo de decodificación es `InvalidImageError`."""
     if len(raw) > MAX_UPLOAD_BYTES:
         raise ImageTooLargeError()
 
@@ -32,12 +34,37 @@ def process_image(raw, kind):
                 raise InvalidImageError()
             probe.load()
             image = ImageOps.exif_transpose(probe)
-            image = ImageOps.fit(image.convert("RGB"), TARGET_SIZES[kind], Image.LANCZOS)
+            return transform(image.convert("RGB"))
     except InvalidImageError:
         raise
     except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError):
         raise InvalidImageError()
 
+
+def _encode(image):
     out = io.BytesIO()
     image.save(out, format="WEBP", quality=85, method=4)
-    return out.getvalue(), "image/webp"
+    return out.getvalue()
+
+
+def process_image(raw, kind):
+    image = _decode(raw, lambda img: ImageOps.fit(img, TARGET_SIZES[kind], Image.LANCZOS))
+    return _encode(image), "image/webp"
+
+
+# Imágenes de publicaciones y mensajes (ADR-039): se conserva la proporción
+# (sin recortar) y solo se reduce si el lado mayor pasa de este máximo. Se
+# re-codifica a WebP, así se descartan EXIF/GPS y cualquier carga escondida.
+ATTACHMENT_MAX_SIDE = {"post": 1600, "message": 1280}
+
+
+def process_attachment(raw, kind):
+    """Devuelve `(bytes_webp, content_type, ancho, alto)`."""
+    max_side = ATTACHMENT_MAX_SIDE[kind]
+
+    def _fit(img):
+        img.thumbnail((max_side, max_side), Image.LANCZOS)
+        return img
+
+    image = _decode(raw, _fit)
+    return _encode(image), "image/webp", image.width, image.height

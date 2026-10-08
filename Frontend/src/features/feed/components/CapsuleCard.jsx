@@ -4,6 +4,7 @@ import Icon from "@shared/components/Icon";
 import Avatar from "@shared/components/Avatar";
 import Spinner from "@shared/components/Spinner";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
+import ImageGrid from "@shared/components/ImageGrid";
 import MentionText from "./MentionText";
 import { useToast } from "@shared/components/Toast";
 import { useLanguage } from "@shared/i18n";
@@ -522,9 +523,13 @@ export default function CapsuleCard({
               Contenido sensible
             </p>
           )}
-          <p className="whitespace-pre-wrap break-words text-body-lg text-th-fg">
-            <MentionText content={capsule.content} mentions={capsule.mentions} />
-          </p>
+          {/* Una publicación de solo imágenes tiene `content` vacío (ADR-039). */}
+          {capsule.content && (
+            <p className="whitespace-pre-wrap break-words text-body-lg text-th-fg">
+              <MentionText content={capsule.content} mentions={capsule.mentions} />
+            </p>
+          )}
+          <ImageGrid images={capsule.images} alt={`Imagen de ${capsule.author.name}`} />
         </>
       )}
 

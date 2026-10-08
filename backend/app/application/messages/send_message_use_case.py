@@ -7,6 +7,7 @@
 # Desde ADR-024-content-filters-and-privacy-preferences.md respeta además la
 # preferencia `who_can_message` del destinatario.
 
+from app.application.media.attachments import discard_files, store_attachments
 from app.application.messages.message_presenter import to_public_message
 from app.domain.auth.exceptions import UserNotFoundError
 from app.domain.follows.follow_status import ACCEPTED
@@ -18,7 +19,8 @@ from app.domain.restrictions.kinds import BLOCK
 
 def send_message(
     sender_id, recipient_id, content, user_repository, message_repository, follow_repository,
-    restriction_repository, client_id=None,
+    restriction_repository, client_id=None, prepared_images=None, media_repository=None,
+    media_storage=None,
 ):
     """Devuelve `(mensaje_público, created)`. Con `client_id`, reenviar el mismo
     mensaje (por ejemplo tras perder la conexión justo al recibir la respuesta)
@@ -54,9 +56,26 @@ def send_message(
 
     if client_id is None:
         message = message_repository.create(sender_id, recipient_id, content)
-        return to_public_message(message), True
+        created = True
+    else:
+        message, created = message_repository.create_idempotent(
+            sender_id, recipient_id, content, client_id
+        )
 
-    message, created = message_repository.create_idempotent(
-        sender_id, recipient_id, content, client_id
-    )
+    # Imagen (ADR-039). Solo si el mensaje es NUEVO: un reintento idempotente
+    # devuelve el original tal cual, y no debe duplicarle ni cambiarle la imagen.
+    # Los archivos se guardan después de las comprobaciones de arriba, así que un
+    # envío rechazado (bloqueo, permisos) no deja nada en el almacenamiento.
+    if created and prepared_images:
+        stored = []
+        try:
+            stored = store_attachments(prepared_images, "message", media_storage)
+            media_repository.add_for_message(message.id, sender_id, stored)
+        except Exception:
+            # Sin la imagen el mensaje no es lo que la persona quiso mandar:
+            # se retira entero para que pueda reintentar.
+            discard_files([item["key"] for item in stored], media_storage)
+            message_repository.delete(message.id, sender_id)
+            raise
+
     return to_public_message(message), created

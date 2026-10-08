@@ -5,6 +5,16 @@
 MAX_CONTENT_LENGTH = 2000
 
 
+def is_valid_content_with_images(value):
+    """Texto de una publicación que lleva imágenes (ADR-039): puede estar vacío
+    (solo foto), pero no pasar del mismo límite. Un texto ausente cuenta como vacío."""
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    return len(value.strip()) <= MAX_CONTENT_LENGTH
+
+
 def is_valid_content(value):
     """No vacío tras trim() y dentro del límite máximo. El límite es un
     placeholder de producto explícito y revisable -- mismo criterio que
