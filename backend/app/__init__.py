@@ -10,6 +10,10 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # Antes que nada: así Sentry captura también errores del resto del arranque.
+    from app.observability import init_observability
+    init_observability(app)
+
     # ADR-018 §Riesgos ítem 5: en un entorno desplegado `CORS_ORIGINS` limita qué sitios web
     # pueden llamar a la API. Sin ella (desarrollo local) queda abierto, como siempre.
     if app.config["ALLOWED_WEB_ORIGINS"]:
@@ -45,6 +49,9 @@ def create_app():
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    from app.interfaces.security_headers import register_security_headers
+    register_security_headers(app)
+
     from app.interfaces.error_handlers import register_error_handlers
     register_error_handlers(app)
 
@@ -58,6 +65,9 @@ def create_app():
     # Registra los modelos en el metadata de SQLAlchemy para que Flask-Migrate
     # los detecte al autogenerar migraciones (flask db migrate).
     from app.infrastructure.persistence import models  # noqa: F401
+
+    from app.interfaces.routes.health_routes import health_bp
+    app.register_blueprint(health_bp, url_prefix="/api")
 
     from app.interfaces.routes.auth_routes import auth_bp
     app.register_blueprint(auth_bp, url_prefix="/api")

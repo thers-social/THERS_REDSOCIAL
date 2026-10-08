@@ -102,3 +102,27 @@ export function buildCanonicalUrl(siteUrl, path) {
   if (!base) return null;
   return path === "/" ? `${base}/` : `${base}${path}`;
 }
+
+// Datos estructurados de la home (schema.org). Solo se generan con dominio
+// público conocido: un JSON-LD con URLs inventadas es peor que ninguno.
+// No se declara `SearchAction` porque no existe una búsqueda pública indexable,
+// ni `logo`/`sameAs` hasta que haya asset de marca y perfiles oficiales.
+export function buildJsonLd(siteUrl) {
+  if (!siteUrl) return null;
+  const url = buildCanonicalUrl(siteUrl, "/");
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "Organization", "@id": `${url}#organization`, name: SITE_NAME, url },
+      {
+        "@type": "WebSite",
+        "@id": `${url}#website`,
+        name: SITE_NAME,
+        url,
+        inLanguage: "es",
+        description: DEFAULT_DESCRIPTION,
+        publisher: { "@id": `${url}#organization` },
+      },
+    ],
+  };
+}

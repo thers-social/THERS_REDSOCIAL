@@ -47,9 +47,9 @@
 | Páginas **públicas** indexables: landing, legales y, si se quiere, perfiles públicos | ❌ | Una SPA de React es difícil de indexar; usar **prerenderizado o SSR** solo para esas páginas |
 | `title` y `description` únicos por página, Open Graph, `canonical` | ⚠️ | `title`/`description`/`robots`/`canonical` por ruta hechos (`ADR-033`, propuesto); falta `og:image` (sin asset de marca) y que se defina `VITE_SITE_URL` |
 | `sitemap.xml` y `robots.txt` | ✅ | Generados en el build (`ADR-033`); sin `VITE_SITE_URL` bloquean todo. El feed y lo privado no se indexan |
-| Rendimiento (Core Web Vitals): imágenes optimizadas, carga diferida | ⚠️ | Medir con Lighthouse sobre staging |
+| Rendimiento (Core Web Vitals): imágenes optimizadas, carga diferida | ⚠️ | Carga diferida por ruta hecha (bundle inicial ~348 kB, antes ~600 kB). Falta optimizar imágenes y medir con Lighthouse en staging |
 | Google Search Console con el dominio verificado | ❌ | Tras comprar el dominio |
-| Datos estructurados (`Organization`, `WebSite`) en la landing | ❌ | Opcional, tras lo anterior |
+| Datos estructurados (`Organization`, `WebSite`) en la landing | ✅ | JSON-LD en la home, solo con `VITE_SITE_URL` definida (`RouteSeo.jsx`) |
 
 ## 4. Infraestructura (resumen; detalle en `ADR-018`)
 
@@ -60,7 +60,9 @@
 | Staging con base de datos gestionada, backend, almacenamiento S3 y web | ❌ |
 | Copias de seguridad con **restauración probada** | ❌ |
 | CORS limitado a dominios reales y secretos solo en variables de entorno | ⚠️ |
-| Monitoreo, alertas y registro de errores | ❌ (sin decidir) |
+| Monitoreo, alertas y registro de errores | ⚠️ `GET /api/health` y Sentry opcional (`SENTRY_DSN`) listos; falta crear el proyecto en Sentry y un monitor de uptime que llame a `/api/health` |
+| Cabeceras de seguridad (API y web) | ⚠️ API: listas. Web: `Frontend/public/_headers` con CSP en modo *report-only*; pasar a bloqueante tras revisar staging |
+| Auditoría de dependencias y escaneo de secretos en CI | ✅ job `security` en `ci.yml` (`npm audit`, `pip-audit`, gitleaks) |
 
 ## 5. Orden recomendado
 
