@@ -38,6 +38,8 @@ export default function Places() {
   const [pendingViewport, setPendingViewport] = useState(null);
   const [focus, setFocus] = useState(null);
   const [mapUnavailable, setMapUnavailable] = useState(false);
+  // Ruta hacia el lugar abierto (fase 13): `{ route, origin }` o null. La dibuja el mapa.
+  const [routeView, setRouteView] = useState(null);
 
   const geo = useGeolocation();
   const results = usePlaces({ origin, radius, category, query });
@@ -89,8 +91,11 @@ export default function Places() {
   const notice = locationNotice(geo.status);
   const showDetail = Boolean(placeId);
 
+  // Altura en escritorio = pantalla − lo que ya reserva el shell (barra superior + 16 px arriba y
+  // el margen inferior de `ShellFrame`). Con `100dvh − 4rem` la página sobraba 48 px: scroll con un
+  // espacio vacío al final y el título tapado por la barra superior.
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 p-4 lg:h-[calc(100dvh-4rem)] lg:flex-row">
+    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 p-4 lg:h-[calc(100dvh-var(--th-topbar-h)-16px-var(--th-margin))] lg:flex-row">
       <section
         aria-label={t("places.panel.aria")}
         className="order-2 flex min-h-0 flex-col gap-3 lg:order-1 lg:w-[400px] lg:shrink-0"
@@ -121,7 +126,7 @@ export default function Places() {
                 disabled={geo.status === "requesting"}
                 aria-label={t("places.location.use")}
                 title={t("places.location.use")}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line text-ink hover:border-brand disabled:opacity-60 dark:border-line-dark dark:text-ink-dark"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line text-ink hover:border-th-brand disabled:opacity-60 dark:border-line-dark dark:text-ink-dark"
               >
                 <Icon name={geo.status === "granted" ? "my_location" : "location_searching"} size={20} />
               </button>
@@ -130,14 +135,17 @@ export default function Places() {
             <CategoryChips categories={categories} value={category} onChange={setCategory} />
 
             {notice && (
-              <p role="status" className="rounded-xl bg-warning-surface px-3 py-2 text-xs text-warning-fg">
+              <p role="status" className="rounded-xl bg-warning-surface px-3 py-2 text-xs text-th-warning-fg">
                 {t(`places.location.${notice}`)}
               </p>
             )}
           </>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        {/* `relative` es necesario: sin él, los `sr-only` (position:absolute) de la ficha, como las
+            etiquetas de «Tu opinión», escapan del recorte de este scroll y estiran TODA la página
+            (scroll de ~2× la pantalla con un fondo blanco debajo). */}
+        <div className="relative min-h-0 flex-1 overflow-y-auto pr-1">
           {showDetail ? (
             <PlaceDetailPanel
               status={detail.status}
@@ -146,6 +154,8 @@ export default function Places() {
               onBack={() => navigate("/places")}
               onRetry={() => navigate(0)}
               onSavedChange={(saved) => applySavedChange(placeId, saved)}
+              onRouteChange={setRouteView}
+              onStepFocus={([lng, lat]) => setFocus({ lat, lng, zoom: 17, key: `step-${lng}-${lat}-${Date.now()}` })}
             />
           ) : results.viewState === "success" ? (
             <>
@@ -187,7 +197,9 @@ export default function Places() {
             selectedId={placeId}
             center={DEFAULT_CENTER}
             focus={focus}
-            userPoint={geo.point}
+            // Con una ruta abierta, el punto azul es SU origen (el redondeado que se envió).
+            userPoint={routeView?.origin ?? geo.point}
+            route={routeView}
             onSelect={(id) => navigate(`/places/${id}`)}
             onViewportChange={setPendingViewport}
             onUnavailable={() => setMapUnavailable(true)}
@@ -198,7 +210,7 @@ export default function Places() {
           <button
             type="button"
             onClick={searchHere}
-            className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-surface px-4 py-2 text-xs font-semibold text-ink shadow-soft hover:bg-brand-soft dark:bg-surface-dark dark:text-ink-dark"
+            className="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-surface px-4 py-2 text-xs font-semibold text-ink shadow-soft hover:bg-th-brand-soft dark:bg-surface-dark dark:text-ink-dark"
           >
             {t("places.map.searchHere")}
           </button>

@@ -15,19 +15,19 @@ export default function PlaceCard({ place, selected, onSelect }) {
         aria-pressed={selected}
         className={`w-full text-left rounded-[20px] border p-4 transition-colors bg-surface dark:bg-surface-dark ${
           selected
-            ? "border-brand shadow-soft"
-            : "border-line dark:border-line-dark hover:border-brand-soft-strong"
+            ? "border-th-brand shadow-soft"
+            : "border-line dark:border-line-dark hover:border-th-brand-soft-strong"
         }`}
       >
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-fg">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-th-brand-soft text-th-brand-fg">
             <Icon name="location_on" size={20} fill={selected ? 1 : 0} />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <h3 className="truncate text-sm font-semibold text-ink dark:text-ink-dark">{place.name}</h3>
               {place.is_saved && (
-                <Icon name="bookmark" size={18} fill={1} className="shrink-0 text-brand" label={t("places.saved.badge")} />
+                <Icon name="bookmark" size={18} fill={1} className="shrink-0 text-th-brand" label={t("places.saved.badge")} />
               )}
             </div>
             <p className="text-xs text-muted dark:text-muted-dark">{place.category.name}</p>
@@ -39,7 +39,7 @@ export default function PlaceCard({ place, selected, onSelect }) {
                 <span className="font-semibold text-ink dark:text-ink-dark">{distance}</span>
               )}
               {place.verification_status === "verified" && (
-                <span className="inline-flex items-center gap-1 text-success-fg">
+                <span className="inline-flex items-center gap-1 text-th-success-fg">
                   <Icon name="verified" size={14} fill={1} />
                   {t("places.verified")}
                 </span>

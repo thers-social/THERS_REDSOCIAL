@@ -46,7 +46,7 @@ export default function PlacesStateView({ state, message, isSearch, onRetry }) {
         <button
           type="button"
           onClick={onRetry}
-          className="mt-2 rounded-full bg-brand px-4 py-2 text-xs font-semibold text-on-brand hover:bg-brand-hover"
+          className="mt-2 rounded-full bg-th-brand px-4 py-2 text-xs font-semibold text-th-on-brand hover:bg-th-brand-hover"
         >
           {t("places.state.retry")}
         </button>
