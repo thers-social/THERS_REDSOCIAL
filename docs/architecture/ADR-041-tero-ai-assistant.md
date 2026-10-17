@@ -1,7 +1,8 @@
 # ADR-041 — Tero: asistente con IA (chat, herramientas, acciones y automatizaciones)
 
-- **Estado:** **`BORRADOR — PROPUESTO`**. Sin ratificar. Hasta que el equipo lo apruebe (`HB-001`
-  §11–12), **no se implementa nada de las Fases 3 en adelante**.
+- **Estado:** **`ACEPTADO`** el 2026-10-17 (PR #97 aprobado por el equipo; proveedor, modelo y
+  tope de gasto decididos el mismo día, §4). **Sin implementar:** las Fases 4–7 siguen pendientes.
+  **Abiertos todavía:** retención de datos del proveedor (§4), dónde corre n8n (`ADR-018`).
 - **Fecha:** 2026-10-17
 - **Autor del borrador:** Claude Code, a pedido del propietario del proyecto.
 - **Habilita:** Fases 4–7 de `docs/tero/TERO_IMPLEMENTATION_PLAN.md` (chat backend, herramientas de
@@ -92,17 +93,27 @@ Todos exigen JWT. Cada endpoint se documenta en `API_CONTRACT.md` el mismo día 
 
 ---
 
-## 4. Proveedor y modelo — **[PENDIENTE]**
+## 4. Proveedor y modelo — **decidido el 2026-10-17**
 
-`TERO_RESEARCH.md` cita la guía de inicio de OpenAI como fuente, pero **ninguna decisión de
-proveedor está ratificada** y este borrador no la inventa. El equipo debe elegir y registrar aquí:
+`TERO_RESEARCH.md` citaba la guía de inicio de OpenAI como fuente, pero no era una decisión. La
+decisión del equipo es:
 
-| Decisión | Opciones a evaluar | Criterio |
+| Decisión | Valor | Nota |
 |---|---|---|
-| Proveedor | API de un proveedor comercial · modelo autoalojado | Privacidad, costo, latencia, disponibilidad |
-| Modelo (`TERO_MODEL`) | por definir | Costo por mensaje, calidad en español, soporte de herramientas |
-| Región / retención | por definir | Si el proveedor retiene o entrena con las entradas |
-| Presupuesto mensual | por definir | Tope duro de gasto (§8) |
+| Proveedor | **Anthropic** (API de Claude) | Detrás del puerto `AiProvider` (§3): se puede cambiar |
+| Modelo inicial (`TERO_MODEL`) | **`claude-haiku-5-5`** | Gama económica. Si no alcanza con herramientas o español, subir a `claude-sonnet-5-5` cambiando solo la variable |
+| Presupuesto mensual | **USD 20** tope duro | Corte automático a la respuesta controlada (§8.2) |
+| Región / retención | **[PENDIENTE]** | Verificar en los términos de Anthropic que las entradas de la API no se usan para entrenar y cuánto se retienen, antes del primer mensaje con datos reales |
+
+**Precio de referencia, sin verificar contra la página oficial:** Haiku 5.5 aparece en fuentes de
+terceros a USD 0,10 / 0,50 por millón de tokens (entrada / salida); Sonnet 5.5 a USD 2 / 10. Con
+~2.000 tokens de entrada y ~400 de salida por mensaje, Haiku cuesta unos USD 0,40 por cada 1.000
+mensajes, de modo que el tope de USD 20 deja un margen amplio. **Confirmar los precios en la página
+oficial antes de fijar el tope en código.**
+
+**Elección entre modelos:** antes de pasar a Sonnet se mide con un banco de 20–30 mensajes reales en
+español (resumir una publicación, buscar un lugar, proponer seguir a alguien): aciertos con
+herramientas, latencia y costo.
 
 **Requisitos mínimos para aceptar un proveedor** [PROPUESTA]: que permita desactivar el
 entrenamiento con nuestros datos, que soporte llamadas a herramientas con esquema JSON estricto y
@@ -221,7 +232,7 @@ Pruebas obligatorias: confirmación ajena, doble confirmación, expiración, per
 - **Rate limiting** propio de Tero dentro de `ADR-027` (por usuario y por IP), más bajo que el de
   endpoints normales porque cada mensaje cuesta dinero.
 - Longitud máxima de mensaje, máximo de herramientas por turno y *timeout* de proveedor.
-- **Tope de gasto mensual** con corte automático a la respuesta controlada [PENDIENTE: monto].
+- **Tope de gasto mensual** con corte automático a la respuesta controlada **USD 20 al mes** (§4).
 - Errores del proveedor se traducen a errores genéricos del contrato de `API_CONTRACT.md`; nunca se
   filtran detalles internos, claves ni trazas.
 
