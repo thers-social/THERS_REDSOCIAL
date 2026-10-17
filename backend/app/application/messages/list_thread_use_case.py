@@ -4,7 +4,7 @@
 # `other_user_id` le mandó a `user_id` (ADR-013 §Opciones consideradas --
 # "abrir el hilo" es "leerlo", no hay un PATCH separado).
 
-from app.application.messages.message_presenter import to_public_message
+from app.application.messages.message_presenter import to_public_messages
 from app.domain.auth.exceptions import UserNotFoundError
 
 DEFAULT_LIMIT = 50
@@ -38,7 +38,7 @@ def list_thread(
     # mensajes que esta misma llamada acaba de marcar. Armando la respuesta
     # primero, el Frontend recibe el estado real de "antes de abrir el
     # hilo" y puede ubicar el separador de "mensajes no leídos".
-    public_messages = [to_public_message(message) for message in messages]
+    public_messages = to_public_messages(messages, message_repository)
 
     message_repository.mark_thread_as_read(recipient_id=user_id, sender_id=other_user_id)
 

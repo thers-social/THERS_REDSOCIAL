@@ -7,6 +7,8 @@
 # que conoce tanto el caso de uso (application/) como la implementación
 # concreta del repositorio (infrastructure/).
 
+import uuid
+
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
@@ -16,7 +18,7 @@ from app.application.posts.list_posts_use_case import DEFAULT_LIMIT, list_posts
 from app.application.posts.update_post_use_case import update_post
 from app.application.rate_limiting import rate_limit_guard
 from app.domain.media.attachments import MAX_POST_IMAGES
-from app.domain.posts.exceptions import PostNotFoundError
+from app.domain.posts.exceptions import PostNotFoundError, PostPlaceNotFoundError
 from app.domain.posts.validators import (
     MAX_CONTENT_LENGTH,
     is_valid_content,
@@ -66,6 +68,8 @@ from app.infrastructure.persistence.repositories.post_repository import (
 )
 
 posts_bp = Blueprint("posts", __name__)
+
+PLACE_POSTS_LIMIT = 30
 
 _post_repository = SQLAlchemyPostRepository()
 _like_repository = SQLAlchemyLikeRepository()
@@ -123,6 +127,16 @@ def create():
     if not isinstance(is_sensitive, bool):
         return jsonify({"msg": "`is_sensitive` debe ser true o false"}), 400
 
+    # ADR-040 fase 4d: lugar asociado, opcional. Es una clave, no texto libre.
+    place_id = data.get("place_id")
+    if place_id is not None:
+        try:
+            place_id = str(uuid.UUID(place_id)) if isinstance(place_id, str) else None
+        except ValueError:
+            place_id = None
+        if place_id is None:
+            return jsonify({"msg": "place_id debe ser un identificador válido"}), 400
+
     prepared = []
     if files:
         # Antes de procesar nada: decodificar imágenes cuesta CPU, así que se
@@ -138,14 +152,18 @@ def create():
         if error_response:
             return error_response
 
-    post = create_post(
-        author_id, content, _post_repository, _user_repository,
-        _follow_repository, _mention_repository, _notification_repository,
-        _restriction_repository, is_sensitive,
-        prepared_images=prepared,
-        media_repository=_media_repository,
-        media_storage=current_app.extensions["media_storage"],
-    )
+    try:
+        post = create_post(
+            author_id, content, _post_repository, _user_repository,
+            _follow_repository, _mention_repository, _notification_repository,
+            _restriction_repository, is_sensitive,
+            prepared_images=prepared,
+            media_repository=_media_repository,
+            media_storage=current_app.extensions["media_storage"],
+            place_id=place_id,
+        )
+    except PostPlaceNotFoundError:
+        return jsonify({"msg": "Lugar no encontrado"}), 404
     return jsonify({"post": post}), 201
 
 
@@ -161,6 +179,23 @@ def list_all():
     posts = list_posts(
         _post_repository, _like_repository, _comment_repository, _follow_repository,
         _mention_repository, _muted_keyword_repository, viewer_id, DEFAULT_LIMIT,
+    )
+    return jsonify({"posts": posts}), 200
+
+
+@posts_bp.route("/places/<uuid:place_id>/posts", methods=["GET"])
+@jwt_required()
+def list_for_place(place_id):
+    """Publicaciones asociadas a un lugar (ADR-040 fase 4d). Las mismas reglas de visibilidad
+    que el feed (cuentas privadas, bloqueos, filtros): el lugar no es una forma de saltárselas.
+    Un lugar inexistente o no público es 404."""
+    viewer_id = get_jwt_identity()
+    if not _post_repository.place_cards([str(place_id)]):
+        return jsonify({"msg": "Lugar no encontrado"}), 404
+    posts = list_posts(
+        _post_repository, _like_repository, _comment_repository, _follow_repository,
+        _mention_repository, _muted_keyword_repository, viewer_id, PLACE_POSTS_LIMIT,
+        place_id=str(place_id),
     )
     return jsonify({"posts": posts}), 200
 

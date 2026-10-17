@@ -75,12 +75,14 @@ def test_nearby_response_shape_has_no_invented_fields(client, abc):
 
     assert set(place) == {
         "id", "name", "slug", "category", "latitude", "longitude", "verification_status",
-        "address", "cover_image_url", "distance_meters", "is_saved",
+        "address", "cover_image_url", "distance_meters", "is_saved", "rating_average",
+        "reviews_count",
     }
     assert set(place["category"]) == {"id", "slug", "name"}
     # Sin reseñas, horarios ni guardados todavía: no se exponen valores ficticios.
-    for invented in ("rating", "reviews_count", "is_open"):
+    for invented in ("rating", "is_open"):
         assert invented not in place
+    assert place["rating_average"] is None and place["reviews_count"] == 0  # sin reseñas: nada inventado
     assert place["cover_image_url"] is None
     assert place["is_saved"] is False  # sin sesión: no ha guardado nada
 

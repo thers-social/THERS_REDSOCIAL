@@ -9,3 +9,8 @@ class PostNotFoundError(Exception):
     formato inválido (aunque el conversor `uuid` de Flask ya descarta el
     segundo caso antes de llegar acá, ver interfaces/routes/like_routes.py
     y comment_routes.py)."""
+
+
+class PostPlaceNotFoundError(Exception):
+    """El lugar al que se quiere asociar la publicación no existe o no es público
+    (ADR-040 fase 4d)."""

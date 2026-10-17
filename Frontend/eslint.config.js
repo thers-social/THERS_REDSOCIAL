@@ -39,6 +39,14 @@ export default [
     },
   },
   {
+    files: ["tests/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  {
     files: ["*.config.js"],
     languageOptions: {
       globals: {

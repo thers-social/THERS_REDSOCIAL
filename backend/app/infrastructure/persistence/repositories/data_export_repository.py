@@ -63,6 +63,8 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
                 "content": p.content,
                 "created_at": _iso(p.created_at),
                 "edited": p.edited_at is not None,
+                # ADR-040 fase 4d: lugar asociado (id del catálogo), si lo hubo.
+                "place_id": str(p.place_id) if p.place_id else None,
             }
             for p in db.session.execute(
                 select(Post).where(Post.author_id == user_id).order_by(Post.created_at)
@@ -139,6 +141,8 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
                     "created_at": _iso(m.created_at),
                     "read": m.read_at is not None,
                     "edited": m.edited_at is not None,
+                    # ADR-040 fase 4c: lugar compartido (id del catálogo), si lo hubo.
+                    "shared_place_id": str(m.place_id) if m.place_id else None,
                 }
             )
 
@@ -148,18 +152,23 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
                 "type": type_,
                 "from_username": username,
                 "post_id": str(post_id) if post_id else None,
+                # Fase 12: avisos de Places (nulos en like/comment/follow).
+                "place_id": str(place_id) if place_id else None,
+                "detail": detail,
                 "created_at": _iso(created_at),
                 "read": read_at is not None,
             }
-            for type_, username, post_id, created_at, read_at in db.session.execute(
+            for type_, username, post_id, place_id, detail, created_at, read_at in db.session.execute(
                 select(
                     Notification.type,
                     actor.username,
                     Notification.post_id,
+                    Notification.place_id,
+                    Notification.detail,
                     Notification.created_at,
                     Notification.read_at,
                 )
-                .join(actor, actor.id == Notification.actor_id)
+                .outerjoin(actor, actor.id == Notification.actor_id)
                 .where(Notification.recipient_id == user_id)
                 .order_by(Notification.created_at)
             )
@@ -251,6 +260,151 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
             )
         ]
 
+        place_reviews = [
+            {
+                "place": name,
+                "rating": rating,
+                "body": body,
+                "created_at": _iso(created_at),
+                "updated_at": _iso(updated_at),
+            }
+            for name, rating, body, created_at, updated_at in db.session.execute(
+                db.text(
+                    "SELECT p.name, r.rating, r.body, r.created_at, r.updated_at "
+                    "FROM place_reviews r JOIN places p ON p.id = r.place_id "
+                    "WHERE r.user_id = :u ORDER BY r.created_at"
+                ),
+                {"u": str(user_id)},
+            )
+        ]
+
+        # Planes con amistades (fase 5): los propios y a los que te invitaron, sin datos
+        # privados de las demás personas (solo cuántas van).
+        place_plans = [
+            {
+                "place": place,
+                "title": title,
+                "note": note,
+                "starts_at": _iso(starts_at),
+                "status": status,
+                "role": "creator" if is_creator else "member",
+                "my_response": my_status,
+                "going_count": going,
+            }
+            for place, title, note, starts_at, status, is_creator, my_status, going in (
+                db.session.execute(
+                    db.text(
+                        "SELECT p.name, pl.title, pl.note, pl.starts_at, pl.status, "
+                        "pl.creator_id = m.user_id, m.status, "
+                        "(SELECT count(*) FROM place_plan_members g WHERE g.plan_id = pl.id "
+                        " AND g.status = 'going') "
+                        "FROM place_plan_members m JOIN place_plans pl ON pl.id = m.plan_id "
+                        "JOIN places p ON p.id = pl.place_id "
+                        "WHERE m.user_id = :u ORDER BY pl.starts_at"
+                    ),
+                    {"u": str(user_id)},
+                )
+            )
+        ]
+
+        # Reclamos de negocio (fase 6): lo que escribiste y su resultado. El documento que
+        # subiste no se incluye: se borra al resolver el reclamo.
+        place_claims = [
+            {
+                "place": place,
+                "business_name": business_name,
+                "contact_phone": contact_phone,
+                "message": message,
+                "status": status,
+                "review_note": review_note,
+                "created_at": _iso(created_at),
+                "reviewed_at": _iso(reviewed_at),
+            }
+            for place, business_name, contact_phone, message, status, review_note, created_at,
+            reviewed_at in (
+                db.session.execute(
+                    db.text(
+                        "SELECT p.name, c.business_name, c.contact_phone, c.message, c.status, "
+                        "c.review_note, c.created_at, c.reviewed_at "
+                        "FROM place_claims c JOIN places p ON p.id = c.place_id "
+                        "WHERE c.claimant_id = :u ORDER BY c.created_at"
+                    ),
+                    {"u": str(user_id)},
+                )
+            )
+        ]
+        # Reservas (fase 8): las que pediste, con el lugar y el resultado.
+        place_reservations = [
+            {
+                "place": place,
+                "starts_at": _iso(starts_at),
+                "party_size": party_size,
+                "note": note,
+                "status": status,
+                "decision_note": decision_note,
+                "created_at": _iso(created_at),
+            }
+            for place, starts_at, party_size, note, status, decision_note, created_at in (
+                db.session.execute(
+                    db.text(
+                        "SELECT p.name, r.starts_at, r.party_size, r.note, r.status, "
+                        "r.decision_note, r.created_at FROM place_reservations r "
+                        "JOIN places p ON p.id = r.place_id WHERE r.user_id = :u "
+                        "ORDER BY r.starts_at"
+                    ),
+                    {"u": str(user_id)},
+                )
+            )
+        ]
+        # Cotizaciones (fase 10): las que pediste, con sus líneas. Importes en texto decimal exacto.
+        quote_rows = db.session.execute(
+            db.text(
+                "SELECT q.id, p.name, q.currency, q.total_cents, q.note, q.valid_until, q.created_at "
+                "FROM place_quotes q JOIN places p ON p.id = q.place_id WHERE q.user_id = :u "
+                "ORDER BY q.created_at"
+            ),
+            {"u": str(user_id)},
+        ).all()
+        quote_lines = {}
+        if quote_rows:
+            for quote_id, name, quantity, unit_price, line_total in db.session.execute(
+                db.text(
+                    "SELECT quote_id, name, quantity, unit_price_cents, line_total_cents "
+                    "FROM place_quote_lines WHERE quote_id = ANY(CAST(:ids AS uuid[])) ORDER BY id"
+                ),
+                {"ids": [str(row[0]) for row in quote_rows]},
+            ):
+                quote_lines.setdefault(quote_id, []).append(
+                    {
+                        "name": name,
+                        "quantity": quantity,
+                        "unit_price": f"{unit_price // 100}.{unit_price % 100:02d}",
+                        "line_total": f"{line_total // 100}.{line_total % 100:02d}",
+                    }
+                )
+        place_quotes = [
+            {
+                "place": place,
+                "currency": currency,
+                "total": f"{total // 100}.{total % 100:02d}",
+                "note": note,
+                "valid_until": _iso(valid_until),
+                "created_at": _iso(created_at),
+                "lines": quote_lines.get(quote_id, []),
+            }
+            for quote_id, place, currency, total, note, valid_until, created_at in quote_rows
+        ]
+        managed_places = [
+            {"place": place, "since": _iso(since)}
+            for place, since in db.session.execute(
+                db.text(
+                    "SELECT p.name, m.created_at FROM place_managers m "
+                    "JOIN places p ON p.id = m.place_id WHERE m.user_id = :u ORDER BY m.created_at"
+                ),
+                {"u": str(user_id)},
+            )
+        ]
+
         return {
             "profile": profile,
             "posts": posts,
@@ -266,6 +420,12 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
             "sessions": sessions,
             "saved_places": saved_places,
             "place_reports": place_reports,
+            "place_reviews": place_reviews,
+            "place_plans": place_plans,
+            "place_claims": place_claims,
+            "managed_places": managed_places,
+            "place_reservations": place_reservations,
+            "place_quotes": place_quotes,
         }
 
     def create(self, user_id, file_name, content, expires_at):

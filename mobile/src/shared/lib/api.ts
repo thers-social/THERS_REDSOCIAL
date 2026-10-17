@@ -98,13 +98,15 @@ function networkError(): ApiError {
 }
 
 type RequestOptions = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   /** Adjunta el `Authorization: Bearer <token>` de SecureStore. */
   authenticated?: boolean;
   timeoutMs?: number;
   /** Permite cancelar desde el llamador (p. ej. al desmontar una pantalla). */
   signal?: AbortSignal;
+  /** La respuesta es un archivo: devuelve sus bytes en vez de JSON (los errores siguen siendo JSON). */
+  binary?: boolean;
 };
 
 /**
@@ -262,9 +264,10 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     authenticated = false,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     signal,
+    binary = false,
   } = options;
 
-  const baseHeaders: Record<string, string> = { Accept: 'application/json' };
+  const baseHeaders: Record<string, string> = { Accept: binary ? 'application/pdf, application/json' : 'application/json' };
   if (body !== undefined) baseHeaders['Content-Type'] = 'application/json';
   const serializedBody = body === undefined ? undefined : JSON.stringify(body);
 
@@ -307,6 +310,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   if (response.status === 204) return undefined as T;
+
+  if (binary && response.ok) return new Uint8Array(await response.arrayBuffer()) as T;
 
   // El backend responde JSON incluso en los errores, incluidos `404`/`500`,
   // gracias al manejador global (`app/interfaces/error_handlers.py`). Igual se

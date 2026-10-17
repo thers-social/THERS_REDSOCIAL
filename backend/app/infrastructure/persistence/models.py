@@ -261,6 +261,14 @@ class Post(db.Model):
     # existente pasa a ser sensible por efecto de la migración.
     is_sensitive = db.Column(db.Boolean, nullable=False, server_default=text("false"))
 
+    # Lugar al que se asocia la publicación (ADR-040 fase 4d). NULL = sin lugar. SET NULL: si el
+    # lugar desaparece del catálogo la publicación se conserva.
+    place_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("places.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # lazy="joined": listar posts siempre necesita el autor (to_public_post),
     # un JOIN evita el N+1 que tendría cada post resolviendo su autor por
     # separado.
@@ -459,10 +467,12 @@ class Notification(db.Model):
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # Nulo solo en `place_claim_decided` (ADR-040 fase 12): el aviso no dice qué cuenta de
+    # moderación decidió (lo exige un CHECK).
     actor_id = db.Column(
         PG_UUID(as_uuid=True),
         db.ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
 
     # VARCHAR corto en vez de un ENUM de PostgreSQL -- agregar un tipo nuevo
@@ -471,7 +481,16 @@ class Notification(db.Model):
     # aplicación, no en el esquema (mismo criterio ya aceptado para
     # `content` de posts/comments: la forma se valida en domain/, no con un
     # CHECK).
-    type = db.Column(db.String(20), nullable=False)
+    type = db.Column(db.String(40), nullable=False)
+
+    # Fase 12 (ADR-040): avisos de Places. `object_id` es la reserva, cotización, plan, reclamo
+    # o reseña según `type` (sin FK: apunta a tablas distintas); `detail` es el estado
+    # («confirmed», «accepted»...). Nunca llevan texto libre de nadie.
+    place_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("places.id", ondelete="CASCADE"), nullable=True
+    )
+    object_id = db.Column(PG_UUID(as_uuid=True), nullable=True)
+    detail = db.Column(db.String(20), nullable=True)
 
     # Nullable: solo 'like'/'comment' tienen un post de origen -- 'follow'
     # no tiene ningún post asociado, viaja como NULL (ADR-008 §Modelo de
@@ -507,6 +526,7 @@ class Notification(db.Model):
     # caso de uso necesita navegar de la notificación a su destinatario
     # completo, solo compara su id (siempre ya conocido: es quien pregunta).
     actor = db.relationship("User", foreign_keys=[actor_id], lazy="joined")
+    place = db.relationship("Place", foreign_keys=[place_id], lazy="joined")
 
     __table_args__ = (
         db.Index("ix_notifications_recipient_id_created_at", "recipient_id", "created_at"),
@@ -576,6 +596,14 @@ class Message(db.Model):
     # personas pueden elegir el mismo valor sin chocar.
     client_id = db.Column(db.String(64), nullable=True)
 
+    # Lugar compartido por chat (ADR-040 fase 4c). NULL = mensaje normal. SET NULL: si el
+    # lugar desaparece del catálogo el mensaje se conserva (la tarjeta pasa a "no disponible").
+    place_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("places.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     sender = db.relationship("User", foreign_keys=[sender_id], lazy="joined")
     recipient = db.relationship("User", foreign_keys=[recipient_id], lazy="joined")
 
@@ -625,8 +653,8 @@ class Message(db.Model):
 class MediaAttachment(db.Model):
     __tablename__ = "media_attachments"
 
-    # Imagen adjunta a una publicación o a un mensaje (ADR-039). Una sola tabla
-    # para los dos casos: cada fila pertenece a EXACTAMENTE uno (CHECK). El
+    # Imagen adjunta a una publicación, un mensaje o una reseña de lugar (ADR-039,
+    # ADR-040). Una sola tabla para los tres casos: cada fila pertenece a EXACTAMENTE uno (CHECK). El
     # archivo vive en el almacenamiento de medios; aquí solo su clave.
     id = db.Column(
         PG_UUID(as_uuid=True),
@@ -651,6 +679,12 @@ class MediaAttachment(db.Model):
         db.ForeignKey("messages.id", ondelete="CASCADE"),
         nullable=True,
     )
+    # Foto de una reseña de lugar (ADR-040 fase 4b).
+    review_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("place_reviews.id", ondelete="CASCADE"),
+        nullable=True,
+    )
 
     # Nombre de objeto aleatorio e impredecible (`posts/<uuid4>.webp`). Único.
     storage_key = db.Column(db.Text, nullable=False, unique=True)
@@ -665,10 +699,11 @@ class MediaAttachment(db.Model):
 
     __table_args__ = (
         db.CheckConstraint(
-            "(post_id IS NOT NULL AND message_id IS NULL) "
-            "OR (post_id IS NULL AND message_id IS NOT NULL)",
+            "((post_id IS NOT NULL)::int + (message_id IS NOT NULL)::int "
+            "+ (review_id IS NOT NULL)::int) = 1",
             name="ck_media_attachments_one_parent",
         ),
+        db.Index("ix_media_attachments_review_id", "review_id"),
         db.Index("ix_media_attachments_post_id", "post_id"),
         db.Index("ix_media_attachments_message_id", "message_id"),
         db.Index("ix_media_attachments_owner_id", "owner_id"),
@@ -1694,3 +1729,355 @@ class AdminAuditLog(db.Model):
     created_at = db.Column(
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+# --- THERS Places, fase 4a: reseñas (ADR-040-thers-places.md) ---
+
+
+class PlaceReview(db.Model):
+    __tablename__ = "place_reviews"
+
+    # Una reseña por persona y lugar. CASCADE: al eliminar la cuenta (ADR-031) o el
+    # lugar desaparecen. `is_hidden` lo cambia solo la moderación.
+    __table_args__ = (
+        CheckConstraint("rating BETWEEN 1 AND 5", name="ck_place_reviews_rating"),
+        db.UniqueConstraint("user_id", "place_id", name="uq_place_reviews_user_place"),
+        db.Index("ix_place_reviews_place_created", "place_id", "created_at"),
+    )
+
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("places.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    rating = db.Column(db.SmallInteger, nullable=False)
+    body = db.Column(db.Text, nullable=True)
+    is_hidden = db.Column(db.Boolean, nullable=False, server_default=text("false"))
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class PlacePlan(db.Model):
+    __tablename__ = "place_plans"
+
+    # Plan de salida a un lugar con amistades (ADR-040 fase 5). CASCADE: al borrarse
+    # la cuenta de quien lo creó (ADR-031) o el lugar, el plan desaparece. `status`
+    # ('active'/'cancelled') tiene CHECK; cancelar conserva la fila para que las
+    # personas invitadas vean que ya no va.
+    __table_args__ = (
+        CheckConstraint("status IN ('active','cancelled')", name="ck_place_plans_status"),
+        db.Index("ix_place_plans_place", "place_id"),
+        db.Index("ix_place_plans_creator_starts", "creator_id", "starts_at"),
+    )
+
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("places.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    creator_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title = db.Column(db.String(80), nullable=False)
+    note = db.Column(db.Text, nullable=True)
+    starts_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    status = db.Column(db.String(12), nullable=False, server_default=text("'active'"))
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class PlacePlanMember(db.Model):
+    __tablename__ = "place_plan_members"
+
+    # Quien creó el plan también tiene fila (siempre 'going').
+    # `status`: 'invited' / 'going' / 'declined'.
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('invited','going','declined')", name="ck_place_plan_members_status"
+        ),
+        db.UniqueConstraint("plan_id", "user_id", name="uq_place_plan_members_pair"),
+        db.Index("ix_place_plan_members_user", "user_id"),
+    )
+
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    plan_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("place_plans.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    invited_by = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status = db.Column(db.String(12), nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+# --- THERS Places, fase 6: reclamos de negocio (ADR-040-thers-places.md) ---
+
+
+class PlaceClaim(db.Model):
+    __tablename__ = "place_claims"
+
+    # `document_key` apunta al almacenamiento PRIVADO y se vacía al resolver el reclamo.
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("places.id", ondelete="CASCADE"), nullable=False
+    )
+    claimant_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status = db.Column(db.String(12), nullable=False, server_default="pending")
+    business_name = db.Column(db.String(160), nullable=False)
+    contact_phone = db.Column(db.String(40), nullable=True)
+    message = db.Column(db.Text, nullable=True)
+    document_key = db.Column(db.String(255), nullable=True)
+    document_content_type = db.Column(db.String(40), nullable=True)
+    reviewed_by = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    review_note = db.Column(db.Text, nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class PlaceManager(db.Model):
+    __tablename__ = "place_managers"
+
+    # Rol de gestor de UN lugar, distinto de `users.is_moderator` (que es de la plataforma).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("places.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    claim_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("place_claims.id", ondelete="SET NULL"), nullable=True
+    )
+    granted_by = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+# --- THERS Places, fase 7: respuestas del negocio a reseñas (ADR-040-thers-places.md) ---
+
+
+class PlaceReviewReply(db.Model):
+    __tablename__ = "place_review_replies"
+
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    review_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("place_reviews.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("places.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+# --- THERS Places, fase 8: reservas (ADR-040-thers-places.md) ---
+
+
+class PlaceReservationSettings(db.Model):
+    __tablename__ = "place_reservation_settings"
+
+    place_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("places.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled = db.Column(db.Boolean, nullable=False, server_default=text("false"))
+    capacity = db.Column(db.Integer, nullable=False, server_default="10")
+    max_party_size = db.Column(db.Integer, nullable=False, server_default="8")
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class PlaceReservation(db.Model):
+    __tablename__ = "place_reservations"
+
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("places.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    starts_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    party_size = db.Column(db.Integer, nullable=False)
+    note = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(12), nullable=False, server_default="pending")
+    decided_by = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decision_note = db.Column(db.Text, nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+# --- THERS Places, fase 10: cotizador (ADR-040-thers-places.md) ---
+
+
+class PlaceQuoteItem(db.Model):
+    __tablename__ = "place_quote_items"
+
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("places.id", ondelete="CASCADE"), nullable=False
+    )
+    name = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.String(300), nullable=True)
+    unit = db.Column(db.String(10), nullable=False)
+    # Dinero siempre en centavos enteros (USD), nunca float.
+    unit_price_cents = db.Column(db.Integer, nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, server_default=text("true"))
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class PlaceQuote(db.Model):
+    __tablename__ = "place_quotes"
+
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    place_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("places.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    reservation_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("place_reservations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    currency = db.Column(db.String(3), nullable=False, server_default="USD")
+    total_cents = db.Column(db.BigInteger, nullable=False)
+    note = db.Column(db.Text, nullable=True)
+    valid_until = db.Column(db.DateTime(timezone=True), nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    # Fase 11: el negocio acepta o rechaza; sin cobro.
+    status = db.Column(db.String(10), nullable=False, server_default="pending")
+    decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    decided_by = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class PlaceQuoteLine(db.Model):
+    __tablename__ = "place_quote_lines"
+
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    quote_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("place_quotes.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("place_quote_items.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Copia del artículo al cotizar.
+    name = db.Column(db.String(120), nullable=False)
+    unit = db.Column(db.String(10), nullable=False)
+    unit_price_cents = db.Column(db.Integer, nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    line_total_cents = db.Column(db.BigInteger, nullable=False)
+    position = db.Column(db.SmallInteger, nullable=False, server_default="0")
+
+
+# --- THERS Places, fase 16 parte 2: visitas anónimas (ADR-040 §33) ---
+
+
+class PlaceVisitCount(db.Model):
+    __tablename__ = "place_visit_counts"
+
+    # Contador por lugar, día LOCAL (UTC-6) y evento. Sin user_id a propósito (ADR-040 §33).
+    place_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("places.id", ondelete="CASCADE"), primary_key=True
+    )
+    day = db.Column(db.Date, primary_key=True)
+    event = db.Column(db.String(16), primary_key=True)
+    count = db.Column(db.Integer, nullable=False, server_default="0")

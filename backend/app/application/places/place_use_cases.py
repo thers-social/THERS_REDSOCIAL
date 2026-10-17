@@ -4,14 +4,20 @@
 # ubicación de quien consulta: `lat`/`lng` se usan para la consulta y se descartan
 # (ADR-040 §4.4).
 
+from app.application.media.attachments import discard_files, store_attachments
 from app.application.places import place_presenter
 from app.domain.places import kinds, validators, write_validators
+from app.domain.pulse import place_pulse
+from app.domain.visits import place_visits
 from app.domain.places.exceptions import (
     InvalidPlaceDataError,
     InvalidPlaceQueryError,
     PlaceNotFoundError,
     PlaceReportAlreadyResolvedError,
     PlaceReportNotFoundError,
+    PlaceReviewNotFoundError,
+    ReviewImageNotFoundError,
+    TooManyReviewImagesError,
 )
 
 
@@ -67,6 +73,22 @@ def get_place(place_id, repository, user_id=None):
     return place_presenter.present_detail(row)
 
 
+def get_pulse(place_id, repository):
+    """Nivel de actividad reciente del lugar (ADR-040 §32). Mismo 404 que la ficha."""
+    if repository.get_public_place(place_id) is None:
+        raise PlaceNotFoundError()
+    return place_pulse.build_pulse(repository.pulse_counts(place_id, place_pulse.WINDOW_DAYS))
+
+
+def record_visit(place_id, event_raw, user_id, repository):
+    """Cuenta una visita anónima (ADR-040 §33). Mismo 404 que la ficha. No devuelve nada: la
+    respuesta no dice si se contó o no (p. ej. si quien visita gestiona el lugar)."""
+    event = place_visits.parse_event(event_raw)
+    if repository.get_public_place(place_id) is None:
+        raise PlaceNotFoundError()
+    repository.record_visit(place_id, event, user_id)
+
+
 # ------------------------------------------------------------------- guardados
 
 
@@ -103,6 +125,82 @@ def report_place(user_id, place_id, reason, details, repository):
         raise PlaceNotFoundError()
     row, created = repository.create_report(place_id, user_id, reason, details)
     return place_presenter.present_own_report(row), created
+
+
+# --------------------------------------------------------------------- reseñas
+
+
+def write_review(user_id, place_id, rating, body, repository):
+    """`(reseña, creada)`. Solo se reseña un lugar público; una por persona y lugar."""
+    rating, body = write_validators.parse_review(rating, body)
+    if repository.get_public_place(place_id) is None:
+        raise PlaceNotFoundError()
+    row, created = repository.upsert_review(user_id, place_id, rating, body)
+    images = repository.review_images([row["id"]]).get(str(row["id"]), [])
+    return place_presenter.present_own_review(row, images), created
+
+
+def delete_review(user_id, place_id, repository, storage=None):
+    if not repository.place_exists(place_id):
+        raise PlaceNotFoundError()
+    keys = repository.delete_review(user_id, place_id)
+    if keys is None:
+        raise PlaceReviewNotFoundError()
+    # Ya con el borrado confirmado en la base: los archivos se limpian sin poder fallar.
+    if storage is not None:
+        discard_files(keys, storage)
+    return {"deleted": True}
+
+
+def add_review_images(user_id, place_id, prepared, repository, storage):
+    """Añade fotos (ya procesadas: sin EXIF, WebP) a la reseña propia. Máximo
+    `MAX_REVIEW_IMAGES` por reseña."""
+    if not prepared:
+        raise InvalidPlaceDataError("Adjunta al menos una imagen")
+    if len(prepared) > kinds.MAX_REVIEW_IMAGES:
+        raise TooManyReviewImagesError(kinds.MAX_REVIEW_IMAGES)
+    if repository.get_public_place(place_id) is None:
+        raise PlaceNotFoundError()
+    stored = store_attachments(prepared, "review", storage)
+    try:
+        result = repository.add_review_images(user_id, place_id, stored, kinds.MAX_REVIEW_IMAGES)
+    except Exception:
+        discard_files([item["key"] for item in stored], storage)
+        raise
+    if result in ("no_review", "too_many"):
+        discard_files([item["key"] for item in stored], storage)
+        if result == "no_review":
+            raise PlaceReviewNotFoundError()
+        raise TooManyReviewImagesError(kinds.MAX_REVIEW_IMAGES)
+    return place_presenter.present_images(result)
+
+
+def delete_review_image(user_id, place_id, image_id, repository, storage):
+    key = repository.delete_review_image(user_id, place_id, image_id)
+    if key is None:
+        raise ReviewImageNotFoundError()
+    discard_files([key], storage)
+    return {"deleted": True}
+
+
+def list_reviews(place_id, limit_raw, offset_raw, repository, viewer_id=None):
+    if repository.get_public_place(place_id) is None:
+        raise PlaceNotFoundError()
+    limit = validators.parse_limit(limit_raw)
+    offset = validators.parse_offset(offset_raw)
+    # Se pide una fila de más para saber si hay otra página.
+    rows = repository.list_reviews(place_id, viewer_id, limit + 1, offset)[:limit + 1]
+    images = repository.review_images([r["id"] for r in rows[:limit]])
+    rows = [{**r, "images": images.get(str(r["id"]), [])} for r in rows]
+    summary = repository.review_summary(place_id)
+    return {
+        "reviews": [place_presenter.present_review(r) for r in rows[:limit]],
+        "has_more": len(rows) > limit,
+        "summary": {
+            "average": None if summary["average"] is None else float(summary["average"]),
+            "count": int(summary["count"]),
+        },
+    }
 
 
 # ------------------------------------------------------------------ moderación
@@ -188,3 +286,10 @@ def moderation_set_status(actor_id, place_id, data, repository):
 
 def moderation_summary(repository):
     return repository.summary()
+
+
+def moderation_set_review_hidden(actor_id, review_id, data, repository):
+    hidden, note = write_validators.parse_review_moderation(data.get("hidden"), data.get("note"))
+    if not repository.set_review_hidden(actor_id, review_id, hidden, note):
+        raise PlaceReviewNotFoundError()
+    return {"review_id": str(review_id), "hidden": hidden}

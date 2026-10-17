@@ -8,10 +8,14 @@
 # preferencia `who_can_message` del destinatario.
 
 from app.application.media.attachments import discard_files, store_attachments
-from app.application.messages.message_presenter import to_public_message
+from app.application.messages.message_presenter import to_public_messages
 from app.domain.auth.exceptions import UserNotFoundError
 from app.domain.follows.follow_status import ACCEPTED
-from app.domain.messages.exceptions import CannotMessageSelfError, MessagesNotAllowedError
+from app.domain.messages.exceptions import (
+    CannotMessageSelfError,
+    MessagesNotAllowedError,
+    SharedPlaceNotFoundError,
+)
 from app.domain.privacy.audience import is_allowed
 from app.domain.restrictions.exceptions import AccountBlockedError
 from app.domain.restrictions.kinds import BLOCK
@@ -20,7 +24,7 @@ from app.domain.restrictions.kinds import BLOCK
 def send_message(
     sender_id, recipient_id, content, user_repository, message_repository, follow_repository,
     restriction_repository, client_id=None, prepared_images=None, media_repository=None,
-    media_storage=None,
+    media_storage=None, place_id=None,
 ):
     """Devuelve `(mensaje_público, created)`. Con `client_id`, reenviar el mismo
     mensaje (por ejemplo tras perder la conexión justo al recibir la respuesta)
@@ -54,12 +58,17 @@ def send_message(
     if not is_allowed(recipient.who_can_message, sender_follows_recipient):
         raise MessagesNotAllowedError()
 
+    # Solo se comparten lugares públicos (ADR-040 fase 4c). Va después de las comprobaciones
+    # de bloqueo y permisos: un envío rechazado no revela si el lugar existe.
+    if place_id is not None and not message_repository.place_cards([place_id]):
+        raise SharedPlaceNotFoundError()
+
     if client_id is None:
-        message = message_repository.create(sender_id, recipient_id, content)
+        message = message_repository.create(sender_id, recipient_id, content, place_id=place_id)
         created = True
     else:
         message, created = message_repository.create_idempotent(
-            sender_id, recipient_id, content, client_id
+            sender_id, recipient_id, content, client_id, place_id=place_id
         )
 
     # Imagen (ADR-039). Solo si el mensaje es NUEVO: un reintento idempotente
@@ -78,4 +87,4 @@ def send_message(
             message_repository.delete(message.id, sender_id)
             raise
 
-    return to_public_message(message), created
+    return to_public_messages([message], message_repository)[0], created

@@ -43,6 +43,10 @@ os.environ["DATABASE_URL"] = os.environ.get(
 # suite -- exactamente lo que DATABASE_URL de arriba ya evita para Postgres.
 os.environ["RESEND_API_KEY"] = ""
 
+# Rutas (ADR-040 fase 13): las pruebas NUNCA llaman a OpenRouteService. Sin clave, aunque quien
+# corre los tests tenga una real en `backend/.env`; cada prueba inyecta un proveedor simulado.
+os.environ["ROUTING_API_KEY"] = ""
+
 # Imágenes de perfil (ADR-015): siempre disco local en un directorio
 # temporal, nunca el backend/uploads real ni un bucket S3 del entorno.
 import tempfile
@@ -50,6 +54,8 @@ import tempfile
 os.environ["STORAGE_BACKEND"] = "local"
 os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="thers_test_uploads_")
 os.environ["MEDIA_PUBLIC_BASE_URL"] = "http://testserver/api/media"
+# Documentos privados de reclamos (ADR-040 fase 6): también en un directorio temporal.
+os.environ["PRIVATE_UPLOAD_DIR"] = tempfile.mkdtemp(prefix="thers_test_private_")
 
 import psycopg
 import pytest
@@ -161,7 +167,7 @@ def _clean_tables(app):
                 "user_identities, notifications, messages, mentions, muted_keywords, "
                 "sessions, two_factor_recovery_codes, rate_limit_buckets, data_exports, user_restrictions, muted_topics, "
                 "media_attachments, "
-                "comments, likes, follows, posts, reports, saved_places, place_reports, admin_audit_log, places, users"
+                "comments, likes, follows, posts, reports, saved_places, place_reviews, place_reports, place_plan_members, place_plans, place_managers, place_claims, place_review_replies, place_reservations, place_reservation_settings, place_opening_hours, place_closures, place_quote_lines, place_quotes, place_quote_items, place_visit_counts, admin_audit_log, places, users"
             )
         )
         db.session.commit()
@@ -173,6 +179,6 @@ def _clean_uploads():
     import shutil
 
     yield
-    root = os.environ["UPLOAD_DIR"]
-    for entry in os.listdir(root):
-        shutil.rmtree(os.path.join(root, entry), ignore_errors=True)
+    for root in (os.environ["UPLOAD_DIR"], os.environ["PRIVATE_UPLOAD_DIR"]):
+        for entry in os.listdir(root):
+            shutil.rmtree(os.path.join(root, entry), ignore_errors=True)

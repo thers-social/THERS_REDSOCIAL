@@ -5,6 +5,7 @@ import Avatar from "@shared/components/Avatar";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
 import ImageAttachmentPicker from "@shared/components/ImageAttachmentPicker";
 import ImageGrid from "@shared/components/ImageGrid";
+import SharedPlaceCard from "@shared/components/SharedPlaceCard";
 import useImageAttachments from "@shared/hooks/useImageAttachments";
 import { ACCEPTED_IMAGE_TYPES } from "@shared/lib/imageAttachments";
 import { api, getErrorMessage } from "@shared/lib/api";
@@ -328,7 +329,8 @@ export default function Messages() {
                   </div>
                   <p className="text-muted text-xs truncate">
                     {conversation.last_message.content ||
-                      (conversation.last_message.has_image ? "📷 Foto" : "")}
+                      (conversation.last_message.has_image ? "📷 Foto" : "") ||
+                      (conversation.last_message.has_place ? t("places.share.preview") : "")}
                   </p>
                 </div>
                 {conversation.unread_count > 0 && (
@@ -462,8 +464,12 @@ export default function Messages() {
                               alt="Imagen del mensaje"
                               compact
                             />
+                            {/* Lugar compartido (ADR-040 fase 4c). */}
+                            {message.place && (
+                              <SharedPlaceCard place={message.place} mine={message.sender_id === currentUser.id} />
+                            )}
                             {message.content && (
-                              <span className={message.images?.length ? "mt-2 block" : ""}>
+                              <span className={message.images?.length || message.place ? "mt-2 block" : ""}>
                                 {message.content}
                               </span>
                             )}

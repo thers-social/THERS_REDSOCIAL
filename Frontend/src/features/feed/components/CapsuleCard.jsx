@@ -5,6 +5,7 @@ import Avatar from "@shared/components/Avatar";
 import Spinner from "@shared/components/Spinner";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
 import ImageGrid from "@shared/components/ImageGrid";
+import SharedPlaceCard from "@shared/components/SharedPlaceCard";
 import MentionText from "./MentionText";
 import { useToast } from "@shared/components/Toast";
 import { useLanguage } from "@shared/i18n";
@@ -530,6 +531,8 @@ export default function CapsuleCard({
             </p>
           )}
           <ImageGrid images={capsule.images} alt={`Imagen de ${capsule.author.name}`} />
+          {/* Lugar asociado (ADR-040 fase 4d). */}
+          {capsule.place && <SharedPlaceCard place={capsule.place} />}
         </>
       )}
 

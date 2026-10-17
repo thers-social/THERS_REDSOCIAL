@@ -238,7 +238,7 @@ export default function Messages() {
                 numberOfLines={1}
               >
                 {item.last_message.sender_id === user.id ? 'Tú: ' : ''}
-                {item.last_message.content}
+                {item.last_message.content || (item.last_message.has_place ? '📍 Lugar' : '')}
               </Text>
             </View>
             <View style={styles.rowEnd}>

@@ -236,3 +236,28 @@ describe('integración', () => {
     for (const source of files) assert.doesNotMatch(source, /rating|reviews_count|is_open/);
   });
 });
+
+describe('reseñas (fase 4a)', () => {
+  it('el texto de las reseñas se pinta como texto, nunca como HTML', () => {
+    const reviews = code('src/features/places/components/PlaceReviews.jsx');
+    assert.doesNotMatch(reviews, /dangerouslySetInnerHTML|innerHTML/);
+  });
+
+  it('el cliente HTTP usa los endpoints del contrato y manda la sesión', () => {
+    const api = code('src/features/places/lib/placesApi.js');
+    assert.match(api, /`\/places\/\$\{placeId\}\/reviews`/);
+    assert.match(api, /api\.put\(`\/places\/\$\{placeId\}\/review`/);
+    assert.match(api, /api\.delete\(`\/places\/\$\{placeId\}\/review`, authConfig\(\)\)/);
+  });
+
+  it('no recalcula el promedio en el cliente: lo trae el servidor', () => {
+    const hook = code('src/features/places/hooks/usePlaceReviews.js');
+    assert.doesNotMatch(hook, /reduce\(|\/ *reviews\.length/);
+  });
+
+  it('sin sesión solo se leen reseñas; el formulario exige una calificación', () => {
+    const reviews = code('src/features/places/components/PlaceReviews.jsx');
+    assert.match(reviews, /!user \?/);
+    assert.match(reviews, /disabled=\{!rating \|\| busy\}/);
+  });
+});

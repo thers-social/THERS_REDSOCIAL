@@ -478,7 +478,13 @@ class TestEveryTableThatPointsToUsersIsDeleted:
         # También `place_reports` y `admin_audit_log` (ADR-040 fase 2): el reporte de un lugar
         # y el registro de auditoría deben sobrevivir a la cuenta de quien los generó; la
         # referencia a la persona queda en NULL.
-        set_null_on_purpose = {"reports", "places", "place_reports", "admin_audit_log"}
+        # Y las referencias de AUTORÍA ajena que quedan en NULL sin conservar datos de la persona
+        # (ADR-040 fases 5-6): quién invitó a un plan, quién resolvió un reclamo y quién otorgó la
+        # gestión de un lugar. La fila pertenece a OTRA persona, que sigue ahí.
+        set_null_on_purpose = {
+            "reports", "places", "place_reports", "admin_audit_log",
+            "place_plan_members", "place_claims", "place_managers", "place_reservations", "place_quotes",
+        }
         not_cascading = [
             (t, n) for t, n, d in rows if d != "c" and not (t in set_null_on_purpose and d == "n")
         ]

@@ -2,6 +2,7 @@ import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "@shared/i18n";
+import { boundsOf } from "../lib/routeFormat";
 import { radiusFromBounds } from "../lib/coordinates";
 import { DEFAULT_ZOOM, MAP_STYLE_URL } from "../lib/mapConfig";
 
@@ -28,6 +29,8 @@ maplibregl.setWorkerUrl(
 );
 
 const SOURCE_ID = "thers-places";
+const ROUTE_SOURCE_ID = "thers-route";
+const EMPTY_LINE = { type: "FeatureCollection", features: [] };
 const BRAND = "#7c3aed";
 
 function toGeoJson(places) {
@@ -48,6 +51,7 @@ export default function PlacesMap({
   zoom = DEFAULT_ZOOM,
   focus,
   userPoint,
+  route,
   onSelect,
   onViewportChange,
   onUnavailable,
@@ -82,6 +86,22 @@ export default function PlacesMap({
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
     map.on("load", () => {
+      // Ruta hacia un lugar (fase 13): debajo de los pines para no taparlos.
+      map.addSource(ROUTE_SOURCE_ID, { type: "geojson", data: EMPTY_LINE });
+      map.addLayer({
+        id: "route-casing",
+        type: "line",
+        source: ROUTE_SOURCE_ID,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#ffffff", "line-width": 8 },
+      });
+      map.addLayer({
+        id: "route-main",
+        type: "line",
+        source: ROUTE_SOURCE_ID,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": BRAND, "line-width": 5 },
+      });
       map.addSource(SOURCE_ID, { type: "geojson", data: toGeoJson(latest.current.places) });
       map.addLayer({
         id: "places-selected-halo",
@@ -137,6 +157,23 @@ export default function PlacesMap({
     if (!ready) return;
     mapRef.current.getSource(SOURCE_ID)?.setData(toGeoJson(places));
   }, [places, ready]);
+
+  // Ruta hacia el lugar (fase 13): dibuja la línea y encuadra toda la ruta.
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current;
+    const source = map.getSource(ROUTE_SOURCE_ID);
+    if (!route) {
+      source?.setData(EMPTY_LINE);
+      return;
+    }
+    source?.setData({
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: {}, geometry: route.route.geometry }],
+    });
+    const bounds = boundsOf(route.route.geometry.coordinates, [[route.origin.lng, route.origin.lat]]);
+    if (bounds) map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { padding: 48, duration: 400 });
+  }, [route, ready]);
 
   // Pin seleccionado: resalta y centra suavemente
   useEffect(() => {

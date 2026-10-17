@@ -88,7 +88,7 @@ export default function ReportPlaceDialog({ place, onClose, onReported }) {
         </label>
 
         {error && (
-          <p role="alert" className="text-sm text-danger-fg">
+          <p role="alert" className="text-sm text-th-danger-fg">
             {error}
           </p>
         )}
@@ -105,7 +105,7 @@ export default function ReportPlaceDialog({ place, onClose, onReported }) {
           <button
             type="submit"
             disabled={!canSend}
-            className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-50"
+            className="rounded-full bg-th-brand px-4 py-2 text-sm font-semibold text-th-on-brand hover:bg-th-brand-hover disabled:opacity-50"
           >
             {sending ? t("places.report.sending") : t("places.report.send")}
           </button>

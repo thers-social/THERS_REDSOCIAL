@@ -182,3 +182,23 @@ def parse_resolution(status, note):
     if status not in kinds.REPORT_CLOSING_STATUSES:
         raise InvalidPlaceDataError("status debe ser resolved o dismissed")
     return status, _text(note, "note", kinds.MAX_NOTE_LENGTH, multiline=True)
+
+
+# ------------------------------------------------------------------- reseñas
+
+
+def parse_review(rating, body):
+    """`(calificación, texto)` validados. La calificación es un ENTERO de 1 a 5 (un
+    `true`, un `4.5` o un `"4"` se rechazan); el texto es opcional."""
+    if isinstance(rating, bool) or not isinstance(rating, int):
+        raise InvalidPlaceDataError("rating debe ser un entero de 1 a 5")
+    if not kinds.MIN_RATING <= rating <= kinds.MAX_RATING:
+        raise InvalidPlaceDataError("rating debe ser un entero de 1 a 5")
+    body = _text(body, "body", kinds.MAX_REVIEW_LENGTH, multiline=True)
+    return rating, body
+
+
+def parse_review_moderation(hidden, note):
+    if not isinstance(hidden, bool):
+        raise InvalidPlaceDataError("hidden debe ser true o false")
+    return hidden, _text(note, "note", kinds.MAX_NOTE_LENGTH)

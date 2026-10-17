@@ -11,6 +11,7 @@ from app.domain.follows.follow_status import ACCEPTED
 from app.domain.posts.repositories import PostRepository
 from app.domain.restrictions.kinds import BLOCK
 from app.extensions import db
+from app.infrastructure.persistence.repositories.place_cards import fetch_place_cards
 from app.infrastructure.persistence.models import (
     Follow,
     MutedTopic,
@@ -21,8 +22,10 @@ from app.infrastructure.persistence.models import (
 
 
 class SQLAlchemyPostRepository(PostRepository):
-    def create(self, author_id, content, is_sensitive=False):
-        post = Post(author_id=author_id, content=content, is_sensitive=is_sensitive)
+    def create(self, author_id, content, is_sensitive=False, place_id=None):
+        post = Post(
+            author_id=author_id, content=content, is_sensitive=is_sensitive, place_id=place_id
+        )
         db.session.add(post)
         db.session.commit()
         # Refresh para traer created_at/id ya generados por PostgreSQL, y
@@ -33,7 +36,10 @@ class SQLAlchemyPostRepository(PostRepository):
         _ = post.author
         return post
 
-    def list_recent(self, limit, viewer_id, muted_keywords=()):
+    def place_cards(self, place_ids):
+        return fetch_place_cards(place_ids)
+
+    def list_recent(self, limit, viewer_id, muted_keywords=(), place_id=None):
         # Traducción literal a SQL de domain/privacy/visibility.py
         # (can_view_content_of): el post entra en el feed si el autor no es
         # privado, O es el propio espectador, O el espectador tiene un follow
@@ -123,6 +129,11 @@ class SQLAlchemyPostRepository(PostRepository):
         topics_ok = or_(Post.author_id == viewer_id, ~has_muted_topic)
 
         conditions = [visible_to_viewer, not_blocked, sensitive_ok, topics_ok]
+
+        # Solo las publicaciones de un lugar (ADR-040 fase 4d). Las reglas de visibilidad de
+        # arriba aplican igual: el lugar no es una forma de saltárselas.
+        if place_id is not None:
+            conditions.append(Post.place_id == place_id)
 
         # Términos filtrados del espectador (ADR-024). Su propio post nunca se
         # le oculta: filtrar una palabra no debería hacer desaparecer lo que

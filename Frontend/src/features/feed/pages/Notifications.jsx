@@ -4,8 +4,10 @@ import {
   IoPersonAdd,
   IoChatbubble,
   IoCheckmarkDoneOutline,
+  IoStorefront,
 } from "react-icons/io5";
 import Avatar from "@shared/components/Avatar";
+import { isPlaceNotice } from "../lib/mapNotification";
 
 // Tipos reales que GET /api/notifications puede devolver
 // (ADR-008-notifications-minimal-model.md) -- "mention" no está en esta
@@ -17,8 +19,11 @@ const ICONS = {
   comment: { icon: IoChatbubble, color: "text-muted" },
 };
 
+// ADR-040 fase 12: avisos de Places (reservas, cotizaciones, planes, reclamos, reseñas).
+const PLACE_ICON = { icon: IoStorefront, color: "text-pulse-500" };
+
 function NotificationRow({ notification, onMarkRead }) {
-  const { icon: Icon, color } = ICONS[notification.type] || ICONS.comment;
+  const { icon: Icon, color } = ICONS[notification.type] || (isPlaceNotice(notification.type) ? PLACE_ICON : ICONS.comment);
 
   return (
     <button

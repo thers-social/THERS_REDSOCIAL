@@ -8,13 +8,17 @@ from abc import ABC, abstractmethod
 
 class PostRepository(ABC):
     @abstractmethod
-    def create(self, author_id, content, is_sensitive=False):
+    def create(self, author_id, content, is_sensitive=False, place_id=None):
         """Crea un post y devuelve el registro creado (con `id`/`created_at`
         generados por PostgreSQL, y el autor ya resuelto). `is_sensitive` es lo
         que el autor declara (ADR-030-content-preferences.md)."""
 
     @abstractmethod
-    def list_recent(self, limit, viewer_id, muted_keywords=()):
+    def place_cards(self, place_ids):
+        """Tarjeta mínima de cada lugar PÚBLICO de `place_ids`, por id (ADR-040 fase 4d)."""
+
+    @abstractmethod
+    def list_recent(self, limit, viewer_id, muted_keywords=(), place_id=None):
         """Devuelve los `limit` posts más recientes **visibles para
         `viewer_id`**, ordenados por `created_at` descendente, con el autor ya
         resuelto (sin N+1).
