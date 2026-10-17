@@ -136,6 +136,10 @@ def create_app():
     from app.interfaces.routes.plan_routes import plans_bp
     app.register_blueprint(plans_bp, url_prefix="/api")
 
+    # Tero, asistente con IA (ADR-041, fase 4): chat. Apagado por defecto (TERO_ENABLED).
+    from app.interfaces.routes.tero_routes import tero_bp
+    app.register_blueprint(tero_bp, url_prefix="/api")
+
     # Comandos de línea de comandos (flask set-moderator, flask unsuspend-user).
     from app.interfaces.cli import register_cli
     register_cli(app)

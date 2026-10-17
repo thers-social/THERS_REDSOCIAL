@@ -63,3 +63,7 @@ boto3==1.43.103
 # Registro de errores en producción (app/observability.py). Opcional en runtime:
 # solo se importa si SENTRY_DSN está definida.
 sentry-sdk[flask]==2.19.2
+
+# SDK oficial de Anthropic (ADR-041, Tero): el unico punto del backend que lo importa es
+# infrastructure/ai/anthropic_provider.py (mismo principio que confina `resend` a infrastructure/email/).
+anthropic==1.15.0
