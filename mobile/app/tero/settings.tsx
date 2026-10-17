@@ -1,5 +1,6 @@
 import { Alert, Pressable, Switch, Text, View } from 'react-native';
 
+import { TeroAvatar } from '@features/tero/components/TeroAvatar';
 import { TeroGate } from '@features/tero/components/TeroGate';
 import { useTero } from '@features/tero/context/TeroContext';
 import type { TeroSide } from '@features/tero/types';
@@ -42,6 +43,14 @@ function TeroSettingsContent() {
 
   return (
     <Screen title="Ajustes de Tero" back>
+      {/* Vista previa: refleja al momento «Animaciones» y reducir movimiento. */}
+      <View style={styles.preview}>
+        <TeroAvatar size={72} mood="idle" />
+        <Text style={styles.description}>
+          {preferences.animations ? 'Tero se mueve con calma y parpadea de vez en cuando.' : 'Tero se queda quieto.'}
+        </Text>
+      </View>
+
       <SwitchRow
         label="Mostrar Tero"
         description="La burbuja flotante sobre las pestañas."
@@ -134,6 +143,7 @@ function SwitchRow({
 }
 
 const styles = themedStyles(() => ({
+  preview: { alignItems: 'center', gap: space[2], paddingVertical: space[4] },
   row: { paddingVertical: space[4], borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: space[3] },
   switchText: { flex: 1 },

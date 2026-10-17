@@ -7,7 +7,7 @@
  * esta validación.
  */
 
-import type { TeroContext, TeroMessage, TeroReply } from '../types';
+import type { TeroContext, TeroMessage, TeroMessageStatus, TeroReply } from '../types';
 
 /** Mismo límite que tendrá el servidor (a confirmar en ADR-041). */
 export const MAX_TERO_MESSAGE_LENGTH = 1000;
@@ -33,6 +33,23 @@ export function makeMessage(
 ): TeroMessage {
   sequence += 1;
   return { id: `tero:${now.getTime()}:${sequence}`, role, text, createdAt: now.toISOString(), isMock };
+}
+
+/** Cambia el estado de un mensaje de la persona sin tocar los demás. */
+export function withStatus(
+  messages: TeroMessage[],
+  id: string,
+  status: TeroMessageStatus,
+): TeroMessage[] {
+  return messages.map((message) => (message.id === id ? { ...message, status } : message));
+}
+
+/** Texto bajo un mensaje propio según su estado. */
+export function statusLabel(status: TeroMessageStatus | undefined): string | null {
+  if (status === 'sending') return 'Enviando…';
+  if (status === 'sent') return 'Enviado';
+  if (status === 'failed') return 'No se pudo enviar';
+  return null;
 }
 
 /** Primeras palabras de un texto, cortadas en un límite de palabra. */

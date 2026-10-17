@@ -63,7 +63,11 @@ export type TeroMessage = {
   createdAt: string;
   /** `true` en las respuestas de ejemplo de la fase 1 (sin IA real). */
   isMock?: boolean;
+  /** Solo en los mensajes de la persona: en camino, entregado o fallido. */
+  status?: TeroMessageStatus;
 };
+
+export type TeroMessageStatus = 'sending' | 'sent' | 'failed';
 
 export type TeroReply = {
   text: string;

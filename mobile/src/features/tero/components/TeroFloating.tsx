@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsFocused } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LayoutChangeEvent } from 'react-native';
 import { Animated, Keyboard, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { space } from '@shared/design/tokens';
 
+import { floatingMood, SLEEP_AFTER_MS, tapReaction } from '../animation/expressions';
+import type { ReactionRequest } from '../animation/useTeroMotion';
 import { useTero } from '../context/TeroContext';
 import { clampRatio } from '../lib/preferences';
 import { useReducedMotion } from '../lib/useReducedMotion';
@@ -40,7 +43,9 @@ function positionFor(bounds: Bounds, side: TeroSide, ratio: number) {
  * - Se arrastra dentro de una zona segura (debajo de la cabecera, encima de la
  *   barra) y al soltarla se pega al borde más cercano. Posición y lado se
  *   guardan en las preferencias de Tero.
- * - Un toque abre el panel rápido.
+ * - Un toque abre el panel rápido. La burbuja se hunde bajo el dedo y reacciona.
+ * - Tras `SLEEP_AFTER_MS` sin que nadie la toque se duerme (cara quieta, sin
+ *   parpadeos ni flotación); un toque la despierta sorprendida.
  * - Se oculta con el teclado abierto: si no, taparía el campo de publicar o de
  *   escribir.
  * - Arrastre con `PanResponder` + `Animated` del núcleo de React Native: no hace
@@ -56,6 +61,17 @@ export function TeroFloating({ bottomOffset }: Props) {
   const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const [asleep, setAsleep] = useState(false);
+  const [reaction, setReaction] = useState<ReactionRequest | null>(null);
+  // Cambia con cada interacción: reinicia la cuenta atrás para dormirse.
+  const [interaction, setInteraction] = useState(0);
+  const focused = useIsFocused();
+
+  const touch = useCallback(() => {
+    setAsleep(false);
+    setInteraction((n) => n + 1);
+  }, []);
 
   const position = useRef(new Animated.ValueXY()).current;
   const dragging = useRef(false);
@@ -70,8 +86,8 @@ export function TeroFloating({ bottomOffset }: Props) {
   }, [layout, insets.top, bottomOffset]);
 
   // El PanResponder se crea una vez; lee lo que cambia a través de refs.
-  const latest = useRef({ bounds, animate, update });
-  latest.current = { bounds, animate, update };
+  const latest = useRef({ bounds, animate, update, touch });
+  latest.current = { bounds, animate, update, touch };
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -106,6 +122,7 @@ export function TeroFloating({ bottomOffset }: Props) {
           Math.abs(g.dx) + Math.abs(g.dy) > DRAG_THRESHOLD,
         onPanResponderGrant: () => {
           dragging.current = true;
+          latest.current.touch();
           position.stopAnimation((value) => {
             start.current = value;
           });
@@ -150,6 +167,13 @@ export function TeroFloating({ bottomOffset }: Props) {
 
   const visible = enabled && ready && preferences.showTero && !keyboardVisible;
 
+  // Cuenta atrás para dormirse: solo con la burbuja a la vista y el panel cerrado.
+  useEffect(() => {
+    if (!visible || !focused || panelOpen) return;
+    const timer = setTimeout(() => setAsleep(true), SLEEP_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [visible, focused, panelOpen, interaction]);
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={onLayout}>
       {visible && bounds ? (
@@ -158,10 +182,16 @@ export function TeroFloating({ bottomOffset }: Props) {
           {...responder.panHandlers}
         >
           <Pressable
-            onPress={() => setPanelOpen(true)}
+            onPressIn={() => setPressed(true)}
+            onPressOut={() => setPressed(false)}
+            onPress={() => {
+              setReaction({ kind: tapReaction(asleep), key: Date.now() });
+              touch();
+              setPanelOpen(true);
+            }}
             style={styles.pressable}
             accessibilityRole="button"
-            accessibilityLabel="Tero, tu asistente"
+            accessibilityLabel={asleep ? 'Tero, tu asistente (dormido)' : 'Tero, tu asistente'}
             accessibilityHint="Abre el panel de Tero. Mantén y arrastra para moverlo."
             accessibilityActions={[{ name: 'switchSide', label: 'Mover al otro lado' }]}
             onAccessibilityAction={(event) => {
@@ -170,11 +200,23 @@ export function TeroFloating({ bottomOffset }: Props) {
               }
             }}
           >
-            <TeroAvatar size={SIZE} mood={panelOpen ? 'attention' : 'idle'} animated={animate} />
+            <TeroAvatar
+              size={SIZE}
+              mood={floatingMood({ panelOpen, asleep })}
+              pressed={pressed}
+              reaction={reaction}
+            />
           </Pressable>
         </Animated.View>
       ) : null}
-      <TeroQuickPanel visible={panelOpen} animated={animate} onClose={() => setPanelOpen(false)} />
+      <TeroQuickPanel
+        visible={panelOpen}
+        animated={animate}
+        onClose={() => {
+          setPanelOpen(false);
+          touch();
+        }}
+      />
     </View>
   );
 }
