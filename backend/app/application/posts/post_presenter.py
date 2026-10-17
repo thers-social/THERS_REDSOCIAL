@@ -1,4 +1,5 @@
 from app.application.media.attachments import to_public_images
+from app.application.places.place_card import to_place_card
 from app.application.mentions.mention_presenter import to_public_mentions
 from app.domain.follows.follow_status import ACCEPTED
 
@@ -16,7 +17,7 @@ from app.application.auth.user_presenter import to_author_summary
 
 def to_public_post(
     post, likes_count=0, liked_by_me=False, comments_count=0, follow_status=None,
-    mentions=None,
+    mentions=None, place_cards=None,
 ):
     # Defaults en 0/False: un post recién creado (create_post_use_case.py)
     # no tiene resumen de likes/comentarios que calcular todavía (ADR-005/
@@ -57,4 +58,6 @@ def to_public_post(
         "likes_count": likes_count,
         "liked_by_me": liked_by_me,
         "comments_count": comments_count,
+        # ADR-040 fase 4d: lugar asociado (null si la publicación no lleva uno).
+        "place": to_place_card(post.place_id, place_cards),
     }

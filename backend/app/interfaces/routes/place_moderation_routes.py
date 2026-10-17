@@ -19,6 +19,7 @@ from app.domain.places.exceptions import (
     PlaceNotFoundError,
     PlaceReportAlreadyResolvedError,
     PlaceReportNotFoundError,
+    PlaceReviewNotFoundError,
 )
 from app.infrastructure.persistence.repositories.place_repository import (
     SQLAlchemyPlaceRepository,
@@ -158,3 +159,20 @@ def patch_status(place_id):
     except PlaceNotFoundError:
         return _not_found()
     return jsonify({"place": place}), 200
+
+
+@place_moderation_bp.route(f"{_BASE}/reviews/<uuid:review_id>/visibility", methods=["POST"])
+@moderator_required
+def post_review_visibility(review_id):
+    data = _body()
+    if data is None:
+        return jsonify({"msg": "No se enviaron datos"}), 400
+    try:
+        result = place_use_cases.moderation_set_review_hidden(
+            get_jwt_identity(), review_id, data, _place_repository
+        )
+    except InvalidPlaceDataError as error:
+        return _bad(error)
+    except PlaceReviewNotFoundError:
+        return jsonify({"msg": "Reseña no encontrada"}), 404
+    return jsonify(result), 200

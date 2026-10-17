@@ -10,16 +10,19 @@ from sqlalchemy.exc import IntegrityError
 from app.domain.messages.repositories import MessageRepository
 from app.extensions import db
 from app.infrastructure.persistence.models import Message, User
+from app.infrastructure.persistence.repositories.place_cards import fetch_place_cards
 
 
 class SQLAlchemyMessageRepository(MessageRepository):
-    def create(self, sender_id, recipient_id, content):
-        message = Message(sender_id=sender_id, recipient_id=recipient_id, content=content)
+    def create(self, sender_id, recipient_id, content, place_id=None):
+        message = Message(
+            sender_id=sender_id, recipient_id=recipient_id, content=content, place_id=place_id
+        )
         db.session.add(message)
         db.session.commit()
         return message
 
-    def create_idempotent(self, sender_id, recipient_id, content, client_id):
+    def create_idempotent(self, sender_id, recipient_id, content, client_id, place_id=None):
         existing = self._find_by_client_id(sender_id, client_id)
         if existing is not None:
             return existing, False
@@ -29,6 +32,7 @@ class SQLAlchemyMessageRepository(MessageRepository):
             recipient_id=recipient_id,
             content=content,
             client_id=client_id,
+            place_id=place_id,
         )
         db.session.add(message)
         try:
@@ -42,6 +46,11 @@ class SQLAlchemyMessageRepository(MessageRepository):
                 raise
             return existing, False
         return message, True
+
+    def place_cards(self, place_ids):
+        """Tarjeta mínima de cada lugar PÚBLICO de `place_ids` (ADR-040 fase 4c). Los que no
+        son públicos (o ya no existen) no aparecen: quien presenta decide cómo mostrarlo."""
+        return fetch_place_cards(place_ids)
 
     def _find_by_client_id(self, sender_id, client_id):
         return db.session.execute(

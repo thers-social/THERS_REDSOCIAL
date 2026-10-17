@@ -2,13 +2,15 @@
 # ADR-032-content-reports-and-moderation.md §2).
 #
 # Un solo lugar que conoce las cuatro tablas posibles (posts, comentarios,
-# mensajes y usuarios), para no agregar un `find_by_id` a cada repositorio
+# mensajes, usuarios y reseñas de lugares), para no agregar un `find_by_id` a cada repositorio
 # existente. NO decide la visibilidad: eso es del caso de uso, que ya conoce las
 # guardias de ADR-022 y ADR-029.
 
 from app.domain.reports import kinds
 from app.domain.reports.repositories import ReportTargetResolver, ResolvedTarget
 from app.extensions import db
+from sqlalchemy import text
+
 from app.infrastructure.persistence.models import Comment, Message, Post, User
 
 
@@ -70,6 +72,29 @@ class SQLAlchemyReportTargetResolver(ReportTargetResolver):
                 target_id=str(user.id),
                 owner_id=str(user.id),
                 text=_profile_text(user),
+            )
+
+        if target_type == kinds.TARGET_REVIEW:
+            # Solo una reseña visible para el público: ni oculta por moderación ni de un
+            # lugar que ya no es público. En esos casos «no existe» (404), igual que el
+            # resto de objetivos que no se pueden ver.
+            row = db.session.execute(
+                text(
+                    "SELECT r.id, r.user_id, r.rating, r.body FROM place_reviews r "
+                    "JOIN places p ON p.id = r.place_id "
+                    "JOIN place_categories c ON c.id = p.category_id "
+                    "WHERE r.id = :id AND NOT r.is_hidden AND p.is_active "
+                    "AND p.verification_status = 'verified' AND c.is_active"
+                ),
+                {"id": str(target_id)},
+            ).mappings().first()
+            if row is None:
+                return None
+            return ResolvedTarget(
+                target_type=target_type,
+                target_id=str(row["id"]),
+                owner_id=str(row["user_id"]),
+                text=f"[{row['rating']}/5] {row['body'] or ''}".strip(),
             )
 
         return None

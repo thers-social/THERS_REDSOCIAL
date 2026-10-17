@@ -11,6 +11,7 @@
 # sin necesidad de validarlo a mano (mismo criterio que follow_routes.py).
 
 import re
+import uuid
 from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
@@ -45,6 +46,7 @@ from app.domain.messages.exceptions import (
     CannotMessageSelfError,
     MessageNotFoundError,
     MessagesNotAllowedError,
+    SharedPlaceNotFoundError,
 )
 from app.domain.messages.validators import (
     MAX_CONTENT_LENGTH,
@@ -153,7 +155,18 @@ def create(user_id):
     # body; mismo principio anti mass-assignment que POST /api/posts).
     # Con imagen el texto puede ir vacío; sin ella sigue siendo obligatorio.
     content = data.get("content")
-    content_ok = is_valid_content_with_images(content) if files else is_valid_content(content)
+    # ADR-040 fase 4c: `place_id` comparte un lugar; con él el texto también es opcional.
+    place_id = data.get("place_id")
+    if place_id is not None:
+        try:
+            place_id = str(uuid.UUID(place_id)) if isinstance(place_id, str) else None
+        except ValueError:
+            place_id = None
+        if place_id is None:
+            return jsonify({"msg": "place_id debe ser un identificador válido"}), 400
+    content_ok = (
+        is_valid_content_with_images(content) if (files or place_id) else is_valid_content(content)
+    )
     if not content_ok:
         return jsonify(
             {"msg": f"El contenido debe tener entre 1 y {MAX_CONTENT_LENGTH} caracteres"}
@@ -192,7 +205,10 @@ def create(user_id):
             prepared_images=prepared,
             media_repository=_media_repository,
             media_storage=current_app.extensions["media_storage"],
+            place_id=place_id,
         )
+    except SharedPlaceNotFoundError:
+        return jsonify({"msg": "Lugar no encontrado"}), 404
     except CannotMessageSelfError:
         return jsonify({"msg": "No podés mandarte un mensaje a vos mismo"}), 400
     except UserNotFoundError:

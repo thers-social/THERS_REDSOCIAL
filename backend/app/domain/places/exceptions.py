@@ -31,3 +31,19 @@ class PlaceReportNotFoundError(Exception):
 
 class PlaceReportAlreadyResolvedError(Exception):
     """El reporte ya estaba cerrado (resuelto o descartado): no se puede cerrar dos veces."""
+
+
+class PlaceReviewNotFoundError(Exception):
+    """La persona no tiene reseña en ese lugar, o la reseña no existe."""
+
+
+class TooManyReviewImagesError(Exception):
+    """La reseña llegaría a más fotos de las permitidas."""
+
+    def __init__(self, limit):
+        super().__init__(limit)
+        self.limit = limit
+
+
+class ReviewImageNotFoundError(Exception):
+    """La foto no existe o no es de la reseña de esa persona."""

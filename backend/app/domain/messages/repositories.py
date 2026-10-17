@@ -9,14 +9,18 @@ from abc import ABC, abstractmethod
 
 class MessageRepository(ABC):
     @abstractmethod
-    def create(self, sender_id, recipient_id, content):
+    def create(self, sender_id, recipient_id, content, place_id=None):
         """Crea un mensaje de `sender_id` hacia `recipient_id`. Nunca es
         idempotente -- cada llamada es una fila nueva, mismo criterio que
         CommentRepository.create (ADR-013 §Modelo de datos: sin UNIQUE,
         dos mensajes entre las mismas personas son eventos legítimos)."""
 
     @abstractmethod
-    def create_idempotent(self, sender_id, recipient_id, content, client_id):
+    def place_cards(self, place_ids):
+        """Tarjeta mínima de cada lugar PÚBLICO de `place_ids`, por id (ADR-040 fase 4c)."""
+
+    @abstractmethod
+    def create_idempotent(self, sender_id, recipient_id, content, client_id, place_id=None):
         """Como `create`, pero con `client_id` (ADR-035-chat-sync.md): si `sender_id`
         ya envió un mensaje con ese `client_id`, devuelve **ese** mensaje y NO crea
         otro. Devuelve `(message, created)`. Tiene que resistir dos envíos simultáneos

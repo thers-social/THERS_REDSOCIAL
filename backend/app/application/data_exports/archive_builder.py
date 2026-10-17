@@ -28,6 +28,12 @@ Contenido (un archivo JSON por sección):
   sessions.json        Dispositivos desde los que iniciaste sesión.
   saved_places.json    Lugares que guardaste.
   place_reports.json   Reportes de datos incorrectos de lugares que hiciste.
+  place_reviews.json   Reseñas de lugares que escribiste.
+  place_plans.json     Planes con amistades en los que participas.
+  place_claims.json    Reclamos de negocio que enviaste y su resultado.
+  managed_places.json  Lugares que gestionas.
+  place_reservations.json  Reservas que solicitaste y su resultado.
+  place_quotes.json    Cotizaciones que pediste, con sus líneas.
 
 Qué NO incluye, a propósito:
   - Tu contraseña (ni su hash) ni el secreto de tu autenticación en dos pasos.

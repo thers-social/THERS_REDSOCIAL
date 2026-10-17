@@ -74,6 +74,7 @@ def confirm_account_deletion(
     account_deleter,
     media_storage,
     email_service,
+    private_storage=None,
 ):
     user = user_repository.find_by_email(email)
     if user is None:
@@ -133,6 +134,13 @@ def confirm_account_deletion(
             media_storage.delete(key)
         except Exception:  # noqa: BLE001 -- limpieza best-effort
             _logger.warning("Archivo huérfano tras eliminar una cuenta: %s", key)
+
+    if private_storage is not None:
+        for key in result.get("private_keys", []):
+            try:
+                private_storage.delete(key)
+            except Exception:  # noqa: BLE001 -- limpieza best-effort
+                _logger.warning("Documento privado huérfano tras eliminar una cuenta: %s", key)
 
     # Confirmación a la dirección de la cuenta, sin guardar copia del correo ni
     # del nombre. Un fallo de envío no deshace una eliminación ya hecha.

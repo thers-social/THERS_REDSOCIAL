@@ -132,3 +132,43 @@ PLACES_READ = RateLimitRule("places_read", 120, _MINUTE, clear_on_success=False)
 # por IP. Un reporte cuesta tiempo de quien modera, por eso su tope es bajo.
 PLACES_SAVE = RateLimitRule("places_save", 60, _MINUTE, clear_on_success=False)
 PLACE_REPORT = RateLimitRule("place_report", 10, _HOUR, clear_on_success=False)
+# Escribir, editar o borrar una reseña (fase 4a): por cuenta.
+PLACE_REVIEW = RateLimitRule("place_review", 20, _HOUR, clear_on_success=False)
+# Crear, editar, cancelar o responder planes con amistades y gestionar sus invitaciones
+# (fase 5): por cuenta.
+PLAN_WRITE = RateLimitRule("plan_write", 30, _HOUR, clear_on_success=False)
+
+# Reclamos de negocio (ADR-040 fase 6): crear y retirar. Incluye subir un documento.
+CLAIM_WRITE = RateLimitRule("claim_write", 5, 24 * _HOUR, clear_on_success=False)
+
+# Panel de negocio (ADR-040 fase 7): editar el lugar y responder reseñas.
+BUSINESS_WRITE = RateLimitRule("business_write", 30, _HOUR, clear_on_success=False)
+
+# Reservas (ADR-040 fase 8): solicitar, cancelar, configurar y resolver.
+RESERVATION_WRITE = RateLimitRule("reservation_write", 30, _HOUR, clear_on_success=False)
+
+# Cotizador (ADR-040 fase 10): editar el catálogo y pedir cotizaciones.
+QUOTE_WRITE = RateLimitRule("quote_write", 30, _HOUR, clear_on_success=False)
+
+# Estadísticas del panel de negocio (ADR-040 §31): lecturas por cuenta.
+BUSINESS_ANALYTICS = RateLimitRule("business_analytics", 60, _MINUTE, clear_on_success=False)
+
+# Visitas a la ficha (ADR-040 §33): por IP Y lugar. Una persona real abre, llama y pide ruta pocas
+# veces por hora; un script que quiera inflar cifras se topa aquí.
+PLACE_VISIT = RateLimitRule("place_visit", 30, _HOUR, clear_on_success=False)
+
+# Rutas hacia un lugar (ADR-040 fase 13): por CUENTA, para que una no gaste el cupo de todas.
+ROUTE_REQUEST = RateLimitRule("route_request", 30, _HOUR, clear_on_success=False)
+# Recalcular la ruta durante la navegación en vivo (ADR-040 §30): contador APARTE, para que los
+# recalculos no gasten el de las rutas normales ni al revés.
+ROUTE_REROUTE = RateLimitRule("route_reroute", 30, _HOUR, clear_on_success=False)
+
+DEFAULT_ROUTING_DAILY_BUDGET = 1500
+
+
+def routing_daily_rule(budget):
+    """Cupo diario GLOBAL del proveedor de rutas (identidad «global»). Se arma al usarlo porque
+    el tope sale de la configuración (`ROUTING_DAILY_BUDGET`). Un valor ausente o inválido usa
+    el predeterminado, por debajo del tope gratuito de OpenRouteService."""
+    limit = budget if isinstance(budget, int) and not isinstance(budget, bool) and budget > 0 else DEFAULT_ROUTING_DAILY_BUDGET
+    return RateLimitRule("routing_provider", limit, 24 * _HOUR, clear_on_success=False)

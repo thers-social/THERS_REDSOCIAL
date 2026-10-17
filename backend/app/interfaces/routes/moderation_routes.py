@@ -4,9 +4,10 @@
 # OJO con los nombres: no confundir con los filtros personales de cada persona
 # (palabras y temas silenciados, ADR-024), que viven en `domain/moderation`.
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 
+from app.application.media.attachments import discard_files
 from app.application.platform_moderation.moderation_use_cases import (
     list_reports,
     resolve_report,
@@ -20,6 +21,9 @@ from app.domain.platform_moderation.exceptions import (
 )
 from app.infrastructure.persistence.repositories.comment_repository import (
     SQLAlchemyCommentRepository,
+)
+from app.infrastructure.persistence.repositories.place_repository import (
+    SQLAlchemyPlaceRepository,
 )
 from app.infrastructure.persistence.repositories.message_repository import (
     SQLAlchemyMessageRepository,
@@ -44,6 +48,22 @@ _moderation_repository = SQLAlchemyModerationRepository()
 _post_repository = SQLAlchemyPostRepository()
 _comment_repository = SQLAlchemyCommentRepository()
 _message_repository = SQLAlchemyMessageRepository()
+_place_repository = SQLAlchemyPlaceRepository()
+
+
+class _ReviewRemover:
+    """Retira una reseña reportada y BORRA SUS ARCHIVOS (a diferencia de los otros tipos,
+    que dejan huérfanos los suyos: limitación previa, aquí se evita desde el inicio)."""
+
+    def delete_review_by_id(self, review_id, owner_id):
+        keys = _place_repository.delete_review_by_id(review_id, owner_id)
+        if keys is None:
+            return False
+        discard_files(keys, current_app.extensions["media_storage"])
+        return True
+
+
+_review_remover = _ReviewRemover()
 _session_repository = SQLAlchemySessionRepository()
 _refresh_token_repository = SQLAlchemyRefreshTokenRepository()
 
@@ -86,6 +106,7 @@ def post_resolve_report(report_id):
             _message_repository,
             _session_repository,
             _refresh_token_repository,
+            _review_remover,
         )
     except InvalidModerationRequestError as error:
         return jsonify({"msg": error.message}), 400

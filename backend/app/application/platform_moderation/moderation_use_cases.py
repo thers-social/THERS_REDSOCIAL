@@ -120,7 +120,9 @@ def _validate_resolution(action, note, reason):
     return action, note, reason
 
 
-def _remove_content(report, post_repository, comment_repository, message_repository):
+def _remove_content(
+    report, post_repository, comment_repository, message_repository, review_repository=None
+):
     """Retira el contenido reportado con las rutas de borrado que ya existen
     (ADR-019/ADR-020). Si el autor ya no existe, el contenido se fue con su
     cuenta (`ON DELETE CASCADE`, ADR-031) y no hay nada que borrar."""
@@ -133,6 +135,9 @@ def _remove_content(report, post_repository, comment_repository, message_reposit
         kinds.TARGET_COMMENT: comment_repository.delete,
         kinds.TARGET_MESSAGE: message_repository.delete,
     }
+    if review_repository is not None:
+        # Reseñas de lugares (ADR-040 fase 4a.2): el borrado es por id y autor.
+        deleters[kinds.TARGET_REVIEW] = review_repository.delete_review_by_id
     # Devuelve `False` si ya no existía (el autor lo borró antes): el resultado que
     # se quería, así que no es un error.
     deleters[report.target_type](report.target_id, owner_id)
@@ -150,6 +155,7 @@ def resolve_report(
     message_repository,
     session_repository,
     refresh_token_repository,
+    review_repository=None,
 ):
     action, note, reason = _validate_resolution(action, note, reason)
 
@@ -176,7 +182,9 @@ def resolve_report(
             raise ActionNotApplicableError(
                 "Un reporte sobre una cuenta no tiene contenido que retirar; suspende la cuenta"
             )
-        _remove_content(report, post_repository, comment_repository, message_repository)
+        _remove_content(
+            report, post_repository, comment_repository, message_repository, review_repository
+        )
         moderation_repository.close_report(report, kinds.STATUS_ACTIONED, moderator_id, note)
         # El contenido ya no existe: los demás reportes sobre él no tienen nada más que revisar.
         moderation_repository.close_other_reports_on_target(

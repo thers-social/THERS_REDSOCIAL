@@ -28,7 +28,11 @@ _BASE_COLUMNS = """
     p.phone, p.website, p.verification_status, p.source, p.coordinate_source,
     p.last_verified_at,
     ST_Y(p.location::geometry) AS latitude, ST_X(p.location::geometry) AS longitude,
-    c.id AS category_id, c.slug AS category_slug, c.name AS category_name
+    c.id AS category_id, c.slug AS category_slug, c.name AS category_name,
+    (SELECT round(avg(rv.rating), 1) FROM place_reviews rv
+        WHERE rv.place_id = p.id AND NOT rv.is_hidden) AS rating_average,
+    (SELECT count(*) FROM place_reviews rv
+        WHERE rv.place_id = p.id AND NOT rv.is_hidden) AS reviews_count
 """
 
 _ADMIN_EXTRA = """,
@@ -58,6 +62,21 @@ def _columns(user_id):
     return _BASE_COLUMNS + (
         ", EXISTS (SELECT 1 FROM saved_places s "
         "WHERE s.place_id = p.id AND s.user_id = :uid) AS is_saved"
+    )
+
+
+def _claim_columns(user_id):
+    """`is_claimed` (alguien gestiona el lugar) y `managed_by_me`, solo en el detalle."""
+    mine = (
+        "EXISTS (SELECT 1 FROM place_managers pm WHERE pm.place_id = p.id AND pm.user_id = :uid)"
+        if user_id is not None
+        else "false"
+    )
+    return (
+        "EXISTS (SELECT 1 FROM place_managers pm WHERE pm.place_id = p.id) AS is_claimed, "
+        "EXISTS (SELECT 1 FROM place_reservation_settings rs WHERE rs.place_id = p.id "
+        "AND rs.enabled) AS accepts_reservations, "
+        f"{mine} AS managed_by_me"
     )
 
 
@@ -172,13 +191,60 @@ class SQLAlchemyPlaceRepository(PlaceRepository):
     def get_public_place(self, place_id, user_id=None):
         row = (
             db.session.execute(
-                text(f"SELECT {_columns(user_id)} {_FROM} WHERE {_PUBLIC} AND p.id = :id"),
+                text(
+                    f"SELECT {_columns(user_id)}, {_claim_columns(user_id)} "
+                    f"{_FROM} WHERE {_PUBLIC} AND p.id = :id"
+                ),
                 {"id": str(place_id), **_uid(user_id)},
             )
             .mappings()
             .first()
         )
         return dict(row) if row else None
+
+    def record_visit(self, place_id, event, user_id=None):
+        """Un solo INSERT ... ON CONFLICT: suma al contador del día local (UTC-6). Si quien visita
+        gestiona el lugar, no inserta nada. No se guarda quién visitó (ADR-040 §33)."""
+        db.session.execute(
+            text(
+                "INSERT INTO place_visit_counts (place_id, day, event, count) "
+                "SELECT :p, ((now() AT TIME ZONE 'UTC') - interval '6 hours')::date, :e, 1 "
+                "WHERE CAST(:u AS uuid) IS NULL OR NOT EXISTS ("
+                "  SELECT 1 FROM place_managers m WHERE m.place_id = :p AND m.user_id = CAST(:u AS uuid)) "
+                "ON CONFLICT (place_id, day, event) "
+                "DO UPDATE SET count = place_visit_counts.count + 1"
+            ),
+            {"p": str(place_id), "e": event, "u": None if user_id is None else str(user_id)},
+        )
+        db.session.commit()
+
+    def pulse_counts(self, place_id, window_days):
+        """Actividad de los últimos `window_days` días, solo conteos (ADR-040 §32).
+
+        Las reseñas ocultas, los planes cancelados y las publicaciones de cuentas privadas no
+        cuentan: el Pulse es público y no debe revelar actividad que el resto no puede ver."""
+        row = (
+            db.session.execute(
+                text(
+                    "SELECT "
+                    "(SELECT count(*) FROM place_reviews r WHERE r.place_id = :p "
+                    "  AND NOT r.is_hidden AND r.created_at > now() - make_interval(days => :d)) "
+                    "  AS reviews, "
+                    "(SELECT count(*) FROM saved_places s WHERE s.place_id = :p "
+                    "  AND s.created_at > now() - make_interval(days => :d)) AS saves, "
+                    "(SELECT count(*) FROM place_plans pl WHERE pl.place_id = :p "
+                    "  AND pl.status = 'active' "
+                    "  AND pl.created_at > now() - make_interval(days => :d)) AS plans, "
+                    "(SELECT count(*) FROM posts po JOIN users u ON u.id = po.author_id "
+                    "  WHERE po.place_id = :p AND NOT u.is_private "
+                    "  AND po.created_at > now() - make_interval(days => :d)) AS posts"
+                ),
+                {"p": str(place_id), "d": int(window_days)},
+            )
+            .mappings()
+            .first()
+        )
+        return {key: int(value) for key, value in row.items()}
 
     # ----------------------------------------------------------------- guardados
 
@@ -293,6 +359,187 @@ class SQLAlchemyPlaceRepository(PlaceRepository):
         )
         db.session.commit()
         return dict(row)
+
+    # ------------------------------------------------------------------- reseñas
+
+    def upsert_review(self, user_id, place_id, rating, body):
+        """`(reseña, creada)`. `xmax = 0` distingue el INSERT del UPDATE en un upsert."""
+        row = db.session.execute(
+            text(
+                "INSERT INTO place_reviews (place_id, user_id, rating, body) "
+                "VALUES (:p, :u, :rating, :body) "
+                "ON CONFLICT (user_id, place_id) DO UPDATE SET "
+                "rating = EXCLUDED.rating, body = EXCLUDED.body, updated_at = now() "
+                "RETURNING id, place_id, user_id, rating, body, is_hidden, created_at, "
+                "updated_at, (xmax = 0) AS created"
+            ),
+            {"p": str(place_id), "u": str(user_id), "rating": rating, "body": body},
+        ).mappings().one()
+        db.session.commit()
+        data = dict(row)
+        created = data.pop("created")
+        return data, created
+
+    def delete_review(self, user_id, place_id):
+        row = db.session.execute(
+            text("SELECT id FROM place_reviews WHERE user_id = :u AND place_id = :p"),
+            {"u": str(user_id), "p": str(place_id)},
+        ).first()
+        if row is None:
+            return None
+        return self._delete_review_row(row[0])
+
+    @staticmethod
+    def _delete_review_row(review_id):
+        """Borra la reseña y devuelve las claves de sus fotos (las filas de las fotos se
+        van en cascada; los ARCHIVOS los borra quien llama, ya con el commit hecho)."""
+        keys = [
+            r[0]
+            for r in db.session.execute(
+                text("SELECT storage_key FROM media_attachments WHERE review_id = :id"),
+                {"id": str(review_id)},
+            )
+        ]
+        db.session.execute(text("DELETE FROM place_reviews WHERE id = :id"), {"id": str(review_id)})
+        db.session.commit()
+        return keys
+
+    def review_images(self, review_ids):
+        ids = [str(i) for i in review_ids]
+        if not ids:
+            return {}
+        rows = db.session.execute(
+            text(
+                "SELECT id, review_id, storage_key, width, height FROM media_attachments "
+                "WHERE review_id = ANY(CAST(:ids AS uuid[])) ORDER BY position, created_at, id"
+            ),
+            {"ids": ids},
+        ).mappings()
+        grouped = {}
+        for row in rows:
+            grouped.setdefault(str(row["review_id"]), []).append(dict(row))
+        return grouped
+
+    def add_review_images(self, user_id, place_id, items, limit):
+        # Se bloquea la reseña para que dos subidas a la vez no sobrepasen el límite.
+        review = db.session.execute(
+            text("SELECT id FROM place_reviews WHERE user_id = :u AND place_id = :p FOR UPDATE"),
+            {"u": str(user_id), "p": str(place_id)},
+        ).first()
+        if review is None:
+            db.session.rollback()
+            return "no_review"
+        review_id = review[0]
+        current = db.session.execute(
+            text("SELECT count(*) FROM media_attachments WHERE review_id = :id"),
+            {"id": str(review_id)},
+        ).scalar()
+        if current + len(items) > limit:
+            db.session.rollback()
+            return "too_many"
+        for offset, item in enumerate(items):
+            db.session.execute(
+                text(
+                    "INSERT INTO media_attachments "
+                    "(owner_id, review_id, storage_key, width, height, position) "
+                    "VALUES (:u, :r, :key, :w, :h, :pos)"
+                ),
+                {
+                    "u": str(user_id), "r": str(review_id), "key": item["key"],
+                    "w": item["width"], "h": item["height"], "pos": current + offset,
+                },
+            )
+        db.session.commit()
+        return self.review_images([review_id])[str(review_id)]
+
+    def delete_review_image(self, user_id, place_id, image_id):
+        row = db.session.execute(
+            text(
+                "DELETE FROM media_attachments m USING place_reviews r "
+                "WHERE m.id = :img AND m.review_id = r.id AND r.user_id = :u AND r.place_id = :p "
+                "RETURNING m.storage_key"
+            ),
+            {"img": str(image_id), "u": str(user_id), "p": str(place_id)},
+        ).first()
+        db.session.commit()
+        return row[0] if row else None
+
+    def list_reviews(self, place_id, viewer_id, limit, offset):
+        # Sin bloqueos en ningún sentido entre quien lee y quien escribió (ADR-029). La
+        # reseña propia se muestra aunque la moderación la haya ocultado: nadie debe ver
+        # desaparecer lo que escribió sin explicación.
+        params = {"p": str(place_id), "limit": limit, "offset": offset}
+        block_filter = ""
+        own_first = ""
+        own = "false"
+        if viewer_id is not None:
+            params["viewer"] = str(viewer_id)
+            own = "(r.user_id = :viewer)"
+            own_first = "(r.user_id = :viewer) DESC, "
+            block_filter = (
+                "AND NOT EXISTS (SELECT 1 FROM user_restrictions ur WHERE ur.kind = 'block' "
+                "AND ((ur.owner_id = :viewer AND ur.target_id = r.user_id) "
+                "OR (ur.owner_id = r.user_id AND ur.target_id = :viewer))) "
+            )
+        visible = "(NOT r.is_hidden OR r.user_id = :viewer)" if viewer_id is not None else "NOT r.is_hidden"
+        rows = db.session.execute(
+            text(
+                "SELECT r.id, r.place_id, r.rating, r.body, r.is_hidden, r.created_at, "
+                f"r.updated_at, {own} AS is_mine, "
+                "u.id AS author_id, u.username AS author_username, u.name AS author_name, "
+                "u.avatar_path AS author_avatar_path, "
+                "rp.body AS reply_body, rp.created_at AS reply_created_at, "
+                "rp.updated_at AS reply_updated_at "
+                "FROM place_reviews r JOIN users u ON u.id = r.user_id "
+                "LEFT JOIN place_review_replies rp ON rp.review_id = r.id "
+                f"WHERE r.place_id = :p AND {visible} {block_filter}"
+                f"ORDER BY {own_first}r.created_at DESC, r.id LIMIT :limit OFFSET :offset"
+            ),
+            params,
+        ).mappings()
+        return [dict(row) for row in rows]
+
+    def delete_review_by_id(self, review_id, owner_id):
+        """Borra una reseña por id y autor (retiro por moderación). Devuelve las claves de
+        sus fotos, o `None` si ya no existía."""
+        row = db.session.execute(
+            text("SELECT id FROM place_reviews WHERE id = :id AND user_id = :u"),
+            {"id": str(review_id), "u": str(owner_id)},
+        ).first()
+        if row is None:
+            return None
+        return self._delete_review_row(row[0])
+
+    def review_summary(self, place_id):
+        row = db.session.execute(
+            text(
+                "SELECT round(avg(rating), 1) AS average, count(*) AS count "
+                "FROM place_reviews WHERE place_id = :p AND NOT is_hidden"
+            ),
+            {"p": str(place_id)},
+        ).mappings().one()
+        return {"average": row["average"], "count": row["count"]}
+
+    def set_review_hidden(self, actor_id, review_id, hidden, note):
+        row = db.session.execute(
+            text(
+                "UPDATE place_reviews SET is_hidden = :hidden WHERE id = :id "
+                "RETURNING id, place_id, is_hidden"
+            ),
+            {"id": str(review_id), "hidden": hidden},
+        ).mappings().first()
+        if row is None:
+            db.session.rollback()
+            return False
+        self._audit(
+            actor_id,
+            kinds.AUDIT_REVIEW_HIDDEN if hidden else kinds.AUDIT_REVIEW_RESTORED,
+            "place_review",
+            review_id,
+            {"place_id": str(row["place_id"]), "note": note},
+        )
+        db.session.commit()
+        return True
 
     # ---------------------------------------------------------- administración
 

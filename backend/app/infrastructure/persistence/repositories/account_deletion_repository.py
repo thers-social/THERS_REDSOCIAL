@@ -3,7 +3,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import text, delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.domain.account_deletion.repositories import (
@@ -90,7 +90,7 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
     def delete_account(self, user_id):
         user = db.session.get(User, user_id)
         if user is None:
-            return {"media_keys": []}
+            return {"media_keys": [], "private_keys": []}
 
         media_keys = [key for key in (user.avatar_path, user.cover_path) if key]
         # Imágenes de sus publicaciones y mensajes (ADR-039): las filas caen en
@@ -98,6 +98,18 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
         media_keys += list(
             db.session.execute(
                 select(MediaAttachment.storage_key).where(MediaAttachment.owner_id == user_id)
+            ).scalars()
+        )
+
+        # Documentos de reclamos pendientes (almacenamiento PRIVADO, ADR-040 fase 6): las
+        # filas caen en cascada, los archivos no.
+        private_keys = list(
+            db.session.execute(
+                text(
+                    "SELECT document_key FROM place_claims "
+                    "WHERE claimant_id = :u AND document_key IS NOT NULL"
+                ),
+                {"u": str(user_id)},
             ).scalars()
         )
 
@@ -118,4 +130,4 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
         except Exception:  # noqa: BLE001
             db.session.rollback()
 
-        return {"media_keys": media_keys}
+        return {"media_keys": media_keys, "private_keys": private_keys}

@@ -82,6 +82,8 @@ AUDIT_PLACE_CREATED = "place_created"
 AUDIT_PLACE_UPDATED = "place_updated"
 AUDIT_PLACE_STATUS_CHANGED = "place_status_changed"
 AUDIT_PLACE_REPORT_RESOLVED = "place_report_resolved"
+AUDIT_REVIEW_HIDDEN = "place_review_hidden"
+AUDIT_REVIEW_RESTORED = "place_review_restored"
 
 # Longitudes máximas (iguales a las columnas de `places`).
 MAX_NAME_LENGTH = 160
@@ -103,3 +105,9 @@ MAX_RADIUS_METERS = 50000
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 50
 MAX_OFFSET = 10000
+
+# Reseñas (ADR-040 fase 4a).
+MIN_RATING = 1
+MAX_RATING = 5
+MAX_REVIEW_LENGTH = 1000
+MAX_REVIEW_IMAGES = 3
