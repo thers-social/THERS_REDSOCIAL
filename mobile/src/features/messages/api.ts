@@ -8,6 +8,7 @@
  * cifrados de extremo a extremo.
  */
 
+import type { SharedPlace } from '@features/places/types';
 import { request } from '@shared/lib/api';
 
 export type ChatMessage = {
@@ -24,6 +25,8 @@ export type ChatMessage = {
    * por clientes que no lo mandan (la web actual).
    */
   client_id: string | null;
+  /** Lugar compartido (ADR-040 fase 4c); `null` o ausente en un mensaje normal. */
+  place?: SharedPlace | null;
 };
 
 export type ThreadPage = {
@@ -40,7 +43,7 @@ export type ConversationSummary = {
     avatar_url: string | null;
     last_seen_at: string | null;
   };
-  last_message: { content: string; sender_id: string; created_at: string };
+  last_message: { content: string; has_place?: boolean; sender_id: string; created_at: string };
   unread_count: number;
 };
 

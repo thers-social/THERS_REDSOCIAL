@@ -5,7 +5,7 @@
 # (BACKEND_ARCHITECTURE.md §17), mismo patrón que
 # like_repository.py/comment_repository.py/follow_repository.py.
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 
 from app.domain.notifications.repositories import NotificationRepository
 from app.extensions import db
@@ -27,7 +27,13 @@ class SQLAlchemyNotificationRepository(NotificationRepository):
     def list_for_user(self, user_id, limit, excluded_actor_ids=()):
         conditions = [Notification.recipient_id == user_id]
         if excluded_actor_ids:
-            conditions.append(Notification.actor_id.not_in(list(excluded_actor_ids)))
+            # `NOT IN` con un actor nulo (aviso sin actor) daría NULL y lo ocultaría.
+            conditions.append(
+                or_(
+                    Notification.actor_id.is_(None),
+                    Notification.actor_id.not_in(list(excluded_actor_ids)),
+                )
+            )
 
         return (
             db.session.execute(

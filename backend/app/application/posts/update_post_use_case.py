@@ -49,6 +49,9 @@ def update_post(
         liked_by_me=post.id in liked_ids,
         comments_count=comment_counts.get(post.id, 0),
         mentions=mentions,
+        # La edición no cambia el lugar, pero la respuesta tiene que seguir llevando su tarjeta
+        # (ADR-040 fase 4d): sin esto un lugar válido se vería como "no disponible".
+        place_cards=post_repository.place_cards([post.place_id] if post.place_id else []),
         # `follow_status` queda en su default None y no se consulta a
         # follow_repository: solo el autor puede editar su propia publicación,
         # y nadie se sigue a sí mismo (ck_follows_no_self_follow) -- mismo

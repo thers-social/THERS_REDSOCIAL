@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
@@ -24,6 +25,7 @@ import { StateMessage } from '@shared/ui/StateMessage';
  */
 export default function Search() {
   const { user } = useAuth();
+  const router = useRouter();
   const posts = usePosts();
   const menu = usePostMenu();
 
@@ -71,6 +73,21 @@ export default function Search() {
               </View>
             ) : (
               <>
+                <Pressable
+                  style={styles.discover}
+                  onPress={() => router.push('/places')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Lugares cerca de ti"
+                >
+                  <Icon name="pin" size={22} color={colors.brandText} />
+                  <View style={styles.discoverText}>
+                    <Text style={styles.discoverTitle}>Lugares cerca de ti</Text>
+                    <Text style={styles.discoverHint}>
+                      Descubrí cafés, farmacias y más en el mapa. Guardá tus favoritos.
+                    </Text>
+                  </View>
+                  <Icon name="chevron" size={18} color={colors.fgMuted} />
+                </Pressable>
                 <View style={styles.discover}>
                   <Icon name="grid" size={22} color={colors.brandText} />
                   <View style={styles.discoverText}>

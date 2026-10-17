@@ -27,7 +27,15 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "THERS usa tu ubicación aproximada solo cuando pulsás «Usar mi ubicación», para mostrarte lugares cercanos. No se guarda."
+        }
+      ],
+      "expo-sharing"
     ]
   }
 }

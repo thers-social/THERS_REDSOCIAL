@@ -55,7 +55,7 @@ def process_image(raw, kind):
 # Imágenes de publicaciones y mensajes (ADR-039): se conserva la proporción
 # (sin recortar) y solo se reduce si el lado mayor pasa de este máximo. Se
 # re-codifica a WebP, así se descartan EXIF/GPS y cualquier carga escondida.
-ATTACHMENT_MAX_SIDE = {"post": 1600, "message": 1280}
+ATTACHMENT_MAX_SIDE = {"post": 1600, "message": 1280, "review": 1280}
 
 
 def process_attachment(raw, kind):
@@ -68,3 +68,28 @@ def process_attachment(raw, kind):
 
     image = _decode(raw, _fit)
     return _encode(image), "image/webp", image.width, image.height
+
+
+# Documentos de reclamo de negocio (ADR-040 fase 6): imagen (se re-codifica como las demás,
+# más grande para que el texto siga legible) o PDF. Un PDF no se puede re-codificar sin
+# perder su contenido, así que se valida cabecera y se rechazan los que traen acciones
+# activas (JavaScript, lanzadores, adjuntos). Se sirve siempre como descarga.
+CLAIM_DOCUMENT_MAX_SIDE = 2400
+_PDF_FORBIDDEN = (b"/JavaScript", b"/JS", b"/Launch", b"/EmbeddedFile", b"/OpenAction", b"/AA")
+
+
+def process_claim_document(raw):
+    """Devuelve `(bytes, content_type, extension)` o lanza InvalidImageError /
+    ImageTooLargeError."""
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise ImageTooLargeError()
+    if raw[:5] == b"%PDF-":
+        if any(token in raw for token in _PDF_FORBIDDEN):
+            raise InvalidImageError()
+        return raw, "application/pdf", "pdf"
+
+    def _fit(img):
+        img.thumbnail((CLAIM_DOCUMENT_MAX_SIDE, CLAIM_DOCUMENT_MAX_SIDE), Image.LANCZOS)
+        return img
+
+    return _encode(_decode(raw, _fit)), "image/webp", "webp"

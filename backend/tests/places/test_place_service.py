@@ -39,6 +39,7 @@ def _row(**overrides):
         "verification_status": "verified", "source": "thers_field", "coordinate_source": "gps",
         "last_verified_at": None, "latitude": 13.0, "longitude": -89.0, "is_saved": False,
         "category_id": "c1", "category_slug": "cafes", "category_name": "Cafés",
+        "rating_average": None, "reviews_count": 0,
     }
     row.update(overrides)
     return row

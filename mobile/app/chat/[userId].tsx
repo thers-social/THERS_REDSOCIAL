@@ -7,6 +7,7 @@ import { useAuth } from '@features/auth/context/AuthContext';
 import { MAX_MESSAGE_LENGTH } from '@features/messages/api';
 import type { LocalMessage } from '@features/messages/chatState';
 import { useChat } from '@features/messages/useChat';
+import { SharedPlaceCard } from '@features/places/SharedPlaceCard';
 import { blockUser } from '@features/safety/api';
 import { ReportModal } from '@features/safety/ReportModal';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
@@ -335,7 +336,10 @@ function Bubble({
         accessibilityLabel={`${mine ? 'Tú' : avatarName}: ${message.content}`}
         accessibilityHint={failed ? 'No se envió. Toca para reintentar.' : 'Mantén pulsado para ver opciones'}
       >
-        <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{message.content}</Text>
+        {message.place ? <SharedPlaceCard place={message.place} mine={mine} /> : null}
+        {message.content || !message.place ? (
+          <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{message.content}</Text>
+        ) : null}
         <Text style={[styles.meta, mine && styles.metaMine]}>
           {failed
             ? 'No se envió · toca para reintentar'

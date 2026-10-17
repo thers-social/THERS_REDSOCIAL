@@ -134,6 +134,7 @@ def confirm_deletion_route():
             _account_deleter,
             current_app.extensions["media_storage"],
             _email_service,
+            current_app.extensions.get("private_storage"),
         )
     except InvalidDeletionCodeError:
         # Mismo mensaje para cuenta inexistente, sin solicitud, vencido, agotado

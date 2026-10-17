@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { memo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { SharedPlaceCard } from '@features/places/SharedPlaceCard';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { comingSoon } from '@shared/lib/comingSoon';
@@ -103,6 +104,10 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           />
         </Pressable>
       )}
+      {/* Lugar asociado (ADR-040 fase 4d). */}
+      {post.place && !hidden ? (
+        <SharedPlaceCard place={post.place} mine={false} />
+      ) : null}
 
       <View style={styles.actions}>
         <Pressable

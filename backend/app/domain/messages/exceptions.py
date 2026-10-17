@@ -27,3 +27,7 @@ class MessagesNotAllowedError(Exception):
     que esa persona existe (le estaba escribiendo) y mentirle con un 404 solo
     lo haria reintentar. Lo que la preferencia protege es la bandeja, no la
     existencia de la cuenta."""
+
+
+class SharedPlaceNotFoundError(Exception):
+    """El lugar que se quiere compartir no existe o no es público (ADR-040 fase 4c)."""

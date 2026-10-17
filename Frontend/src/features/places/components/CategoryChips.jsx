@@ -10,8 +10,8 @@ export default function CategoryChips({ categories, value, onChange }) {
   const chip = (active) =>
     `shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
       active
-        ? "border-brand bg-brand text-on-brand"
-        : "border-line dark:border-line-dark bg-surface dark:bg-surface-dark text-ink dark:text-ink-dark hover:border-brand-soft-strong"
+        ? "border-th-brand bg-th-brand text-th-on-brand"
+        : "border-line dark:border-line-dark bg-surface dark:bg-surface-dark text-ink dark:text-ink-dark hover:border-th-brand-soft-strong"
     }`;
 
   return (

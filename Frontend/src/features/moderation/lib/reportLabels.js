@@ -23,6 +23,7 @@ export const TARGET_LABELS = {
   comment: "Comentario",
   message: "Mensaje",
   user: "Cuenta",
+  review: "Reseña de lugar",
 };
 
 export const STATUS_TABS = [

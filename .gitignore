@@ -34,3 +34,4 @@ docs/qa/
 # Imagenes subidas en desarrollo (ADR-015, STORAGE_BACKEND=local) y logs locales
 backend/uploads/
 backend/*.log
+backend/private_uploads/

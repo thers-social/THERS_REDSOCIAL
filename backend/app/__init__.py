@@ -32,6 +32,11 @@ def create_app():
     app.extensions["media_storage"] = build_media_storage(app.config)
     configure_media_url(app.config["MEDIA_PUBLIC_BASE_URL"])
 
+    # Documentos privados de reclamos (ADR-040 fase 6): almacenamiento aparte, nunca público.
+    from app.infrastructure.media.private_storage import build_private_storage
+
+    app.extensions["private_storage"] = build_private_storage(app.config)
+
     # Versión vigente de los términos de uso (ADR-032 §5).
     from app.application.terms.terms_version import configure_terms_version
 
@@ -127,6 +132,10 @@ def create_app():
     from app.interfaces.routes.place_moderation_routes import place_moderation_bp
     app.register_blueprint(place_moderation_bp, url_prefix="/api")
 
+    # Planes con amistades (ADR-040 fase 5): solo con sesión.
+    from app.interfaces.routes.plan_routes import plans_bp
+    app.register_blueprint(plans_bp, url_prefix="/api")
+
     # Comandos de línea de comandos (flask set-moderator, flask unsuspend-user).
     from app.interfaces.cli import register_cli
     register_cli(app)
@@ -139,5 +148,22 @@ def create_app():
     if (app.config.get("STORAGE_BACKEND") or "local").lower() == "local":
         from app.interfaces.routes.media_routes import media_bp
         app.register_blueprint(media_bp, url_prefix="/api")
+        from app.interfaces.routes.private_document_routes import private_documents_bp
+        app.register_blueprint(private_documents_bp, url_prefix="/api")
+
+    from app.interfaces.routes.claim_routes import claims_bp
+    app.register_blueprint(claims_bp, url_prefix="/api")
+
+    from app.interfaces.routes.business_routes import business_bp
+    app.register_blueprint(business_bp, url_prefix="/api")
+
+    from app.interfaces.routes.reservation_routes import reservations_bp
+    app.register_blueprint(reservations_bp, url_prefix="/api")
+
+    from app.interfaces.routes.quote_routes import quotes_bp
+    app.register_blueprint(quotes_bp, url_prefix="/api")
+
+    from app.interfaces.routes.routing_routes import routing_bp
+    app.register_blueprint(routing_bp, url_prefix="/api")
 
     return app

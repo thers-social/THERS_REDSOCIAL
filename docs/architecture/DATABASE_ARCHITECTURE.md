@@ -4,7 +4,7 @@
 |---|---|
 | Documento | `docs/architecture/DATABASE_ARCHITECTURE.md` |
 | Identificador propuesto | `DB-001` (sigue el patrón `HB-001`/`ARC-001`/`DS-001`/`WF-001`/`PV-001`/`FAS-001`) — **pendiente de ratificación formal** |
-| Versión | 0.29 |
+| Versión | 0.40 |
 | Estado | **Borrador / Contrato técnico — pendiente de aprobación del equipo** |
 | Depende de | `HB-001` (organización, gobernanza, git flow, seguridad), `REPOSITORY_STRUCTURE.md` (ubicación del backend y carpeta futura `database/`) |
 | Motivo | El `CLAUDE.md` maestro (§4, §14) identificó que la arquitectura de Base de Datos no estaba formalmente documentada |
@@ -54,6 +54,10 @@
 >
 > **v0.27 — moderación de la plataforma (`ADR-032` fase 2):** columnas nuevas en `users`: `is_moderator` (`BOOLEAN NOT NULL DEFAULT false`), `suspended_at` (`TIMESTAMPTZ`, nula) y `suspension_reason` (`VARCHAR(500)`, nula). Migración `e5b8c3a7d912`, hija de `d4a9b6c1e275`. Aditiva y no destructiva: las cuentas existentes quedan como no moderadoras y no suspendidas.
 >
+> **v0.33 — publicaciones asociadas a un lugar (`ADR-040` §20):** columna `posts.place_id` (`UUID`, nula, FK a `places(id)` `ON DELETE SET NULL`) e índice `ix_posts_place_id_created_at (place_id, created_at)`. Migración `f4b8d2a6c153`, hija de `e3a7c1f5b942`. Aditiva y no destructiva.
+>
+> **v0.32 — compartir un lugar por chat (`ADR-040` §19):** columna `messages.place_id` (`UUID`, nula, FK a `places(id)` `ON DELETE SET NULL`) e índice `ix_messages_place_id`. Migración `e3a7c1f5b942`, hija de `d2f6b9e4a831`. Aditiva y no destructiva. No se creó `message_type`: que `place_id` no sea nulo ya distingue el caso.
+>
 > **v0.26 — sincronización del chat (`ADR-035`):** columna `messages.client_id` (`VARCHAR(64)`, nula) e índice único parcial `uq_messages_sender_client_id (sender_id, client_id) WHERE client_id IS NOT NULL`. Migración `d4a9b6c1e275`, hija de `c3f7a9d2e841`. Aditiva y no destructiva.
 >
 > **v0.25 — eliminación de cuenta (`ADR-031`):** tabla nueva `account_deletion_codes` (migración `c3f7a9d2e841`, hija de `b6e1d9a4c2f8`): `id`, `user_id` (FK `users` `ON DELETE CASCADE`), `code_hash` (scrypt), `attempts`, `expires_at`, `used_at`, `created_at`, con índice único parcial `uq_account_deletion_codes_active_user` (a lo sumo un código activo por cuenta). **Regla vigente:** toda clave foránea hacia `users` es `ON DELETE CASCADE`, salvo las de `reports` (`SET NULL`, a propósito); `tests/test_account_deletion.py` recorre `pg_constraint` y falla si una tabla nueva no lo cumple, y exige que ninguna columna `*user_id` quede sin clave foránea.
@@ -64,6 +68,7 @@
 >
 > **v0.22 — integración de `refresh_tokens` (`ADR-017`) con el registro de sesiones (`ADR-025`):** una migración (`f8c2d6a4b190`) que une las dos ramas de migraciones y agrega `sessions.refresh_family_id` (`UUID`, nullable, índice `ix_sessions_refresh_family_id`). Enlaza cada fila de `sessions` con la familia de refresh tokens de su login: hay **una fila de `sessions` por login**, y al renovar el access token esa fila se re-vincula a su `jti` nuevo en vez de crear otra. Es lo que hace que cerrar una sesión desde Ajustes también corte su refresh token (la renovación exige una sesión viva en la familia). `refresh_tokens` pasa a ser la sección §5.16 para no chocar con `mentions` (§5.11).
 >
+> **v0.40 — avisos de Places en `notifications` (`ADR-040` §28):** migración aditiva `b3e7d1a9c486`. `type` pasa de `VARCHAR(20)` a `VARCHAR(40)`; `actor_id` admite nulo, **solo** para `place_claim_decided` (lo exige `ck_notifications_actor_required`); columnas nuevas `place_id` (FK a `places`, `ON DELETE CASCADE`), `object_id` (UUID sin FK: apunta a reservas, cotizaciones, planes, reclamos o reseñas según el tipo) y `detail` (`VARCHAR(20)`, el estado). `ck_notifications_place_event_has_place` exige `place_id` en todo tipo `place_*`. Índice único parcial `ux_notifications_place_event` sobre `(recipient_id, type, object_id, coalesce(detail, ''))` donde `object_id` no es nulo, para que reintentos no dupliquen. Las filas de like, comment, follow y mention no cambian. Borrar el lugar o la cuenta destinataria borra el aviso en cascada.
 > **v0.17 — mensajes directos, `messages` (`ADR-013-messages-minimal-model.md`):** "Conversaciones (privadas y grupales), Participantes" + "Mensajes" (§4.B › Mensajería) se resuelve **solo a medias** — pasa a **implementada** (§4.A, §5.10) únicamente la mitad 1:1: mensaje directo entre dos usuarios reales, sin la tabla puente `conversation_participants` que soportaría grupos (sigue sin ratificar). Nueva tabla `messages`: `sender_id`/`recipient_id` (FKs a `users`, ambas `ON DELETE CASCADE`), `content` (texto, sin límite de esquema — validado en la aplicación, máximo 2000 caracteres), `read_at` (`TIMESTAMPTZ`, nullable, `NULL` = no leído, mismo criterio que `notifications.read_at`), sin `updated_at` (mismo criterio que `likes`/`follows`/`notifications`). **Segunda `CHECK` constraint del esquema** (`ck_messages_no_self_message`: `sender_id <> recipient_id`, mismo criterio que `ck_follows_no_self_follow`). Sin `UNIQUE` — dos mensajes entre las mismas personas son eventos legítimos, no un duplicado a impedir (mismo criterio que `notifications`). Dos índices compuestos nuevos, `ix_messages_sender_recipient_created`/`ix_messages_recipient_sender_created` (§8) — el hilo entre A y B se busca con un `OR` sobre ambos sentidos de la relación, que ninguna `UNIQUE` cubre. Decimocuarta y decimoquinta relación real entre entidades (§6): `messages.sender_id → users.id`, `messages.recipient_id → users.id`. Migración `f7a2c9e4d1b8`. Verificado con `flask db upgrade`/`downgrade` contra PostgreSQL 16 real y la suite completa de pruebas (`backend/tests/`, 263 pruebas).
 >
 > **v0.3 — cierre de la capa de persistencia (auditoría y validación real de esta tarea).** Se corrigió la referencia a una instalación nativa de PostgreSQL 17.11 (no reproducible por el equipo) por el entorno estandarizado real: **PostgreSQL 16 vía Docker Compose** (`docker-compose.yml`, raíz del repo, imagen `postgres:16-alpine`), verificado end-to-end (`flask db upgrade`/`downgrade` repetidos, INSERT sin `id` confirmando `gen_random_uuid()` en PostgreSQL, UPDATE confirmando el trigger de `updated_at`, unicidad case-insensitive de `email` vía `CITEXT`, y reconstrucción completa desde un volumen Docker vacío). Se marcó como resuelta la herramienta de migraciones (§9) donde el documento aún decía `PENDIENTE`, pese a que Flask-Migrate/Alembic ya estaba implementado. Ningún esquema, entidad ni columna cambió — solo se sincronizó el documento con el código real ya existente.
@@ -959,6 +964,15 @@ Migración `b8d4f1a6c295` (aditiva). También crea la función `thers_unaccent` 
 - `ADR-031`: `places`, `place_reports` y `admin_audit_log` son excepciones documentadas (`SET NULL`) en la guardia de claves foráneas hacia `users`.
 - `ADR-028`: la exportación de datos incluye `saved_places.json` y `place_reports.json`.
 
+
+### 5.20 `place_reviews` (`ADR-040`, fase 4a, **PROPUESTO**)
+
+Reseña de un lugar por una persona. `UNIQUE(user_id, place_id)` (la base impide duplicar), `CHECK rating BETWEEN 1 AND 5`, `body` opcional,
+`is_hidden` (lo cambia solo la moderación), `created_at`/`updated_at`. Índice `(place_id, created_at)`. `CASCADE` en ambas claves: al
+eliminar la cuenta (`ADR-031`) desaparecen sus reseñas, igual que sus comentarios. Migración `c1e5a8d3f720`, aditiva.
+
+`media_attachments` admite desde la migración `d2f6b9e4a831` (`ADR-040` fase 4b) un tercer padre: `review_id` (`ON DELETE CASCADE` hacia `place_reviews`). El CHECK `ck_media_attachments_one_parent` exige ahora que **exactamente uno** de `post_id`, `message_id`, `review_id` esté definido; las filas anteriores lo cumplen. El `downgrade` falla con un error claro si ya hay fotos de reseñas, en vez de borrarlas.
+
 ## 6. Relaciones entre entidades
 
 **v0.8 — primera relación implementada:** `posts.author_id → users.id` (`ADR-004-posts-minimal-model.md`, ver §5.2) — `ON DELETE CASCADE`.
@@ -1126,3 +1140,42 @@ La lista completa de estructuras candidatas del producto objetivo (con su **form
 ## 15. Cierre
 
 Este documento **no modifica** el backend, el Frontend, el Handbook ni instala dependencias: define el contrato de base de datos que la implementación futura deberá respetar, separando explícitamente **lo implementado (§4.A)**, **lo objetivo (§4.B)** y **lo pendiente (§4.C, §14)**. Cualquier cambio a este contrato sigue el proceso de decisiones de impacto medio/alto de `HB-001` §11–12 (ADR), no el criterio individual de quien implementa.
+
+
+### 5.21 `place_plans` y `place_plan_members` (`ADR-040`, fase 5, **PROPUESTO**)
+
+`place_plans`: salida a un lugar (`place_id`, `creator_id`, `title` ≤ 80, `note` opcional, `starts_at` con zona horaria, `status` `active`/`cancelled` con `CHECK`).
+`place_plan_members`: una fila por integrante, incluida la persona creadora (`going`); `status` `invited`/`going`/`declined` con `CHECK`, `UNIQUE(plan_id, user_id)`,
+`invited_by` (`ON DELETE SET NULL`). `CASCADE` desde `places`, desde `users` (creador e integrante, `ADR-031`) y de plan a integrantes. Índices por lugar,
+por `(creator_id, starts_at)` y por integrante. Migración `a5c9e3b7d264`, aditiva (no toca tablas existentes).
+
+### 5.22 `place_claims` y `place_managers` (`ADR-040`, fase 6, **PROPUESTO**)
+
+`place_claims`: reclamo de un lugar (`place_id`, `claimant_id`, `business_name` ≤ 160, `contact_phone`, `message`, `status` `pending`/`approved`/`rejected`/`withdrawn` con `CHECK`,
+`document_key` y `document_content_type` —clave en el almacenamiento **privado**, vacía al resolver—, `reviewed_by` `ON DELETE SET NULL`, `reviewed_at`, `review_note`). Índice
+único parcial `uq_place_claims_pending (place_id, claimant_id) WHERE status = 'pending'`; índices por `(status, created_at)` y por solicitante.
+`place_managers`: gestor de un lugar (`UNIQUE(place_id, user_id)`, `claim_id` y `granted_by` `ON DELETE SET NULL`); rol distinto de `users.is_moderator`.
+`CASCADE` desde `places` y `users` (`ADR-031`). Migración `b6d1f4a8c375`, aditiva.
+
+### 5.23 `place_review_replies` (`ADR-040`, fase 7, **PROPUESTO**)
+
+Respuesta pública del negocio a una reseña: `review_id` (`UNIQUE`, `ON DELETE CASCADE`), `place_id` y `author_id` (`ON DELETE CASCADE`, `ADR-031`), `body` ≤ 500 validado en el servidor y
+fechas. Índice por lugar. Migración `c7e2a5b9d486`, aditiva.
+
+### 5.24 `place_reservation_settings` y `place_reservations` (`ADR-040`, fase 8, **PROPUESTO**)
+
+`place_reservation_settings`: una fila por lugar (`place_id` PK, `ON DELETE CASCADE`), `enabled` (falso por defecto), `capacity` 1–500 y `max_party_size` 1–50 ≤ `capacity` con `CHECK`; es la fila que se bloquea para serializar las reservas.
+`place_reservations`: `place_id` y `user_id` (`ON DELETE CASCADE`, `ADR-031`), `starts_at`, `party_size` 1–50, `note`, `status` `pending`/`confirmed`/`declined`/`cancelled` con `CHECK`, `decided_by` (`ON DELETE SET NULL`),
+`decision_note`. Índice único parcial `(place_id, user_id, starts_at) WHERE status IN ('pending','confirmed')`; índices por `(place_id, starts_at)` y `(user_id, starts_at)`. Migración `d8f3b6c1e597`, aditiva.
+
+### 5.25 `place_opening_hours` y `place_closures` (`ADR-040`, fase 9, **PROPUESTO**)
+
+`place_opening_hours`: tramos semanales (`place_id` `ON DELETE CASCADE`, `weekday` 0–6 con `CHECK`, `opens` y `closes` de tipo `time` con `CHECK closes > opens`, `UNIQUE(place_id, weekday, opens)`); hora local de El Salvador, UTC-6 fijo. Índice por `(place_id, weekday)`.
+`place_closures`: días cerrados (`PK (place_id, closed_on)`, `reason` ≤ 120, `ON DELETE CASCADE`). Migración `e9a4c7d2f608`, aditiva. Los solapes entre tramos de un mismo día se validan en el servidor, no con una restricción de exclusión.
+
+### 5.26 `place_quote_items`, `place_quotes` y `place_quote_lines` (`ADR-040`, fase 10, **PROPUESTO**)
+
+`place_quote_items`: catálogo del negocio (`place_id` `ON DELETE CASCADE`, `name` ≤ 120 `UNIQUE(place_id, name)`, `unit` `person`/`unit`/`hour` con `CHECK`, `unit_price_cents` entero 0–100 000 000 con `CHECK`, `is_active`). **El dinero es siempre un entero de centavos (USD), nunca `float` ni `numeric` con redondeo.**
+`place_quotes`: `place_id` y `user_id` (`ON DELETE CASCADE`, `ADR-031`), `reservation_id` (`ON DELETE SET NULL`), `currency`, `total_cents` (`bigint`, `CHECK >= 0`), `note`, `valid_until`. Índices por `(user_id, created_at)` y `(place_id, created_at)`.
+`place_quote_lines`: copia inmutable de cada artículo cotizado (`name`, `unit`, `unit_price_cents`, `quantity` 1–10 000 con `CHECK`, `line_total_cents` `bigint`); `quote_id` `ON DELETE CASCADE`, `item_id` `ON DELETE SET NULL`. Migración `f1b5d8e3a719`, aditiva.
+**Fase 11:** `place_quotes` gana `status` (`pending`/`accepted`/`rejected`, `CHECK`, por defecto `pending`), `decided_at` y `decided_by` (`ON DELETE SET NULL`). Un `CHECK` exige que `decided_at` esté nulo si y solo si el estado es `pending`. Migración `a2d6f9c4b857`.

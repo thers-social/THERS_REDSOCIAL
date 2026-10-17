@@ -10,22 +10,30 @@
 from app.application.media.attachments import discard_files, store_attachments
 from app.application.mentions.resolve_mentions import resolve_post_mentions
 from app.application.posts.post_presenter import to_public_post
+from app.domain.posts.exceptions import PostPlaceNotFoundError
 
 
 def create_post(
     author_id, content, post_repository, user_repository, follow_repository,
     mention_repository, notification_repository, restriction_repository,
     is_sensitive=False, prepared_images=None, media_repository=None, media_storage=None,
+    place_id=None,
 ):
     # Imágenes (ADR-039). `prepared_images` ya viene decodificada, sin EXIF y
     # reducida (la route la procesó antes de llegar acá). Se guardan los
     # archivos primero y, si la base falla, se borran: ninguna de las dos mitades
     # puede quedar sola (ni una publicación sin sus imágenes, ni archivos sin
     # publicación).
+    # Solo se asocia un lugar público (ADR-040 fase 4d). Va ANTES de guardar archivos: una
+    # publicación rechazada no deja nada en el almacenamiento.
+    cards = post_repository.place_cards([place_id]) if place_id is not None else {}
+    if place_id is not None and not cards:
+        raise PostPlaceNotFoundError()
+
     stored = store_attachments(prepared_images, "post", media_storage) if prepared_images else []
 
     try:
-        post = post_repository.create(author_id, content, is_sensitive)
+        post = post_repository.create(author_id, content, is_sensitive, place_id=place_id)
         if stored:
             try:
                 media_repository.add_for_post(post.id, author_id, stored)
@@ -45,4 +53,4 @@ def create_post(
         mention_repository, notification_repository, restriction_repository,
     )
 
-    return to_public_post(post, mentions=mentions)
+    return to_public_post(post, mentions=mentions, place_cards=cards)

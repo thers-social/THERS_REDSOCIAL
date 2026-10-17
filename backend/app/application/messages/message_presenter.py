@@ -6,9 +6,23 @@
 
 from app.application.auth.user_presenter import to_author_summary
 from app.application.media.attachments import to_public_images
+from app.application.places.place_card import to_place_card
 
 
-def to_public_message(message):
+def _place_card(message, place_cards):
+    """Tarjeta del lugar compartido (ADR-040 fase 4c), o None si no es un mensaje de lugar.
+    Un lugar que ya no es público se muestra como no disponible: solo su id, nunca nombre
+    ni ubicación (la ficha podría haberse retirado por una razón de moderación)."""
+    return to_place_card(message.place_id, place_cards)
+
+
+def to_public_messages(messages, message_repository):
+    """Varios mensajes con las tarjetas de lugar resueltas en UNA consulta."""
+    cards = message_repository.place_cards([m.place_id for m in messages if m.place_id])
+    return [to_public_message(message, cards) for message in messages]
+
+
+def to_public_message(message, place_cards=None):
     return {
         "id": str(message.id),
         "sender_id": str(message.sender_id),
@@ -25,6 +39,8 @@ def to_public_message(message):
         "edited": message.edited_at is not None,
         # ADR-035: el id que eligió quien envió (null si su cliente no lo manda).
         "client_id": message.client_id,
+        # ADR-040 fase 4c: tarjeta del lugar compartido (null en un mensaje normal).
+        "place": _place_card(message, place_cards),
     }
 
 
@@ -55,6 +71,8 @@ def to_public_conversation(conversation):
             # Un mensaje de solo imagen tiene `content` vacío: la lista de
             # conversaciones necesita saberlo para mostrar "Foto" (ADR-039).
             "has_image": bool(last_message.images),
+            # Un mensaje que comparte un lugar puede no llevar texto (ADR-040 fase 4c).
+            "has_place": last_message.place_id is not None,
             "sender_id": str(last_message.sender_id),
             "created_at": last_message.created_at.isoformat(),
         },

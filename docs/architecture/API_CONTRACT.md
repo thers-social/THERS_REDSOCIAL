@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.37 (Propuesta) |
+| Versión | 0.56 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -43,6 +43,27 @@
 > **v0.16 — verificación obligatoria de email al registrarse (`ADR-011-mandatory-email-verification.md`, reemplaza `send-verification-email`/`verify-email` de v0.14):** `POST /api/register` (§4.1) sigue devolviendo `201` con el usuario creado, pero ahora `email_verified` nace en `false` y de inmediato se envía un código de 6 dígitos — la cuenta no puede iniciar sesión todavía. Registrar de nuevo con un email que existe pero nunca se verificó **actualiza esa misma cuenta** (incluida la contraseña) y reenvía un código, en vez de un `409` — el `409` real solo ocurre si el email ya pertenece a una cuenta verificada. `POST /api/login` (§4.1) gana un caso nuevo: credenciales correctas pero cuenta sin verificar responde `403` con `{"msg": "...", "email_verified": false}`, sin emitir ningún JWT. Se agregan `POST /api/verify-registration-code` y `POST /api/resend-registration-code` (§4.8) — mismo patrón que `verify-reset-code`/`forgot-password` (`ADR-010`): 6 dígitos, hash scrypt, máximo 5 intentos, cooldown de 60s, índice único parcial (a lo sumo un código activo por usuario). Un código de registro nunca sirve para verificar una recuperación de contraseña ni viceversa — viven en tablas/repositorios completamente separados, no un discriminador de tipo sobre una tabla compartida. **Se retiran** `POST /api/send-verification-email` y `POST /api/verify-email` (`ADR-009`, flujo de enlace) — con el login ya bloqueado para cuentas sin verificar, una cuenta sin verificar nunca puede obtener el JWT que el primero exigía, dejando ambos permanentemente inalcanzables. El Frontend queda conectado de punta a punta: `Register.jsx` navega a la nueva pantalla `VerifyRegistrationCode.jsx` en vez de a `/login`; `Login.jsx` distingue el `403` de cuenta sin verificar y redirige a la misma pantalla. Verificado con 36 pruebas nuevas (`test_registration.py`, reemplaza a `test_email_verification.py`) + la suite completa (212/212, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`).
 >
 > **v0.14 — recuperación de contraseña y verificación de email vía Resend (`ADR-009-password-reset-and-email-verification.md`):** se agregan `POST /api/forgot-password`, `POST /api/reset-password`, `POST /api/send-verification-email` y `POST /api/verify-email` (§4.8) — séptima y octava entidad del alcance objetivo del producto (`DATABASE_ARCHITECTURE.md` §4.B, candidata "Verificación de correo, Recuperación de contraseña") en pasar a implementadas. Rutas planas bajo `/api`, sin prefijo `/auth/` — mismo criterio que `/api/register`/`/api/login`. `forgot-password` nunca revela si un email está registrado (mismo mensaje `200` siempre); `reset-password`/`verify-email` usan tokens de un solo uso, expirables, con hash SHA-256 persistido (nunca el valor crudo). `GET`/`PATCH /api/users/me` y `register`/`login` se extienden de forma aditiva con `email_verified` (§4.2, §5) — no rompe el contrato existente. Nuevo servicio de correo centralizado (Resend, SDK oficial) detrás de un `EmailSender` abstracto — ningún endpoint llama a Resend directamente. Verificado con 30 pruebas nuevas + la suite completa (175/175, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`), más una prueba manual end-to-end contra el backend real (los cuatro endpoints, con `NullEmailSender` en desarrollo sin `RESEND_API_KEY`).
+>
+> **v0.56 — THERS Places, fase 16 (parte 2), visitas anónimas (`ADR-040` §33, **PROPUESTO**):** nuevo `POST /api/places/<id>/visits` (§4.36), público, que suma 1 a un contador anónimo por lugar, día local y evento (`view`, `phone`, `website`, `directions`) y responde `204` sin cuerpo. `GET /api/places/<id>/manage/analytics` (§4.34) añade `totals.visits`, `views` en la serie y la clave `visits` en `hidden`. Migración `c9d4a1e7b362` (`place_visit_counts`, sin `user_id`).
+>
+> **v0.55 — THERS Places, fase 15, Pulse (`ADR-040` §32, **PROPUESTO**):** nuevo `GET /api/places/<id>/pulse` (§4.35), público. Devuelve solo un nivel cualitativo de la actividad de los últimos 7 días (`moving`, `active`, `buzzing`) o `null` si hay menos de 5 eventos; nunca cifras ni identificadores. Sin migración ni tablas nuevas.
+
+> **v0.54 — THERS Places, fase 16 (parte 1), estadísticas del negocio (`ADR-040` §31, **PROPUESTO**):** nuevo `GET /api/places/<id>/manage/analytics?days=7|30|90` (§4.34), solo para quien gestiona el lugar. Devuelve solo conteos agregados por día; guardados y planes salen `null` si el periodo suma menos de 5. Sin migración ni tablas nuevas.
+> **v0.53 — THERS Places, fase 13, navegación en vivo (`ADR-040` §30, **PROPUESTO**):** `POST /api/places/<id>/route` (§4.33) acepta `precision` (`normal`\|`high`, por defecto `normal`). Con `high` el origen se redondea a 4 decimales (~11 m) en vez de 3 (~110 m) y cuenta contra un límite **aparte** (30 recálculos por hora por cuenta). Solo lo usa la app para recalcular una ruta cuando la persona se sale de ella. Cambio aditivo, sin migración.
+> **v0.52 — THERS Places, fase 13, indicaciones calle por calle (`ADR-040` §29, **PROPUESTO**):** `POST /api/places/<id>/route` (§4.33) acepta `lang` (`es`\|`en`, por defecto `es`) y su respuesta gana `steps` y `lang`. Cambio aditivo: `steps` puede ser una lista vacía.
+> **v0.51 — THERS Places, fase 13, rutas hacia un lugar (`ADR-040` §29, **PROPUESTO**):** nuevo `POST /api/places/<id>/route` (§4.33) y campo aditivo `routing_available` (booleano, siempre presente) en `GET /api/places/<id>`. Variables de entorno nuevas, solo del servidor: `ROUTING_PROVIDER`, `ROUTING_API_KEY` y `ROUTING_DAILY_BUDGET`. Sin migración.
+> **v0.50 — THERS Places, fase 12, avisos (`ADR-040` §28, **PROPUESTO**):** `GET /api/notifications` (§4.7) gana ocho tipos nuevos (`place_reservation_new`, `place_reservation_decided`, `place_reservation_cancelled`, `place_quote_new`, `place_quote_decided`, `place_plan_invite`, `place_claim_decided`, `place_review_reply`) y tres campos aditivos: `place {id, name}`, `object_id` y `detail`, siempre presentes (`null` en like/comment/follow/mention). **`actor` puede ser `null`**, solo en `place_claim_decided`: los clientes que asumían un actor siempre presente deben tolerarlo. No hay endpoints nuevos: los avisos se crean como efecto secundario de reservas, cotizaciones, planes, reclamos y respuestas a reseñas. Migración `b3e7d1a9c486`.
+> **v0.49 — THERS Places, fase 11, decisión y PDF de la cotización (`ADR-040` §27, **PROPUESTO**):** nuevos `POST /api/places/<id>/manage/quotes/<quote_id>/decision` y `GET /api/quotes/<id>/pdf` (§4.32). La cotización gana `status` (`pending`\|`accepted`\|`rejected`) y `decided_at`; las de antes quedan `pending`. Tres columnas nuevas en `place_quotes` y migración `a2d6f9c4b857`.
+> **v0.48 — THERS Places, fase 10, cotizador (`ADR-040` §26, **PROPUESTO**):** nuevos `GET /api/places/<id>/quote-items`, `POST /api/places/<id>/quotes`, `GET /api/quotes`, `GET /api/quotes/<id>` y, para quien gestiona el lugar, `GET`/`POST /api/places/<id>/manage/quote-items`, `PATCH`/`DELETE …/<item_id>` y `GET /api/places/<id>/manage/quotes` (§4.32). Tres tablas nuevas (`place_quote_items`, `place_quotes`, `place_quote_lines`).
+> **v0.47 — THERS Places, fase 9, horario y calendario (`ADR-040` §25, **PROPUESTO**):** nuevos `GET /api/places/<id>/hours`, `GET /api/places/<id>/availability`, `PUT /api/places/<id>/manage/hours`, `POST`/`DELETE /api/places/<id>/manage/closures` y `GET /api/places/<id>/manage/calendar` (§4.31). `POST /api/places/<id>/reservations` rechaza con `409` los días cerrados y las horas fuera de horario. Dos tablas nuevas (`place_opening_hours`, `place_closures`).
+> **v0.46 — THERS Places, fase 8, reservas (`ADR-040` §24, **PROPUESTO**):** nuevos `POST /api/places/<id>/reservations`, `GET /api/reservations`, `DELETE /api/reservations/<id>` y, para quien gestiona el lugar, `GET`/`PUT /api/places/<id>/manage/reservations/settings`, `GET /api/places/<id>/manage/reservations` y `POST .../<rid>/confirm|decline` (§4.30). El detalle de un lugar suma `accepts_reservations`. Dos tablas nuevas (`place_reservation_settings`, `place_reservations`).
+> **v0.45 — THERS Places, fase 7, panel de negocio (`ADR-040` §23, **PROPUESTO**):** nuevos `GET /api/users/me/managed-places`, `GET`/`PATCH /api/places/<id>/manage` y `PUT`/`DELETE /api/places/<id>/reviews/<review_id>/reply` (§4.29). Cada reseña de `GET /api/places/<id>/reviews` suma `reply` (o `null`). Una tabla nueva (`place_review_replies`).
+> **v0.44 — THERS Places, fase 6, reclamos de negocio (`ADR-040` §22, **PROPUESTO**):** nuevos `POST /api/places/<id>/claims`, `GET /api/users/me/claims`, `DELETE /api/claims/<id>`, las rutas de moderación `/api/moderation/place-claims/*` y `GET /api/private-documents/<token>` (§4.28). El detalle de un lugar suma `is_claimed` y `managed_by_me`. Dos tablas nuevas (`place_claims`, `place_managers`) y un almacenamiento **privado** para los documentos.
+> **v0.43 — THERS Places, fase 5, planes con amistades (`ADR-040` §21, **PROPUESTO**):** nuevos `POST /api/places/<id>/plans`, `GET /api/plans`, `GET`/`PATCH`/`DELETE /api/plans/<id>`, `POST /api/plans/<id>/invites`, `PUT /api/plans/<id>/response` y `DELETE /api/plans/<id>/members/<user_id>` y `GET /api/users/me/friends` (§4.27). Dos tablas nuevas (`place_plans`, `place_plan_members`); no toca tablas existentes.
+>
+> **v0.42 — THERS Places, fase 4d (`ADR-040` §20, **PROPUESTO**):** `POST /api/posts` acepta `place_id` opcional (solo lugares **públicos**; `404 Lugar no encontrado` si no, `400` si está mal formado). Todo post gana `place` (`null` sin lugar; la misma tarjeta que en el chat, §4.10 / §4.26). Nuevo `GET /api/places/<id>/posts` (§4.26). Cambios aditivos y compatibles.
+>
+> **v0.41 — THERS Places, fase 4c (`ADR-040` §19, **PROPUESTO**):** `POST /api/users/<id>/messages` acepta `place_id` opcional para **compartir un lugar por chat** (con `place_id` el texto pasa a ser opcional). El mensaje público gana `place` (`null` en un mensaje normal; tarjeta `{id, available, name, category, municipality, department}`, o `{id, available:false}` si el lugar ya no es público) y la conversación gana `last_message.has_place`. Solo se comparten lugares **públicos** (`404 Lugar no encontrado` si no); `place_id` mal formado es `400`. Cambios aditivos y compatibles (§4.10).
 >
 > **v0.37 — THERS Places, fase 2 (`ADR-040`, **PROPUESTO**):** `GET /api/places/search`, `GET /api/places/saved`, `POST|DELETE /api/places/<id>/save`, `POST /api/places/<id>/report` y las rutas de moderación `/api/moderation/places/*` (§4.24). **Cambio en el contrato de la fase 1:** los resúmenes y el detalle de lugares ganan `is_saved` (siempre presente; `false` para quien no ha iniciado sesión). Un token ausente, vencido o inválido en el catálogo público se trata como anónimo, no como error. Las rutas de moderación de lugares reutilizan `is_moderator`: quien no lo es recibe el mismo `404` que una ruta inexistente. Tablas nuevas `saved_places`, `place_reports` y `admin_audit_log` (`DATABASE_ARCHITECTURE.md` v0.29).
 > **v0.36 — THERS Places, fase 1 (`ADR-040-thers-places.md`, **PROPUESTO**):** `GET /api/places/categories`, `GET /api/places`, `GET /api/places/nearby` y `GET /api/places/<id>` (§4.23). **Lectura pública, sin JWT**, con límite de uso por IP (`places_read`, 120/min). Solo devuelven lugares activos y `verified`. Cambios aditivos: ningún cliente actual se rompe. Tablas nuevas `place_categories` y `places` (`DATABASE_ARCHITECTURE.md` v0.28). Los guardados, reportes, administración y búsqueda de texto son de la fase 2.
@@ -792,9 +813,12 @@ Obligatorio, con el mismo validador y el mismo límite (1000, menor que el de po
   "notifications": [
     {
       "id": "string (UUID)",
-      "type": "like | comment | follow",
-      "actor": { "id": "string (UUID)", "username": "string", "name": "string" },
+      "type": "like | comment | follow | follow_request | follow_accepted | mention | place_*",
+      "actor": { "id": "string (UUID)", "username": "string", "name": "string" } | null,
       "post_id": "string (UUID) | null",
+      "place": { "id": "string (UUID)", "name": "string" } | null,
+      "object_id": "string (UUID) | null",
+      "detail": "string | null",
       "read": "boolean",
       "created_at": "string (ISO 8601)"
     }
@@ -802,6 +826,8 @@ Obligatorio, con el mismo validador y el mismo límite (1000, menor que el de po
 }
 ```
 `post_id` es `null` para `type: "follow"` — ese evento no tiene ningún post de origen. Lista vacía (`[]`) si no hay notificaciones.
+
+**Avisos de Places (`ADR-040` fase 12).** `place`, `object_id` y `detail` solo vienen llenos en los tipos `place_*`. `object_id` es la reserva, cotización, plan, reclamo o reseña; `detail` es el estado: `confirmed`/`declined` (reserva), `accepted`/`rejected` (cotización), `approved`/`rejected` (reclamo) y `null` en el resto. **Nunca llevan texto libre** (ni la nota de una reserva, ni el contenido de una cotización o reseña). `actor` es `null` en `place_claim_decided`: no se revela qué cuenta de moderación decidió. Un solo aviso por destinatario, tipo, objeto y estado; nunca se avisa a quien hizo la acción ni, con un bloqueo entre las partes en cualquier dirección, a la otra; quien gestiona un lugar recibe un aviso por cada persona que lo gestiona. Un aviso que falla al crearse no deshace la acción.
 
 **Response — error**
 
@@ -1060,7 +1086,7 @@ Obligatorio, con el mismo validador y el mismo límite (1000, menor que el de po
 
 **Request body**
 ```json
-{ "content": "string", "client_id": "string (opcional, 1–64: letras, números, - o _)" }
+{ "content": "string", "client_id": "string (opcional, 1–64: letras, números, - o _)", "place_id": "string (UUID, opcional — comparte un lugar público; con él `content` puede ir vacío)" }
 ```
 `client_id` (v0.34, `ADR-035`) hace el envío **idempotente por remitente**: repetir la petición con el mismo `client_id` devuelve el mensaje ya creado con `200` en vez de duplicarlo (el texto del reintento se ignora). Sin `client_id` se mantiene el comportamiento anterior: cada llamada crea un mensaje (`201`). Las comprobaciones de bloqueo y de quién puede escribir se hacen **siempre**, también en un reintento. El mensaje público incluye `client_id` (`null` si no se envió).
 
@@ -1867,7 +1893,7 @@ Además de los de §4.2, acepta `bio` (≤ 160), `location` (≤ 60) y `website`
 **Request body**
 ```json
 {
-  "target_type": "post | comment | message | user",
+  "target_type": "post | comment | message | user | review",
   "target_id": "string (UUID)",
   "reason": "spam | harassment | hate | sexual | violence | self_harm | illegal | impersonation | other | child_safety",
   "details": "string, opcional, hasta 500 caracteres"
@@ -1889,6 +1915,7 @@ Además de los de §4.2, acepta `bio` (≤ 160), `location` (≤ 60) y `website`
 | `comment` | El post es visible **y** su autor no está bloqueado en ningún sentido |
 | `message` | **Solo quien lo recibió**, y sin bloqueo entre ambos. El remitente y los terceros reciben `404` |
 | `user` | La cuenta existe y no hay bloqueo entre ambos |
+| `review` | Reseña de un lugar (v0.39, `ADR-040` fase 4a.2): visible para el público (no oculta por moderación y de un lugar público) y su autora o autor no está bloqueado en ningún sentido. «Retirar contenido» la borra |
 
 No se puede reportar lo propio (`400`). La visibilidad se comprueba **antes** que "es mío", para que ese `400` no sirva para confirmar que algo existe.
 
@@ -2099,7 +2126,7 @@ Query opcional: `status` (`open` por defecto, `reviewing`, `actioned`, `dismisse
   "reports": [
     {
       "id": "uuid",
-      "target_type": "post | comment | message | user",
+      "target_type": "post | comment | message | user | review",
       "target_id": "uuid",
       "reason": "string",
       "priority": "normal | critical",
@@ -2159,7 +2186,7 @@ Lectura **pública**: no exige `Authorization` (ADR-040 D4). Todas las rutas com
 (120 peticiones por minuto y por IP, `ADR-027`); al superarlo responden `429` con `Retry-After`. Solo se devuelven lugares
 `is_active` con `verification_status = "verified"`, de una categoría activa. Los errores usan `{"msg": "..."}`.
 
-No se exponen `rating`, `reviews_count` ni `is_open`: no existen reseñas ni horarios todavía. `is_saved` existe desde la v0.37.
+No se expone `is_open`: no hay horarios todavía. `rating_average` y `reviews_count` existen desde la v0.38 (§4.25) y valen `null` y 0 sin reseñas. `is_saved` existe desde la v0.37.
 `cover_image_url` es siempre `null` hasta que haya fotos de lugares.
 
 ### `GET /api/places/categories`
@@ -2266,3 +2293,225 @@ Motivos (`reason`): `wrong_location`, `wrong_hours`, `wrong_phone`, `closed`, `d
 Validación en el servidor: longitudes máximas, sin caracteres de control, `phone` con formato telefónico, `website` solo `http(s)://`,
 coordenadas en rango. **PostGIS corrige en silencio las coordenadas fuera de rango**, por eso toda escritura las valida antes.
 Cada creación, edición, cambio de estado y resolución de reporte queda en `admin_audit_log` (en la misma transacción), sin secretos.
+
+## 4.25 THERS Places — reseñas (`ADR-040`, fase 4a) — v0.38
+
+| Ruta | Acceso | Descripción |
+|---|---|---|
+| `GET /api/places/<id>/reviews?limit=&offset=` | Pública (con token marca la propia) | `{"reviews": [...], "has_more": bool, "summary": {"average": 4.5 \| null, "count": n}}`. La reseña **propia primero**, luego la más reciente. `404` si el lugar no es público |
+| `PUT /api/places/<id>/review` | Sesión | Cuerpo `{"rating": 1..5, "body": "..."}`. **Una reseña por persona y lugar**: `201` la primera vez, `200` si la actualiza. Límite 20/hora por cuenta |
+| `DELETE /api/places/<id>/review` | Sesión | `200 {"deleted": true}`; `404` si no tenías reseña en ese lugar |
+| `POST /api/moderation/places/reviews/<id>/visibility` | Moderación (`404` al resto) | `{"hidden": true \| false, "note": "..."}`. Oculta o restaura sin borrar; queda en `admin_audit_log` |
+
+Cada reseña: `{id, rating, body, created_at, updated_at, is_mine, author: {id, username, name, avatar_url}}`; la propia añade `hidden`
+(la moderación pudo ocultarla y su autor debe poder saberlo). **No se expone** email, teléfono ni fecha de nacimiento del autor.
+
+Validación en el servidor: `rating` **entero** de 1 a 5 (`4.5`, `"4"`, `true` y `null` dan `400`); `body` opcional de hasta 1000 caracteres,
+sin caracteres de control. `user_id` e `is_hidden` del cuerpo se ignoran: la identidad sale solo del token.
+
+Las reseñas de una cuenta bloqueada (en cualquier sentido) no aparecen; las ocultas por moderación quedan fuera del listado, del promedio y
+del conteo. `GET /api/places*` añade a cada lugar `rating_average` (un decimal, `null` sin reseñas) y `reviews_count` (0 sin reseñas): nunca
+se inventan. Entran en la exportación (`place_reviews.json`, `ADR-028`) y se borran con la cuenta (`ADR-031`).
+
+### Fotos de la reseña (`ADR-040` fase 4b) — v0.40
+
+| Ruta | Acceso | Descripción |
+|---|---|---|
+| `POST /api/places/<id>/review/images` | Sesión | `multipart/form-data`, campo `images` (1 a 3 archivos). Añade fotos a **tu** reseña, con un máximo de **3** por reseña entre todas las subidas. `201 {"images": [{id, url, width, height}]}` (la lista completa de la reseña). `404` si aún no escribiste la reseña o el lugar no es público; `400` si no hay archivos, hay más de 3, o un archivo no es una imagen JPEG/PNG/WebP válida (**un archivo malo cancela toda la petición**); `413` si una imagen pesa más de 5 MB; `429` por límite |
+| `DELETE /api/places/<id>/review/images/<image_id>` | Sesión | Quita una foto **tuya** y borra su archivo. `404` si no es de tu reseña |
+
+Cada foto se decodifica por su **contenido** (no por extensión ni `Content-Type`), se le quita el EXIF/GPS y se re-codifica a WebP con el lado mayor reducido a 1280 px; nunca se guarda el original. La respuesta no expone la clave interna de almacenamiento ni quién la subió. `GET /api/places/<id>/reviews` incluye `images` en cada reseña (lista vacía si no tiene). Límites por cuenta: 20 escrituras/hora de reseñas **y** 40 subidas/hora de imágenes (rige el más estricto). Borrar la reseña, retirarla por moderación o eliminar la cuenta borra también los archivos; ocultar la reseña (moderación) las oculta del público sin borrarlas.
+
+## 4.26 THERS Places — publicaciones asociadas (`ADR-040`, fase 4d) — v0.42
+
+| Ruta | Acceso | Descripción |
+|---|---|---|
+| `POST /api/posts` | Sesión | Acepta además **`place_id`** (UUID, opcional) para asociar la publicación a un lugar. Solo lugares públicos: inexistente, pendiente o inactivo → `404 {"msg": "Lugar no encontrado"}` y **no se publica ni se guarda nada**; `place_id` que no sea un UUID (o no sea texto) → `400`. Con multipart (fotos) va como un campo más |
+| `GET /api/places/<id>/posts` | Sesión (`401` sin ella) | `{"posts": [...]}`, las 30 más recientes del lugar. `404` si el lugar no existe o no es público |
+
+Cada post incluye **`place`**: `null` si no lleva lugar; si lo lleva, `{id, available: true, name, category: {slug, name}, municipality, department}`
+o `{id, available: false}` cuando el lugar ya no es público (sin nombre ni ubicación: pudo retirarse por moderación). Si el lugar se borra del
+catálogo la publicación se conserva y `place` pasa a `null`. La tarjeta **nunca** lleva coordenadas, teléfono ni estado de verificación.
+
+**El lugar no es una forma de saltarse la visibilidad.** `GET /api/places/<id>/posts` aplica exactamente las mismas reglas que `GET /api/posts`: no
+muestra publicaciones de cuentas privadas que no sigues, de cuentas bloqueadas (en cualquier sentido), contenido sensible si lo ocultas, ni
+las que contienen tus palabras o temas silenciados. Tus propias publicaciones nunca se te ocultan. Editar una publicación (`PATCH /api/posts/<id>`)
+no cambia su lugar y la respuesta lo sigue incluyendo. Entra en la exportación de datos (`posts[].place_id`, `ADR-028`).
+
+## 4.27 THERS Places — planes con amistades (`ADR-040`, fase 5) — v0.43
+
+Todas las rutas exigen sesión (`401` sin ella). La identidad sale **siempre** del JWT; el cuerpo solo admite los campos listados (el resto se ignora).
+**Amistad** = seguimiento mutuo aceptado, sin bloqueo en ningún sentido.
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/users/me/friends` | `{"friends": [{id, username, name, avatar_url}]}`: tus amistades (seguimiento mutuo aceptado, sin bloqueo), por nombre, máx. 200. Es la lista de a quién se puede invitar |
+| `POST /api/places/<id>/plans` | Cuerpo `{title, starts_at, note?, user_ids?}`. `title` 1–80 sin saltos de línea; `note` hasta 500; `starts_at` ISO-8601 **con zona horaria**, a futuro y a menos de 1 año; `user_ids` hasta 19 amistades. `201 {"plan": {...}}`. `404` si el lugar no es público; `400` si un dato es inválido o alguien no es amistad (mismo mensaje para inexistente, no amistad o bloqueada). No se guarda nada si falla |
+| `GET /api/plans?scope=upcoming\|past` | Mis planes (creados o con invitación), máx. 50. `upcoming` (defecto) del más próximo al más lejano; `past` del más reciente. Se omiten los de personas bloqueadas. `400` si `scope` es otro |
+| `GET /api/plans/<id>` | Detalle. **`404` si no eres integrante** (existiera o no) |
+| `PATCH /api/plans/<id>` | Solo quien lo creó (`403` a otros integrantes): `title`, `note`, `starts_at`. No cambia lugar ni creador |
+| `DELETE /api/plans/<id>` | Cancela (solo quien lo creó). Conserva la fila: los integrantes ven `status: "cancelled"` |
+| `POST /api/plans/<id>/invites` | Cuerpo `{user_ids}` (1–19 amistades). Solo quien lo creó. No reinvita a quien ya es integrante ni a quien rechazó |
+| `PUT /api/plans/<id>/response` | Cuerpo `{status: "going"\|"declined"}`. Quien creó el plan no responde (`403`): lo cancela |
+| `DELETE /api/plans/<id>/members/<user_id>` | Quien creó el plan saca a otra persona; cualquiera puede salirse a sí misma. Quien creó no sale (`403`). `404` si no era integrante |
+
+`409` en editar, cancelar, invitar o responder cuando el plan **ya está cancelado o ya pasó**, y al invitar si se superaría el máximo de **20** integrantes.
+`429` por el límite de 30 escrituras por hora y cuenta.
+
+Forma del plan: `{id, title, note, starts_at, status ("active"|"cancelled"), place (tarjeta de §4.26, o {id, available:false}), creator {id, username, name, avatar_url},
+my_status ("going"|"invited"|"declined"), members [{id, username, name, avatar_url, status}], counts {going, invited, declined}, created_at, updated_at}`.
+Las cuentas bloqueadas con quien consulta no aparecen entre `members`. Entra en la exportación de datos (`place_plans.json`, `ADR-028`) sin datos de otras personas;
+se borra con la cuenta de quien lo creó (`ADR-031`).
+
+## 4.28 THERS Places — reclamos de negocio (`ADR-040`, fase 6) — v0.44
+
+Las rutas de persona exigen sesión (`401` sin ella). La identidad sale **siempre** del JWT. Las de moderación son solo para cuentas con `is_moderator`
+no suspendidas: cualquier otra recibe el mismo `404` que una URL inexistente (`401` sin sesión).
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/places/<id>/claims` | `multipart/form-data`: `business_name` (1–160, sin saltos de línea), `contact_phone?` (teléfono, ≤ 40), `message?` (≤ 500) y el archivo **`document`** (obligatorio: JPG/PNG/WebP o PDF, ≤ 5 MB). `201 {claim}`. Solo lugares **públicos** (`404` si no) |
+| `GET /api/users/me/claims` | `{"claims": [...]}`: tus reclamos, recientes primero, máx. 50 |
+| `DELETE /api/claims/<id>` | Retira un reclamo **pendiente** tuyo y borra su documento. `404` si no es tuyo; `409` si ya estaba resuelto |
+| `GET /api/moderation/place-claims?status=&limit=&offset=` | Cola de revisión (`pending` del más antiguo al más reciente). `400` si `status` no es válido |
+| `GET /api/moderation/place-claims/<id>` | Detalle para moderación (quién reclama, nombre del negocio, mensaje, si hay documento) |
+| `POST /api/moderation/place-claims/<id>/document-url` | `{document: {url, content_type, expires_in: 300}}`: URL **firmada de 5 min** (`Cache-Control: no-store`). Cada petición queda en `admin_audit_log` (`place_claim_document_viewed`). `409` si ya no hay documento |
+| `POST /api/moderation/place-claims/<id>/approve` | `{note?}`. Crea el gestor del lugar, borra el documento y rechaza los demás reclamos pendientes del mismo lugar |
+| `POST /api/moderation/place-claims/<id>/reject` | `{note}` obligatoria (≤ 500); la ve quien reclamó. Borra el documento |
+| `GET /api/private-documents/<token>` | Solo con `STORAGE_BACKEND=local`. El token firmado **es** la autorización; caduca a los 5 min. Siempre `Content-Disposition: attachment`, `Cache-Control: private, no-store`, `nosniff`. Con S3 no existe: se usa una URL prefirmada del bucket privado |
+
+Errores: `400` dato inválido o documento ilegible/PDF con acciones activas; `409` si el lugar **ya tiene gestor**, si ya tienes un reclamo pendiente de ese lugar o
+si tienes 3 pendientes; `429` por 5 reclamos al día y cuenta; `503` si no hay almacenamiento privado configurado.
+
+Forma del reclamo: `{id, place (tarjeta de §4.26), business_name, contact_phone, message, status ("pending"|"approved"|"rejected"|"withdrawn"), review_note, created_at, reviewed_at}`.
+**Nunca** viaja la clave del documento. `GET /api/places/<id>` suma `is_claimed` (alguien gestiona el lugar) y `managed_by_me`.
+Entra en la exportación (`place_claims.json`, `managed_places.json`, `ADR-028`) sin el documento; los claims y documentos pendientes se borran con la cuenta (`ADR-031`).
+
+## 4.29 THERS Places — panel de negocio (`ADR-040`, fase 7) — v0.45
+
+Todas las rutas exigen sesión (`401`) **y ser gestor del lugar** (`place_managers`, §4.28). Quien no lo es —otra persona, un moderador sin gestión, o el lugar no existe o no es público—
+recibe el mismo `404`. La identidad sale del JWT. `429` por 30 escrituras por hora y cuenta (`BUSINESS_WRITE`).
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/users/me/managed-places` | `{"places": [{id, name, municipality, department, category {slug, name}, is_public, rating_average, reviews_count}]}` |
+| `GET /api/places/<id>/manage` | `{place (detalle de §4.23), stats {saves, reviews, rating_average, reviews_without_reply, upcoming_plans}}` |
+| `PATCH /api/places/<id>/manage` | Cuerpo parcial con **solo** `description` (≤ 2000), `address` (≤ 255), `phone`, `website` (`http(s)://`). Cualquier otro campo (`name`, `category`, `latitude`, `verification_status`, `is_active`…) se **ignora**. `400` si no queda ninguno válido. Queda en `admin_audit_log` (`place_updated`, con antes/después y quien lo hizo) |
+| `PUT /api/places/<id>/reviews/<review_id>/reply` | Cuerpo `{body}` (1–500, sin caracteres de control). Crea o corrige la respuesta pública (una por reseña). `404` si la reseña no es de ese lugar o está oculta por moderación |
+| `DELETE /api/places/<id>/reviews/<review_id>/reply` | Quita la respuesta; `404` si no había |
+
+En `GET /api/places/<id>/reviews` cada reseña lleva `reply: {body, created_at, updated_at} | null`, visible para cualquiera. La respuesta cae con la reseña, con el lugar y con la cuenta de quien la escribió.
+
+## 4.30 THERS Places — reservas (`ADR-040`, fase 8) — v0.46
+
+Todas las rutas exigen sesión (`401`). La identidad sale del JWT. Las de gestión (`/manage/…`) exigen ser gestor del lugar (§4.28): cualquier otra cuenta, incluida moderación, recibe `404`.
+`429` por 30 escrituras por hora y cuenta (`RESERVATION_WRITE`).
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/places/<id>/reservations` | Cuerpo `{starts_at, party_size, note?}`. `starts_at` ISO-8601 **con zona**, en cuartos de hora exactos, ≥ 30 min en el futuro y ≤ 90 días; `party_size` entero 1–50 (y ≤ el máximo del lugar); `note` ≤ 300. `201 {reservation}` en estado `pending`. `404` si el lugar no es público; `409` si el lugar no acepta reservas, **no queda cupo** en ese horario, ya tienes esa reserva o ya tienes 5 activas |
+| `GET /api/reservations` | `{"reservations": [...]}`: las tuyas, máx. 50, de la más lejana a la más cercana |
+| `DELETE /api/reservations/<id>` | Cancela una reserva tuya `pending` o `confirmed` y futura (`404` si no es tuya; `409` si ya no admite el cambio) |
+| `GET`/`PUT /api/places/<id>/manage/reservations/settings` | `{settings: {enabled, capacity (1–500, personas por horario), max_party_size (1–50, ≤ capacity)}}`. Por defecto desactivado. `PUT` admite cambios parciales; `400` si un valor no es entero o `max_party_size > capacity` |
+| `GET /api/places/<id>/manage/reservations?status=&limit=&offset=` | Solicitudes del lugar (`{reservations, has_more}`), con `user {id, username, name, avatar_url}` |
+| `POST /api/places/<id>/manage/reservations/<rid>/confirm` · `/decline` | Cuerpo opcional `{note}` (≤ 300). Solo desde `pending` y a futuro; si no, `409` |
+
+Forma de la reserva: `{id, starts_at, party_size, note, status ("pending"|"confirmed"|"declined"|"cancelled"), decision_note, created_at, place (tarjeta de §4.26)}`.
+**Cupo:** en un mismo `starts_at`, la suma de `party_size` de reservas `pending` + `confirmed` nunca supera `capacity`; se garantiza en el servidor bajo bloqueo de la configuración del lugar.
+Entra en la exportación (`place_reservations.json`, `ADR-028`); se borra con la cuenta (`ADR-031`).
+
+## 4.31 THERS Places — horario, cierres y calendario (`ADR-040`, fase 9) — v0.47
+
+Todas exigen sesión (`401`). Las de `/manage/…` exigen ser gestor del lugar (§4.28): cualquier otra cuenta recibe `404`. Escrituras: `429` por el límite de 30/hora y cuenta de las reservas (§4.30).
+**Zona horaria:** todas las horas del horario son locales de El Salvador (UTC-6 fijo, sin horario de verano); los instantes del resto de la API van en ISO-8601 con zona. `weekday`: 0 = lunes … 6 = domingo.
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/places/<id>/hours` | `{schedule: {timezone: "UTC-06:00", days: [{weekday, intervals: [{opens, closes}]}] (7 días), closures: [{date, reason}] (próximos 90 días)}}`. `404` si el lugar no es público. Un día sin tramos está cerrado |
+| `GET /api/places/<id>/availability?date=AAAA-MM-DD` | `{availability: {date, accepts_reservations, max_party_size, slots: [{starts_at, seats_left}]}}`. Horarios de entrada cada 15 min dentro del horario, sin cierres, sin horas ya pasadas (o con menos de 30 min de margen), con el cupo que queda. `date` por defecto hoy; `400` si es anterior a hoy o a más de 90 días. Lista vacía si el lugar no acepta reservas, no cargó horario o cierra ese día |
+| `PUT /api/places/<id>/manage/hours` | Cuerpo `{days: [{weekday, intervals: [{opens: "HH:MM", closes: "HH:MM"}]}]}`. **Reemplaza** todo el horario. Máx. 3 tramos por día, en cuartos de hora exactos, `closes` > `opens`, sin solaparse; un tramo no cruza la medianoche (el último cierre posible es 23:45). `400` y nada cambia si algo es inválido |
+| `POST /api/places/<id>/manage/closures` | `{date, reason?}` (`reason` ≤ 120). Cierra un día (hoy hasta 1 año). Repetir la fecha reemplaza el motivo. `201` |
+| `DELETE /api/places/<id>/manage/closures/<AAAA-MM-DD>` | Quita el cierre; `404` si no existía |
+| `GET /api/places/<id>/manage/calendar?from=&to=` | `{days: [{date, closed, closure_reason, intervals, reservations: {pending, confirmed, people}}]}`. Por defecto hoy + 14 días; máx. 31 días |
+
+**Efecto sobre las reservas (§4.30):** `POST /api/places/<id>/reservations` responde `409 {msg, reason}` con `reason: "closed_day"` (cierre puntual) o `"outside_hours"` (fuera de los tramos del día; la hora de cierre misma ya no admite entrada).
+Un lugar **sin horario cargado** no restringe por hora (compatible con la fase 8), pero los cierres puntuales siempre cuentan.
+
+## 4.32 THERS Places — cotizador (`ADR-040`, fase 10) — v0.48
+
+Todas exigen sesión (`401`). Las de `/manage/…` exigen ser gestor del lugar (§4.28): cualquier otra cuenta, incluida moderación, recibe `404`. `429` por 30 escrituras por hora y cuenta (`QUOTE_WRITE`).
+**Regla central: el total lo calcula SIEMPRE el servidor.** El cliente envía solo `item_id` y `quantity`; cualquier `unit_price_cents`, `line_total_cents`, `total` o `user_id` que mande se ignora. Todo el dinero va en **centavos enteros** (USD); nunca `float`.
+Un importe se devuelve como `{cents, amount ("12.50"), currency ("USD")}`.
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/places/<id>/quote-items` | `{"items": [{id, name, description, unit ("person"\|"unit"\|"hour"), unit_price, is_active}]}`: solo los **activos**. `404` si el lugar no es público |
+| `POST /api/places/<id>/quotes` | Cuerpo `{lines: [{item_id, quantity}], note?, reservation_id?}`. 1–20 líneas, sin artículos repetidos, `quantity` entero 1–10 000, `note` ≤ 500, `reservation_id` debe ser una reserva **tuya** en ese lugar. `201 {quote}`. `404` si algún artículo no existe, está inactivo o es de otro lugar (no se guarda nada) |
+| `GET /api/quotes` | `{"quotes": [...]}`: las tuyas, máx. 50, recientes primero |
+| `GET /api/quotes/<id>` | La ve quien la pidió y quien gestiona ese lugar; cualquier otra cuenta, `404` |
+| `GET /api/places/<id>/manage/quote-items` | Catálogo completo (con inactivos) |
+| `POST /api/places/<id>/manage/quote-items` | `{name (1–120), description? (≤ 300), unit, unit_price_cents (entero 0–100 000 000)}`. `409` si el nombre ya existe en el lugar o ya hay 30 activos |
+| `PATCH /api/places/<id>/manage/quote-items/<item_id>` | Cambios parciales de esos campos y `is_active` (booleano). `404` si el artículo no es de ese lugar |
+| `DELETE /api/places/<id>/manage/quote-items/<item_id>` | Elimina el artículo; las cotizaciones ya emitidas no cambian |
+| `GET /api/places/<id>/manage/quotes?limit=&offset=` | `{quotes, has_more}`; cada una con `user {id, username, name}` |
+| `POST /api/places/<id>/manage/quotes/<quote_id>/decision` | **Fase 11.** Cuerpo `{"decision": "accepted"\|"rejected"}` (cualquier otro valor, `400`). `200 {quote}`. Solo desde `pending` y antes de `valid_until`: ya decidida, `409`; vencida, `409`. Solo cambia el estado: no cobra, no reserva cupo ni toca el total. Quien no gestiona ese lugar (incluida la persona que la pidió y moderación), `404`. Cuenta para `QUOTE_WRITE` |
+| `GET /api/quotes/<id>/pdf` | **Fase 11.** `200 application/pdf` (`attachment`, `Cache-Control: no-store`). Lo descarga quien la pidió o quien gestiona el lugar; cualquier otra cuenta, `404`. Dibuja los importes ya guardados: no recalcula nada |
+
+Forma de la cotización: `{id, status, decided_at, total, note, valid_until (7 días), created_at, reservation_id, place (tarjeta de §4.26), lines: [{name, unit, unit_price, quantity, line_total}]}`.
+Cada línea es una **copia** del artículo al cotizar: cambiar o borrar el catálogo después no altera una cotización emitida. Entra en la exportación (`place_quotes.json`, `ADR-028`) y se borra con la cuenta (`ADR-031`).
+
+## 4.33 THERS Places — rutas hacia un lugar (`ADR-040`, fase 13) — v0.51
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/places/<id>/route` | Exige sesión (`401`). Cuerpo `{"from_lat": número, "from_lng": número, "profile": "walk"\|"bike"\|"car", "lang"?: "es"\|"en", "precision"?: "normal"\|"high"}`. `200 {"route": {profile, provider, lang, distance_m, duration_s, geometry, steps}}`, con `geometry` un GeoJSON `LineString` de pares `[lng, lat]` (máx. 500 puntos) y `Cache-Control: no-store` |
+
+**Indicaciones calle por calle (`steps`).** Lista de `{instruction, street, distance_m, duration_s, type, at}`: `instruction` es el texto en el idioma pedido («Gire a la izquierda a 1a Calle Poniente»), `street` el nombre de la calle o `null` si la vía no lo tiene, `type` el código de maniobra del proveedor (0 a 20, o `null`) y `at` el punto `[lng, lat]` donde empieza el paso, para que el cliente pueda acercar el mapa. Máximo 300 pasos; el texto sale limpio de caracteres de control y acotado (200 y 120 caracteres). **Es secundaria:** si el proveedor no las da o vienen malformadas, `steps` es `[]` y la ruta sigue valiendo. `lang` fuera de la lista da `400`; la caché es por idioma.
+
+**Es POST aunque no cambia nada**, para que la ubicación de la persona **no viaje en la URL**: los registros de acceso del servidor y de los proxies guardan la URL completa. **El destino sale siempre de la base de datos** (el punto guardado del lugar): cualquier destino que mande el cliente se ignora. El origen se **redondea a 3 decimales (~110 m) en el servidor** y no se guarda en ninguna tabla ni en los registros. El servidor pide la ruta a OpenRouteService; la clave (`ROUTING_API_KEY`) no sale del servidor.
+
+| Código | Causa |
+|---|---|
+| `400` | Cuerpo que no es un objeto, `from_lat`/`from_lng` ausentes, no numéricos o fuera de rango, o `profile` fuera de la lista |
+| `401` | Sin sesión |
+| `404` | El lugar no existe, está inactivo o no es público (mismo `404` que el resto) |
+| `422` | No hay ruta entre esos puntos con ese perfil |
+| `429` | Más de 30 rutas por hora para la cuenta |
+| `503` | Sin proveedor configurado, sin clave, cupo diario global agotado (`ROUTING_DAILY_BUDGET`, 1500 por defecto), proveedor caído o lento (espera máx. 8 s) o con respuesta inválida. **Siempre un mensaje fijo**: nunca el texto del proveedor |
+
+**Precisión (`precision`).** `normal` redondea el origen a 3 decimales (~110 m). `high` lo redondea a 4 decimales (~11 m) y existe **solo** para recalcular la ruta durante la navegación en vivo, porque con 110 m la ruta nueva saldría de otra calle; el servidor nunca devuelve ni usa nada más fino que 4 decimales y rechaza otros valores con `400`. Un pedido `high` cuenta contra su propio límite (`429` tras 30 por hora por cuenta), independiente del de las rutas normales; el cupo diario global del proveedor y la caché son compartidos. El origen, con cualquier precisión, no se guarda ni se registra.
+
+**Caché y cupo.** La misma consulta (lugar, origen redondeado y perfil) se sirve desde una caché de una hora, por proceso, **sin gastar cupo del proveedor**. El cupo diario es **global** (de todas las cuentas) y solo cuenta consultas reales al proveedor. `GET /api/places/<id>` devuelve `routing_available` (`true` si hay proveedor configurado), para que los clientes escondan «Cómo llegar» cuando no lo hay. Los clientes deben mostrar la atribución a OpenRouteService y a OpenStreetMap.
+
+## 4.34 THERS Places — estadísticas del negocio (`ADR-040` §31, fase 16 parte 1) — v0.54
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/places/<id>/manage/analytics?days=7\|30\|90` | Exige sesión (`401`) y ser gestor del lugar: cualquier otra cuenta, incluida moderación, recibe `404`. `days` por defecto 30; otro valor, `400`. `200 {"analytics": {...}}` con `Cache-Control: no-store`. `429` por 60 lecturas por minuto y cuenta |
+
+**Solo conteos agregados: ningún identificador, nombre ni lista de personas.** Los días son de hora de El Salvador (UTC-6). Forma de la respuesta:
+- `range {days, from, to, previous_from, previous_to, timezone}`: el periodo actual y el anterior de igual duración (fechas locales, incluidas).
+- `series`: una entrada por día del periodo, `{date, reviews, reservations, quotes, posts, saves, plans}`, con 0 en los días sin actividad.
+- `totals`: `reviews`, `rating_average` (`null` sin reseñas), `reservations {requested, confirmed, declined, cancelled, pending, people_confirmed}`, `quotes {requested, accepted, rejected, pending, accepted_value}` (un importe `{cents, amount, currency}` de §4.32), `posts`, `saves`, `plans`.
+- `previous`: las mismas cifras simples del periodo anterior. `change`: variación porcentual entera frente a él; **`null` si el periodo anterior fue 0** (no se inventa un «infinito %») o si la cifra está oculta.
+- `min_count` (5) y `hidden`: lista de métricas ocultas por tener pocos datos.
+
+**Ocultar lo sensible.** `saves` y `plans` se devuelven `null` (en `totals`, en `previous`, y en cada punto de `series`) y aparecen en `hidden` cuando el periodo suma **menos de `min_count`**: con poca gente, un número diario permitiría deducir quién fue. El resto (reseñas, reservas, cotizaciones, publicaciones) no se oculta, porque quien gestiona ya las ve una por una. Las reseñas ocultas por moderación y los datos de otros lugares no cuentan.
+
+## 4.35 THERS Places — Pulse del lugar (`ADR-040` §32, fase 15) — v0.55
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/places/<id>/pulse` | Público (sin JWT; un token, válido o no, se ignora). `200 {"pulse": {"level": "moving"|"active"|"buzzing"|null, "window_days": 7}}` con `Cache-Control: public, max-age=300`. Lugar inexistente, inactivo o no verificado: el mismo `404` que la ficha |
+
+**Solo un nivel, nunca una cifra.** El nivel sale de sumar, en los últimos 7 días, reseñas visibles, guardados, planes activos creados y publicaciones con el lugar de cuentas no privadas. Por debajo de **5 eventos** el nivel es `null` (no se muestra nada); de 5 a 14, `moving`; de 15 a 39, `active`; desde 40, `buzzing`. La respuesta no trae conteos, desglose por fuente ni identificadores. Sin migración ni tablas nuevas.
+
+## 4.36 THERS Places — visitas anónimas a la ficha (`ADR-040` §33, fase 16 parte 2) — v0.56
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/places/<id>/visits` | Público (sin JWT obligatorio). Cuerpo `{"event": "view"\|"phone"\|"website"\|"directions"}`. `204` sin cuerpo; `400` si falta el cuerpo, no es un objeto o `event` no es uno de los cuatro; `404` igual que la ficha (inexistente, inactivo o no verificado); `429` por **30 visitas por hora, por IP y lugar** (además del tope general de lecturas públicas) |
+
+**Anónimo por construcción.** Solo se incrementa un contador por `(lugar, día local UTC-6, evento)`; la tabla `place_visit_counts` no tiene `user_id`, IP, dispositivo ni hora exacta, así que no hay nada que exportar ni borrar por persona. Un token, válido o no, solo sirve para **no contar** a quien gestiona el lugar (para que nadie infle sus propias cifras); la respuesta es `204` en ambos casos y no revela si se contó. Las visitas no pasan por moderación ni notificaciones.
+
+**En las estadísticas del negocio (§4.34).** `totals.visits` es `{views, phone, website, directions, conversion_percent}` o **`null`** si el periodo suma menos de `min_count` (5) entre los cuatro eventos; en ese caso `hidden` incluye `"visits"` y `series[].views` es `null`. `previous.views` y `change.views` siguen la misma regla (`null` si ocultos o si el periodo anterior fue 0). `conversion_percent` es el porcentaje de (reservas + cotizaciones pedidas) sobre las visitas de la ficha, con un decimal; es `null` sin visitas a la ficha o si hubo más solicitudes que visitas (no se inventa un porcentaje mayor de 100).

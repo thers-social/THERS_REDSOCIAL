@@ -200,6 +200,15 @@ class Config:
 # de lectura de entorno que el resto).
 Config.MAX_CONTENT_LENGTH = 6 * 1024 * 1024  # techo HTTP; el límite real de imagen es 5 MiB
 Config.STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "local")
+
+# --- Rutas hacia un lugar (ADR-040 fase 13) ---
+# Solo en el servidor: la clave nunca va en el cliente. Sin clave la función queda desactivada.
+Config.ROUTING_PROVIDER = os.environ.get("ROUTING_PROVIDER", "openrouteservice")
+Config.ROUTING_API_KEY = (os.environ.get("ROUTING_API_KEY") or "").strip() or None
+try:
+    Config.ROUTING_DAILY_BUDGET = int(os.environ.get("ROUTING_DAILY_BUDGET") or 1500)
+except ValueError:
+    Config.ROUTING_DAILY_BUDGET = 1500
 Config.UPLOAD_DIR = os.environ.get(
     "UPLOAD_DIR", str(Path(__file__).resolve().parent.parent / "uploads")
 )
@@ -256,3 +265,13 @@ Config.TERMS_VERSION = os.environ.get("TERMS_VERSION", "").strip() or DEFAULT_TE
 Config.TERMS_ACCEPTANCE_REQUIRED = os.environ.get(
     "TERMS_ACCEPTANCE_REQUIRED", ""
 ).strip().lower() in ("1", "true", "yes")
+
+# --- Documentos privados de reclamos (ADR-040 fase 6) ---
+# Directorio local APARTE de UPLOAD_DIR (que se sirve público). En S3, bucket privado distinto.
+Config.PRIVATE_UPLOAD_DIR = os.environ.get(
+    "PRIVATE_UPLOAD_DIR", str(Path(__file__).resolve().parent.parent / "private_uploads")
+)
+Config.PRIVATE_DOCUMENTS_BASE_URL = os.environ.get(
+    "PRIVATE_DOCUMENTS_BASE_URL", "http://127.0.0.1:5000/api/private-documents"
+)
+Config.S3_PRIVATE_BUCKET = os.environ.get("S3_PRIVATE_BUCKET")
