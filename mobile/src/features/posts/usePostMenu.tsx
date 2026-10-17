@@ -6,6 +6,8 @@ import { Alert } from 'react-native';
 import { useAuth } from '@features/auth/context/AuthContext';
 import { blockUser } from '@features/safety/api';
 import { ReportModal } from '@features/safety/ReportModal';
+import { useTeroPostActions } from '@features/tero/components/TeroContextActions';
+import { useTero } from '@features/tero/context/TeroContext';
 import { ActionSheet } from '@shared/ui/ActionSheet';
 import type { SheetAction } from '@shared/ui/ActionSheet';
 import { EditTextModal } from '@shared/ui/EditTextModal';
@@ -33,6 +35,8 @@ export function usePostMenu(): {
   const [target, setTarget] = useState<Post | null>(null);
   const [editing, setEditing] = useState<Post | null>(null);
   const [reporting, setReporting] = useState<Post | null>(null);
+  const tero = useTero();
+  const teroActions = useTeroPostActions(setReporting);
 
   const fail = useCallback((title: string, error: unknown) => {
     Alert.alert(title, messageOf(error));
@@ -89,7 +93,7 @@ export function usePostMenu(): {
     );
   }
 
-  const actions: SheetAction[] = !target
+  const postActions: SheetAction[] = !target
     ? []
     : target.author.id === user?.id
       ? [
@@ -117,6 +121,15 @@ export function usePostMenu(): {
             onPress: () => confirmBlock(target),
           },
         ];
+
+  // Acciones de Tero (vista previa, `EXPO_PUBLIC_TERO_ENABLED`): solo una
+  // entrada aquí; el resto vive en `useTeroPostActions`.
+  const teroEntry: SheetAction[] =
+    tero.enabled && target
+      ? [{ label: 'Preguntar a Tero…', onPress: () => teroActions.open(target, target.author.id === user?.id) }]
+      : [];
+
+  const actions = [...teroEntry, ...postActions];
 
   const element = (
     <>
@@ -148,6 +161,7 @@ export function usePostMenu(): {
         targetLabel="esta publicación"
         onClose={() => setReporting(null)}
       />
+      {teroActions.element}
     </>
   );
 

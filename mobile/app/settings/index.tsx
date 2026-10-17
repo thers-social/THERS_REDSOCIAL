@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
+import { TERO_ENABLED } from '@features/tero/config';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { comingSoon } from '@shared/lib/comingSoon';
@@ -76,6 +77,18 @@ const SECTIONS: { title: string; rows: Row[] }[] = [
     rows: [
       { label: 'Permisos de cámara y micro', description: 'Acceso a galería, audio y sensores.', icon: 'camera' },
       { label: 'Idioma y traducciones', description: 'Idioma de la app y traducción automática.', icon: 'globe' },
+      // Excepción a la regla de abajo: las preferencias de Tero son locales del
+      // teléfono. Esta fila es la vuelta para quien ocultó la burbuja.
+      ...(TERO_ENABLED
+        ? [
+            {
+              label: 'Tero',
+              description: 'Mostrar, mover u ocultar a Tero (vista previa).',
+              icon: 'sparkle' as const,
+              route: '/tero/settings',
+            },
+          ]
+        : []),
     ],
   },
   {
