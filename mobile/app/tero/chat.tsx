@@ -5,8 +5,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { usePosts } from '@features/posts/PostsContext';
-import { SETTLE_AFTER_MS, settledMood } from '@features/tero/animation/expressions';
+import {
+  moodForActionOutcome,
+  reactionForActionOutcome,
+  SETTLE_AFTER_MS,
+  settledMood,
+} from '@features/tero/animation/expressions';
+import type { ActionOutcome } from '@features/tero/animation/expressions';
 import { useTeroMotionAllowed } from '@features/tero/animation/useTeroMotion';
+import type { ReactionRequest } from '@features/tero/animation/useTeroMotion';
 import { TeroActionCardView } from '@features/tero/components/TeroActionCard';
 import { TeroAvatar } from '@features/tero/components/TeroAvatar';
 import { TeroDots } from '@features/tero/components/TeroDots';
@@ -77,6 +84,8 @@ function TeroChatContent() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [replyMood, setReplyMood] = useState<TeroMood>('idle');
+  // Reacción breve de Tero al desenlace de una tarjeta (celebrar / encogerse).
+  const [reaction, setReaction] = useState<ReactionRequest | null>(null);
   // Estado de cada tarjeta de confirmación, por id de acción. Vive solo mientras la pantalla está
   // abierta, igual que la conversación: lo que cuenta es el estado real en el servidor.
   const [cardStates, setCardStates] = useState<Record<string, TeroCardState>>({});
@@ -180,6 +189,14 @@ function TeroChatContent() {
     setCardStates((current) => ({ ...current, [id]: state }));
   }
 
+  /** Tero reacciona al desenlace: celebra lo que se hizo, se encoge si falló, calla si no. */
+  function reactToOutcome(outcome: ActionOutcome) {
+    const kind = reactionForActionOutcome(outcome);
+    const nextMood = moodForActionOutcome(outcome);
+    if (nextMood) setReplyMood(nextMood);
+    if (kind) setReaction({ kind, key: Date.now() });
+  }
+
   /** Solo la persona llega aquí, al pulsar «Confirmar»: es lo único que ejecuta la acción. */
   async function confirmCard(card: TeroActionCard) {
     if (cardStates[card.id]?.status !== 'pending') return;
@@ -187,11 +204,15 @@ function TeroChatContent() {
     try {
       const result = await teroClient.confirmAction(card.id);
       setCard(card.id, { status: 'confirmed', note: confirmedNote(result) });
+      reactToOutcome('confirmed');
       // Lo que cambió ya no coincide con lo que la app tiene en memoria: se vuelve a leer.
       if (card.kind === 'update_profile') void refreshUser();
       else void posts.reload();
     } catch (caught) {
-      setCard(card.id, cardStateFromError(caught));
+      const next = cardStateFromError(caught);
+      setCard(card.id, next);
+      // Solo un fallo definitivo cuenta (sin red o límite de intentos deja la tarjeta pendiente).
+      if (next.status !== 'pending') reactToOutcome(next.status as ActionOutcome);
     }
   }
 
@@ -238,10 +259,22 @@ function TeroChatContent() {
       ? 'Te escucho…'
       : mood === 'error'
         ? 'Algo salió mal.'
-        : 'Pregúntame sobre THERS.';
+        : mood === 'speaking'
+          ? 'Tero responde…'
+          : mood === 'happy'
+            ? '¡Listo!'
+            : 'Pregúntame sobre THERS.';
 
   return (
     <Screen title="Preguntar a Tero" back scroll={false} withBottomInset={false}>
+      {/* Tero queda fijo arriba mientras la conversación se desplaza: así se le ve pensar, hablar
+          y reaccionar aunque la lista sea larga. */}
+      <View style={styles.statusBar}>
+        <TeroAvatar size={56} mood={mood} reaction={reaction} />
+        <Text style={styles.heroText} accessibilityLiveRegion="polite">
+          {heroText}
+        </Text>
+      </View>
       <FlatList
         ref={listRef}
         data={messages}
@@ -251,12 +284,6 @@ function TeroChatContent() {
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: animate })}
         ListHeaderComponent={
           <View>
-            <View style={styles.hero}>
-              <TeroAvatar size={72} mood={mood} />
-              <Text style={styles.heroText} accessibilityLiveRegion="polite">
-                {heroText}
-              </Text>
-            </View>
             {TERO_LIVE ? (
               <Text style={styles.liveHint}>
                 Tero puede equivocarse: revisa lo importante. Nada cambia en tu cuenta sin que lo
@@ -397,8 +424,16 @@ function MessageBubble({
 
 const styles = themedStyles(() => ({
   list: { padding: space[4], paddingBottom: space[6] },
-  hero: { alignItems: 'center', marginBottom: space[4] },
-  heroText: { fontSize: fontSize.bodyMd, color: colors.fgSecondary, marginTop: space[2] },
+  statusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space[3],
+    paddingHorizontal: space[4],
+    paddingVertical: space[2],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  heroText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.fgSecondary },
   liveHint: {
     fontSize: fontSize.bodySm,
     color: colors.fgMuted,

@@ -28,14 +28,24 @@ type Props = {
  * mascota: si en el futuro se adopta Rive (docs/tero/TERO_PHASE2.md §Rive),
  * cambia este interior, con este dibujo como respaldo, sin tocar a quien lo usa.
  *
- * Dibujo en dos capas de `react-native-svg`: el cuerpo (copete, cuerpo, rostro
- * oscuro, boca) y, encima, los ojos, que van aparte para poder parpadear con una
- * transformación nativa sin redibujar el SVG.
+ * Dibujo en capas de `react-native-svg`, cada una movible con el driver nativo:
+ *  - el cuerpo (copete, cuerpo, rostro oscuro y la boca en reposo);
+ *  - los ojos, en DOS capas que se cruzan con un fundido al cambiar de estado, y que juntas
+ *    parpadean y miran hacia donde corresponde;
+ *  - la boca al hablar, aparte para abrirse y cerrarse con una escala.
  */
 export function TeroAvatar({ size = 56, mood = 'idle', animated = true, pressed = false, reaction = null }: Props) {
   const allowed = useTeroMotionAllowed(animated);
-  const { bodyStyle, eyesStyle } = useTeroMotion({ size, mood, allowed, pressed, reaction });
+  const { bodyStyle, eyesStyle, eyeLayers, mouthStyle } = useTeroMotion({
+    size,
+    mood,
+    allowed,
+    pressed,
+    reaction,
+  });
   const dotSize = Math.max(3, Math.round(size * 0.07));
+  // Al hablar la boca vive en su propia capa animada; si no se puede animar, queda la fija.
+  const talking = mood === 'speaking' && allowed;
 
   return (
     <Animated.View
@@ -55,7 +65,7 @@ export function TeroAvatar({ size = 56, mood = 'idle', animated = true, pressed 
         <Path d="M50 22 C 56 6, 72 2, 82 8 C 70 10, 62 15, 58 24 Z" fill={teroColors.lavender} />
         <Circle cx={50} cy={56} r={38} fill="url(#teroBody)" />
         <Ellipse cx={50} cy={58} rx={27} ry={22} fill={teroColors.face} />
-        <Mouth mood={mood} />
+        {talking ? null : <Mouth mood={mood} />}
         <Circle cx={31} cy={66} r={3.5} fill={teroColors.cheek} opacity={0.55} />
         <Circle cx={69} cy={66} r={3.5} fill={teroColors.cheek} opacity={0.55} />
         {mood === 'listening' ? (
@@ -63,10 +73,24 @@ export function TeroAvatar({ size = 56, mood = 'idle', animated = true, pressed 
         ) : null}
       </Svg>
 
+      {talking ? (
+        <Animated.View style={[StyleSheet.absoluteFill, mouthStyle]}>
+          <Svg width={size} height={size} viewBox="0 0 100 100">
+            <Ellipse cx={50} cy={68} rx={6} ry={5.5} fill={teroColors.lavender} />
+          </Svg>
+        </Animated.View>
+      ) : null}
+
+      {/* Los ojos: dos capas siempre montadas que se cruzan con un fundido al cambiar de estado
+          (una se ve, la otra espera con la cara nueva); juntas parpadean y miran. */}
       <Animated.View style={[StyleSheet.absoluteFill, eyesStyle]}>
-        <Svg width={size} height={size} viewBox="0 0 100 100">
-          <Eyes mood={mood} />
-        </Svg>
+        {eyeLayers.map((layer) => (
+          <Animated.View key={layer.key} style={[StyleSheet.absoluteFill, layer.style]}>
+            <Svg width={size} height={size} viewBox="0 0 100 100">
+              <Eyes mood={layer.mood} />
+            </Svg>
+          </Animated.View>
+        ))}
       </Animated.View>
 
       {MOOD_MOTION[mood].thinkingDots ? (
