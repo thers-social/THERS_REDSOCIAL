@@ -34,7 +34,8 @@
         {
           "locationWhenInUsePermission": "THERS usa tu ubicación aproximada solo cuando pulsás «Usar mi ubicación», para mostrarte lugares cercanos. No se guarda."
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

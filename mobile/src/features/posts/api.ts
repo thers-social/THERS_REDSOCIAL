@@ -13,11 +13,15 @@ export async function fetchPosts(signal?: AbortSignal): Promise<Post[]> {
   return posts;
 }
 
-export async function createPost(content: string, isSensitive: boolean): Promise<Post> {
+export async function createPost(
+  content: string,
+  isSensitive: boolean,
+  placeId?: string,
+): Promise<Post> {
   const { post } = await request<{ post: Post }>('/posts', {
     method: 'POST',
     authenticated: true,
-    body: { content, is_sensitive: isSensitive },
+    body: { content, is_sensitive: isSensitive, ...(placeId ? { place_id: placeId } : {}) },
   });
   return post;
 }

@@ -29,6 +29,16 @@ export function roundPoint(point: LatLng): LatLng {
   return { lat: roundCoordinate(point.lat), lng: roundCoordinate(point.lng) };
 }
 
+/**
+ * Redondeo a 4 decimales (~11 m), SOLO para recalcular una ruta durante la navegación en vivo
+ * (ADR-040 §30): con 110 m la ruta nueva saldría de otra calle. El servidor lo vuelve a redondear
+ * y solo lo acepta con `precision: "high"`.
+ */
+export function roundPointFine(point: LatLng): LatLng {
+  const fine = (value: number) => Math.round(value * 10000) / 10000;
+  return { lat: fine(point.lat), lng: fine(point.lng) };
+}
+
 export function isValidPoint(point: LatLng | null | undefined): point is LatLng {
   return (
     !!point &&

@@ -37,7 +37,7 @@ export function unblockUser(userId: string): Promise<unknown> {
 
 // --- Reportes ---------------------------------------------------------------
 
-export type ReportTargetType = 'post' | 'comment' | 'message' | 'user';
+export type ReportTargetType = 'post' | 'comment' | 'message' | 'user' | 'review';
 
 /** Mismos motivos que `REASONS` del backend (`domain/reports/kinds.py`). */
 export const REPORT_REASONS = [

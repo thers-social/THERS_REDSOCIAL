@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
-import { fetchCategories } from '@features/places/api';
+import { fetchCategories, fetchManagedPlaces } from '@features/places/api';
 import { CategoryChips } from '@features/places/CategoryChips';
 import { DEFAULT_CENTER, DEFAULT_RADIUS_METERS, IS_DEV_MAP_STYLE } from '@features/places/mapConfig';
 import { PlaceCard } from '@features/places/PlaceCard';
@@ -58,11 +58,38 @@ export default function Places() {
     setFocus({ ...geo.point, key: `geo-${geo.point.lat}-${geo.point.lng}` });
   }, [geo.point]);
 
+  // «Mis negocios» solo aparece si la persona gestiona algún lugar (ADR-040 fase 6).
+  const [manages, setManages] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchManagedPlaces(controller.signal)
+      .then((places) => setManages(places.length > 0))
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
   const open = (id: string) => router.push({ pathname: '/places/[id]', params: { id } });
   const notice = locationNotice(geo.status);
 
   return (
-    <Screen title="Lugares" back scroll={false} withBottomInset={false}>
+    <Screen
+      title="Lugares"
+      back
+      scroll={false}
+      withBottomInset={false}
+      headerRight={
+        manages ? (
+          <Pressable
+            onPress={() => router.push('/places/manage')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Mis negocios"
+          >
+            <Text style={styles.manageLink}>Mis negocios</Text>
+          </Pressable>
+        ) : undefined
+      }
+    >
       <View style={styles.controls}>
         <View style={styles.searchRow}>
           <View style={styles.inputBox}>
@@ -178,6 +205,7 @@ export default function Places() {
 }
 
 const styles = themedStyles(() => ({
+  manageLink: { fontSize: fontSize.labelLg, fontWeight: '700', color: colors.brandText },
   controls: { gap: space[2], paddingHorizontal: space[4], paddingBottom: space[2] },
   searchRow: { flexDirection: 'row', gap: space[2], alignItems: 'center' },
   inputBox: {

@@ -1,3 +1,5 @@
+import type { SharedPlace } from '@features/places/types';
+
 /**
  * Tipos del contrato de publicaciones y comentarios.
  *
@@ -35,6 +37,8 @@ export type Post = {
   likes_count: number;
   liked_by_me: boolean;
   comments_count: number;
+  /** Lugar asociado (ADR-040 fase 4d); `null` o ausente si la publicación no lleva uno. */
+  place?: SharedPlace | null;
 };
 
 export type CommentAuthor = {

@@ -47,9 +47,20 @@ describe('privacidad: coordenadas redondeadas', () => {
     assert.ok(haversineMeters(exact, roundPoint(exact)) < 80);
   });
 
-  it('el cliente HTTP redondea ANTES de enviar (nearby y search)', () => {
+  it('el cliente HTTP redondea ANTES de enviar (nearby, search y ruta)', () => {
     const api = code('src/features/places/api.ts');
-    assert.equal(api.match(/roundPoint\(/g).length, 2);
+    assert.equal(api.match(/roundPoint\(/g).length, 3);
+    // Fase 13: la ruta manda la ubicación en el CUERPO (no en la URL) y ya redondeada.
+    const from = api.indexOf('export async function fetchRoute');
+    // Solo el cuerpo de `fetchRoute`: lo que se declare después no tiene que ver con la ubicación.
+    const end = api.slice(from).search(/\r?\n\}\r?\n/);
+    assert.ok(end > 0, 'no se encontró el final de fetchRoute');
+    const route = api.slice(from, from + end);
+    // Normal: ~110 m. Solo al recalcular en la navegación en vivo (§30): ~11 m, y solo con la marca.
+    assert.match(route, /precision === 'high' \? roundPointFine\(from\) : roundPoint\(from\)/);
+    assert.match(route, /from_lat: rounded\.lat,\s+from_lng: rounded\.lng/);
+    assert.match(route, /precision === 'high' \? \{ precision \} : \{\}/);
+    assert.doesNotMatch(route, /from\.lat|from\.lng|withQuery/);
   });
 
   it('la ubicación no se guarda, no se rastrea y solo se pide por un botón', () => {
@@ -189,5 +200,30 @@ describe('integración', () => {
     const api = code('src/features/places/api.ts');
     const calls = api.match(/request(<[^>]*>)?\(/g).length;
     assert.equal(api.match(/authenticated: true/g).length, calls);
+  });
+});
+
+describe('reseñas (fase 4a)', () => {
+  it('el texto de las reseñas se pinta como <Text>, nunca como HTML', () => {
+    const reviews = code('src/features/places/PlaceReviews.tsx');
+    assert.doesNotMatch(reviews, /dangerouslySetInnerHTML|innerHTML|WebView/);
+  });
+
+  it('el cliente HTTP usa los endpoints del contrato y va autenticado', () => {
+    const api = code('src/features/places/api.ts');
+    assert.match(api, /`\/places\/\$\{placeId\}\/reviews`/);
+    assert.match(api, /method: 'PUT'/);
+    assert.match(api, /`\/places\/\$\{placeId\}\/review`/);
+  });
+
+  it('la app no recalcula el promedio: lo trae el servidor', () => {
+    const hook = code('src/features/places/usePlaceReviews.ts');
+    assert.doesNotMatch(hook, /\.reduce\(|\/ *reviews\.length/);
+  });
+
+  it('el formulario exige una calificación y la ficha lo incluye', () => {
+    const reviews = code('src/features/places/PlaceReviews.tsx');
+    assert.match(reviews, /disabled=\{!rating\}/);
+    assert.match(code('app/places/[id].tsx'), /<PlaceReviews placeId=\{place\.id\}/);
   });
 });

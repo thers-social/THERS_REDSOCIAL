@@ -1,8 +1,16 @@
-import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, Text, View } from 'react-native';
 
 import { savePlace, unsavePlace } from '@features/places/api';
+import { PlacePlans } from '@features/places/PlacePlans';
+import { PlacePulse } from '@features/places/PlacePulse';
+import { PlacePosts } from '@features/places/PlacePosts';
+import { PlaceQuote } from '@features/places/PlaceQuote';
+import { PlaceReservations } from '@features/places/PlaceReservations';
+import { PlaceRoute } from '@features/places/PlaceRoute';
+import { PlaceReviews } from '@features/places/PlaceReviews';
+import { trackPlaceVisit } from '@features/places/placeVisits';
 import { ReportPlaceModal } from '@features/places/ReportPlaceModal';
 import { usePlaceDetail } from '@features/places/usePlaceDetail';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
@@ -19,14 +27,21 @@ function safeWebsite(url: string | null): string | null {
   return url && /^https?:\/\//i.test(url) ? url : null;
 }
 
-/** Ficha de un lugar: solo muestra lo que el backend respalda (nada de reseñas ni horarios). */
+/** Ficha de un lugar: solo muestra lo que el backend respalda (reseñas reales; nada de horarios). */
 export default function PlaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const detail = usePlaceDetail(id);
   const [saving, setSaving] = useState(false);
   const [reporting, setReporting] = useState(false);
 
   const place = detail.place;
+  const placeId = place?.id;
+
+  // Visita anónima (ADR-040 §33): una vez por lugar y sesión de la app. No guarda quién.
+  useEffect(() => {
+    if (placeId) trackPlaceVisit(placeId, 'view');
+  }, [placeId]);
 
   async function toggleSaved() {
     if (!place || saving) return;
@@ -94,6 +109,7 @@ export default function PlaceDetailScreen() {
               : ''}
           </Text>
         ) : null}
+        <PlacePulse placeId={place.id} />
       </View>
 
       <View style={styles.actions}>
@@ -116,17 +132,44 @@ export default function PlaceDetailScreen() {
           <Row
             icon="phone"
             text={place.phone}
-            onPress={() => void Linking.openURL(`tel:${place.phone?.replace(/[^0-9+]/g, '')}`)}
+            onPress={() => {
+              trackPlaceVisit(place.id, 'phone');
+              void Linking.openURL(`tel:${place.phone?.replace(/[^0-9+]/g, '')}`);
+            }}
           />
         ) : null}
         {website ? (
           <Row
             icon="link"
             text={website.replace(/^https?:\/\//i, '')}
-            onPress={() => void Linking.openURL(website)}
+            onPress={() => {
+              trackPlaceVisit(place.id, 'website');
+              void Linking.openURL(website);
+            }}
           />
         ) : null}
       </View>
+
+      {place.managed_by_me ? (
+        <Button
+          label="Administrar mi negocio"
+          variant="secondary"
+          onPress={() => router.push({ pathname: '/places/manage/[id]', params: { id: place.id } })}
+          style={styles.manage}
+        />
+      ) : null}
+
+      <PlaceRoute place={place} />
+
+      <PlaceReservations placeId={place.id} accepts={!!place.accepts_reservations} />
+
+      <PlaceQuote placeId={place.id} />
+
+      <PlacePlans placeId={place.id} />
+
+      <PlacePosts placeId={place.id} />
+
+      <PlaceReviews placeId={place.id} />
 
       <ReportPlaceModal
         visible={reporting}
@@ -169,6 +212,7 @@ const styles = themedStyles(() => ({
   verified: { fontSize: fontSize.labelLg, fontWeight: '700', color: colors.successFg },
   actions: { flexDirection: 'row', gap: space[2], marginBottom: space[4] },
   flex: { flex: 1 },
+  manage: { marginTop: space[4] },
   description: { fontSize: fontSize.bodyMd, color: colors.fg, lineHeight: 22, marginBottom: space[4] },
   rows: { gap: space[3] },
   row: {

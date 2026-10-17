@@ -8,6 +8,7 @@ import {
   markNotificationRead,
 } from '@features/notifications/api';
 import type { AppNotification } from '@features/notifications/api';
+import { placeNoticeTarget } from '@features/notifications/describe';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
@@ -59,9 +60,13 @@ export default function Notifications() {
       setItems((current) => current?.map((n) => (n.id === item.id ? { ...n, read: true } : n)) ?? current);
       markNotificationRead(item.id).catch(() => undefined);
     }
-    if (item.post_id) router.push({ pathname: '/post/[id]', params: { id: item.post_id } });
+    const placeTarget = placeNoticeTarget(item);
+    if (placeTarget) router.push(placeTarget);
+    else if (item.post_id) router.push({ pathname: '/post/[id]', params: { id: item.post_id } });
   }
 
+  // Los avisos de Places se muestran con el nombre del lugar; los demás, con quien actuó.
+  const labelOf = (n: AppNotification) => n.actor?.name ?? n.place?.name ?? 'THERS';
   const unread = items?.filter((n) => !n.read).length ?? 0;
 
   return (
@@ -107,12 +112,19 @@ export default function Notifications() {
             onPress={() => open(item)}
             style={({ pressed }) => [styles.row, !item.read && styles.rowUnread, pressed && styles.rowPressed]}
             accessibilityRole="button"
-            accessibilityLabel={`${item.actor.name} ${describeNotification(item.type)}${item.read ? '' : ', sin leer'}`}
+            accessibilityLabel={`${item.place?.name ?? labelOf(item)} ${describeNotification(item.type, item.detail)}${item.read ? '' : ', sin leer'}`}
           >
-            <Avatar name={item.actor.name} uri={item.actor.avatar_url} size={44} />
+            <Avatar
+              name={item.place && item.type.startsWith('place_') ? item.place.name : labelOf(item)}
+              uri={item.type.startsWith('place_') ? undefined : item.actor?.avatar_url}
+              size={44}
+            />
             <View style={styles.text}>
               <Text style={styles.body}>
-                <Text style={styles.actor}>{item.actor.name}</Text> {describeNotification(item.type)}
+                <Text style={styles.actor}>
+                  {item.type.startsWith('place_') ? (item.place?.name ?? 'Un lugar') : labelOf(item)}
+                </Text>{' '}
+                {describeNotification(item.type, item.detail)}
               </Text>
               <Text style={styles.time}>{formatRelativeTime(item.created_at)}</Text>
             </View>
