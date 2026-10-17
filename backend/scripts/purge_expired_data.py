@@ -18,9 +18,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app  # noqa: E402
 from app.application.retention.purge_use_case import purge_expired_data  # noqa: E402
+from app.application.stories.story_use_cases import purge_expired_stories  # noqa: E402
 from app.domain.retention.policy import SESSION_RETENTION_DAYS  # noqa: E402
 from app.infrastructure.persistence.repositories.retention_repository import (  # noqa: E402
     SQLAlchemyRetentionRepository,
+)
+from app.infrastructure.persistence.repositories.story_repository import (  # noqa: E402
+    SQLAlchemyStoryRepository,
 )
 
 
@@ -28,6 +32,10 @@ def main():
     app = create_app()
     with app.app_context():
         counts = purge_expired_data(SQLAlchemyRetentionRepository())
+        # Historias vencidas (ADR-042): filas y archivos. Aparte porque necesita el almacenamiento.
+        counts["stories"] = purge_expired_stories(
+            SQLAlchemyStoryRepository(), app.extensions["media_storage"]
+        )
     print(f"Plazo de conservación: {SESSION_RETENTION_DAYS} días. Filas borradas:")
     for table, count in counts.items():
         print(f"  {table}: {count}")

@@ -1,7 +1,8 @@
 # ADR-042 — Historias (contenido efímero de 24 horas)
 
-- **Estado:** **`BORRADOR — PROPUESTO`**. Sin ratificar. Hasta que el equipo lo apruebe (`HB-001`
-  §11–12) **no se crea ninguna tabla, endpoint ni pantalla**.
+- **Estado:** **`PROPUESTO` — aprobado por el propietario del proyecto el 2026-10-17 para su
+  implementación; pendiente de revisión del equipo** (`HB-001` §11–12). Backend implementado en la rama
+  `feature/stories` (§10); clientes pendientes.
 - **Fecha:** 2026-10-17
 - **Autor del borrador:** Claude Code, a pedido del propietario del proyecto.
 - **Relacionado:** `ADR-039-images-in-posts-and-messages.md` (imágenes y almacenamiento),
@@ -166,3 +167,19 @@ Si se aprueba: migración aditiva con `upgrade`/`downgrade`; pruebas contra Post
 crear, listar, vencer (con reloj controlado), bloqueo, cuenta privada, borrado y límite diario;
 documentación en `API_CONTRACT.md`; actualización de `DATABASE_ARCHITECTURE.md`, de la exportación
 (`ADR-028`) y de `media_keys` (`ADR-031`).
+
+## 10. Implementación (backend, 2026-10-17)
+
+Hecho en `feature/stories`: migración `d1e5b8f2a640` (`stories`, `story_views`), los seis endpoints
+de §3.2 (documentados en `API_CONTRACT.md` §4.37), límite de 20 por día (`STORY_CREATE`), purga en
+`scripts/purge_expired_data.py`, exportación (`ADR-028`) y recogida de archivos al eliminar la cuenta
+(`ADR-031`). 29 pruebas contra PostgreSQL real en `tests/test_stories.py`, y `upgrade`/`downgrade`
+verificados.
+
+Decisiones tomadas al implementar, que el equipo puede cambiar:
+- **D1:** bucket público (el existente). **D2:** solo seguidores aceptados. **D4:** 24 horas fijas.
+  **D5:** sin video.
+- `GET /api/users/<id>/stories` devuelve lista vacía, no 404, para no revelar cuentas privadas.
+- Ver la propia historia no cuenta como vista.
+- **No se hizo (D3):** el tipo de reporte `story` en `ADR-032`.
+- **Todavía sin clientes:** ni la web ni la app muestran historias.

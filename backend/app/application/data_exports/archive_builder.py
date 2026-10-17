@@ -16,6 +16,8 @@ Generada el {generated_at} para @{username}.
 Contenido (un archivo JSON por sección):
   profile.json         Tu cuenta, tus preferencias de privacidad y seguridad.
   posts.json           Tus publicaciones.
+  stories.json         Tus historias (con cuántas personas las vieron).
+  story_views.json     Historias de otras personas que viste, con la fecha.
   comments.json        Tus comentarios.
   likes.json           Publicaciones a las que diste like.
   following.json       Cuentas que seguís, con el estado de cada solicitud.
