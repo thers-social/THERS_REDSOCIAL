@@ -8,6 +8,7 @@ import { TeroFloating } from '@features/tero/components/TeroFloating';
 import { colors, fontSize, fonts } from '@shared/design/tokens';
 import { Icon } from '@shared/ui/Icon';
 import { useUnreadCount } from '@features/messages/useUnreadCount';
+import { useLocalAlerts } from '@features/notifications/useLocalAlerts';
 import { Avatar } from '@shared/ui/Avatar';
 import { TRayoButton } from '@shared/ui/TRayoButton';
 
@@ -25,6 +26,8 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const unread = useUnreadCount(Boolean(user));
+  // Avisos locales mientras la app está abierta (no son push; ver el hook).
+  useLocalAlerts(Boolean(user));
 
   if (isRestoring) {
     return (

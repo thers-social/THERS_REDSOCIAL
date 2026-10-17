@@ -37,6 +37,12 @@
       ],
       "expo-sharing",
       [
+        "expo-notifications",
+        {
+          "color": "#7c3aed"
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "THERS accede a tus fotos solo para que elijas la imagen de una historia."

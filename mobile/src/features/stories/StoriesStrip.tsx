@@ -50,11 +50,7 @@ export function StoriesStrip({ me, canPublish }: Props) {
       Alert.alert('Completa tu perfil', 'Necesitas completar tu perfil, incluida tu fecha de nacimiento, para publicar.');
       return;
     }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permiso necesario', 'Permite el acceso a tus fotos para elegir la imagen de una historia.');
-      return;
-    }
+    // Sin pedir permiso de galería: el selector del sistema de Android deja elegir una imagen sin él.
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.85,

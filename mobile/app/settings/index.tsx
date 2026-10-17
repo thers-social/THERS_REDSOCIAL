@@ -31,7 +31,12 @@ const SECTIONS: { title: string; rows: Row[] }[] = [
       { label: 'Guardado', description: 'Colecciones de publicaciones.', icon: 'bookmark' },
       { label: 'Archivo', description: 'Historias pasadas y publicaciones archivadas.', icon: 'archive' },
       { label: 'Tu actividad', description: 'Tiempo en la app e interacciones.', icon: 'activity' },
-      { label: 'Notificaciones', description: 'Push, correo y frecuencia.', icon: 'bell' },
+      {
+        label: 'Notificaciones y permisos',
+        description: 'Avisos en este dispositivo y permisos de notificaciones y ubicación.',
+        icon: 'bell',
+        route: '/settings/notifications',
+      },
       { label: 'Administración del tiempo', description: 'Recordatorios de descanso y límites.', icon: 'clock' },
     ],
   },
