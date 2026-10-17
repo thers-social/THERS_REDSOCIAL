@@ -9,6 +9,7 @@ import { themedStyles } from '@shared/design/theme';
 import { Icon } from '@shared/ui/Icon';
 import type { IconName } from '@shared/ui/Icon';
 
+import { TERO_LIVE } from '../config';
 import { TeroAvatar } from './TeroAvatar';
 
 type Props = {
@@ -101,7 +102,9 @@ export function TeroQuickPanel({ visible, animated, onClose }: Props) {
             <Text style={styles.title} accessibilityRole="header">
               Hola, soy Tero
             </Text>
-            <Text style={styles.subtitle}>¿En qué te ayudo? · Vista previa</Text>
+            <Text style={styles.subtitle}>
+              {TERO_LIVE ? '¿En qué te ayudo?' : '¿En qué te ayudo? · Vista previa'}
+            </Text>
           </View>
         </View>
         <View style={styles.grid}>

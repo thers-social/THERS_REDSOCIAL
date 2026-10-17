@@ -8,6 +8,7 @@ import {
   EXPIRED_NOTE,
   MAX_HISTORY_TURNS,
   canAct,
+  cardOutcomeNote,
   cardStateFromError,
   chatBody,
   chatErrorMessage,
@@ -18,6 +19,7 @@ import {
   isRetryable,
   parseCards,
   parseChatResponse,
+  plainText,
 } from '../src/features/tero/lib/teroCards.ts';
 
 const NOW = Date.parse('2026-10-17T12:00:00.000Z');
@@ -89,6 +91,55 @@ describe('historial que se envía al servidor', () => {
       historyForRequest(messages, 'm:c').map((t) => t.content),
       ['a', 'b'],
     );
+  });
+});
+
+describe('el historial cuenta cómo terminó cada tarjeta', () => {
+  const future = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const withCard = (id, summary = 'Seguir a @beto') => ({
+    ...msg('tero', 'Preparé la solicitud. Todavía no está hecha.'),
+    cards: [{ id, kind: 'follow_user', summary, expiresAt: future }],
+  });
+
+  it('una tarjeta confirmada se le dice al modelo como YA HECHA', () => {
+    const messages = [msg('user', 'sigue a beto'), withCard('c1'), msg('user', 'actual')];
+    const history = historyForRequest(messages, 'm:actual', { c1: { status: 'confirmed' } });
+    assert.ok(history[1].content.includes('Todavía no está hecha.'));
+    assert.ok(
+      history[1].content.includes('[Tarjeta «Seguir a @beto»: la persona la confirmó y YA SE HIZO]'),
+    );
+  });
+
+  it('cada resultado tiene su propia frase', () => {
+    const c = { id: 'c1', kind: 'follow_user', summary: 'Seguir a @beto', expiresAt: future };
+    assert.match(cardOutcomeNote(c, { status: 'cancelled' }), /canceló; no se hizo nada/);
+    assert.match(cardOutcomeNote(c, { status: 'expired' }), /venció sin confirmarse/);
+    assert.match(cardOutcomeNote(c, { status: 'failed' }), /no se pudo completar/);
+    assert.match(cardOutcomeNote(c, { status: 'pending' }), /todavía no la confirma/);
+  });
+
+  it('sin estado conocido, una tarjeta vigente es pendiente y una vencida, vencida', () => {
+    const live = { id: 'a', kind: 'follow_user', summary: 's', expiresAt: future };
+    const dead = { ...live, expiresAt: '2020-01-01T00:00:00.000Z' };
+    assert.match(cardOutcomeNote(live, undefined), /pendiente/);
+    assert.match(cardOutcomeNote(dead, undefined), /venció/);
+  });
+
+  it('un mensaje de Tero sin tarjetas queda exactamente igual', () => {
+    const messages = [msg('user', 'hola'), msg('tero', 'respuesta'), msg('user', 'actual')];
+    assert.equal(historyForRequest(messages, 'm:actual', {})[1].content, 'respuesta');
+  });
+
+  it('con una respuesta larguísima y varias tarjetas el turno sigue cabiendo en el tope', () => {
+    const long = { ...msg('tero', 'x'.repeat(3000)), cards: [
+      { id: 'a', kind: 'update_profile', summary: 'y'.repeat(300), expiresAt: future },
+      { id: 'b', kind: 'follow_user', summary: 'Seguir a @beto', expiresAt: future },
+    ] };
+    const history = historyForRequest([msg('user', 'q'), long, msg('user', 'actual')], 'm:actual', { a: { status: 'confirmed' } });
+    assert.ok(history[1].content.length <= 1000);
+    // Las líneas de resultado se conservan completas: recorta el texto, no el desenlace.
+    assert.ok(history[1].content.includes('YA SE HIZO]'));
+    assert.ok(history[1].content.includes('[Tarjeta «Seguir a @beto»'));
   });
 });
 
@@ -270,6 +321,32 @@ describe('errores del chat', () => {
     assert.equal(isRetryable({ status: 503 }), true);
     assert.equal(isRetryable({ status: 429 }), true);
     assert.equal(isRetryable({ status: 400 }), false);
+  });
+});
+
+describe('texto plano: la app no interpreta Markdown', () => {
+  it('quita las negritas, los títulos y el código en línea', () => {
+    assert.equal(plainText('Sigues a **2 personas**.'), 'Sigues a 2 personas.');
+    assert.equal(plainText('## Título\ntexto'), 'Título\ntexto');
+    assert.equal(plainText('usa `Ajustes`'), 'usa Ajustes');
+    assert.equal(plainText('__fuerte__'), 'fuerte');
+  });
+
+  it('convierte las viñetas con asterisco y deja las de guion como están', () => {
+    assert.equal(plainText('* uno\n* dos'), '- uno\n- dos');
+    assert.equal(plainText('- uno\n- dos'), '- uno\n- dos');
+  });
+
+  it('no toca texto normal ni símbolos sueltos', () => {
+    const plain = 'Cuesta 3 * 4 = 12 y el correo es ana@example.com. ¿Algo más?';
+    assert.equal(plainText(plain), plain);
+  });
+
+  it('la respuesta del servidor ya llega sin formato', () => {
+    assert.equal(
+      parseChatResponse({ reply: 'He preparado la solicitud para seguir a **Carla** (@carla).', source: 'ai' }).text,
+      'He preparado la solicitud para seguir a Carla (@carla).',
+    );
   });
 });
 

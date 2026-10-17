@@ -14,6 +14,7 @@ import type {
   TeroActionCard,
   TeroActionKind,
   TeroCardState,
+  TeroCardStatus,
   TeroContext,
   TeroMessage,
   TeroMood,
@@ -32,14 +33,46 @@ const SOURCES: readonly TeroReplySource[] = ['ai', 'disabled', 'budget', 'refuse
 
 export type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
+/** Qué le pasó a cada tarjeta, dicho para el modelo (no para la persona). */
+const CARD_OUTCOME: Record<TeroCardStatus, string> = {
+  pending: 'sigue pendiente: la persona todavía no la confirma',
+  confirming: 'la persona la está confirmando',
+  cancelling: 'la persona la está cancelando',
+  confirmed: 'la persona la confirmó y YA SE HIZO',
+  cancelled: 'la persona la canceló; no se hizo nada',
+  expired: 'venció sin confirmarse; no se hizo nada',
+  failed: 'se intentó pero no se pudo completar',
+  unavailable: 'ya no estaba disponible; no se hizo nada',
+};
+
+const MAX_NOTE_SUMMARY = 80;
+
+/**
+ * Línea que se añade al turno de Tero para que el servidor sepa cómo terminó cada tarjeta. Sin
+ * esto el modelo solo ve «todavía no está hecha» y, al cambiar de tema, vuelve a proponer o
+ * «corrige» una acción que la persona ya resolvió.
+ */
+export function cardOutcomeNote(card: TeroActionCard, state: TeroCardState | undefined): string {
+  const status = state?.status ?? (isCardExpired(card) ? 'expired' : 'pending');
+  const summary = card.summary.length > MAX_NOTE_SUMMARY ? `${card.summary.slice(0, MAX_NOTE_SUMMARY)}…` : card.summary;
+  return `[Tarjeta «${summary}»: ${CARD_OUTCOME[status]}]`;
+}
+
 /**
  * Conversación previa para el servidor, que NO guarda historial (ADR-041 §5.2): lo manda el
  * cliente en cada petición. Solo cuentan los mensajes entregados anteriores a `beforeId`; los de
  * ejemplo, los que fallaron y los que siguen en camino no. Se recorta cada turno al tope del
  * servidor y se descartan los turnos iniciales de Tero, porque la lista debe empezar con la
  * persona.
+ *
+ * Si un mensaje de Tero llevó tarjetas, su turno termina con una línea por tarjeta que dice cómo
+ * quedó (`cardStates`), y el texto se recorta para dejarle sitio.
  */
-export function historyForRequest(messages: TeroMessage[], beforeId: string): ChatTurn[] {
+export function historyForRequest(
+  messages: TeroMessage[],
+  beforeId: string,
+  cardStates: Record<string, TeroCardState> = {},
+): ChatTurn[] {
   const index = messages.findIndex((message) => message.id === beforeId);
   const earlier = index === -1 ? messages : messages.slice(0, index);
 
@@ -47,7 +80,14 @@ export function historyForRequest(messages: TeroMessage[], beforeId: string): Ch
   for (const message of earlier) {
     if (message.isMock) continue;
     if (message.role === 'user' && message.status !== 'sent') continue;
-    const content = message.text.trim().slice(0, MAX_TURN_LENGTH);
+
+    let content = message.text.trim();
+    if (message.role === 'tero' && message.cards?.length) {
+      const notes = message.cards.map((card) => cardOutcomeNote(card, cardStates[card.id])).join('\n');
+      const room = Math.max(0, MAX_TURN_LENGTH - notes.length - 1);
+      content = `${content.slice(0, room).trimEnd()}\n${notes}`.trim();
+    }
+    content = content.slice(0, MAX_TURN_LENGTH);
     if (!content) continue;
     turns.push({ role: message.role === 'user' ? 'user' : 'assistant', content });
   }
@@ -94,6 +134,20 @@ export function parseCards(raw: unknown): TeroActionCard[] {
   return cards;
 }
 
+/**
+ * Quita el formato Markdown que el modelo a veces escribe aunque se le pida texto plano: la app
+ * muestra el texto tal cual y se verían los asteriscos. Solo toca lo que no cambia el sentido
+ * (negritas, títulos, código en línea, viñetas con `*`).
+ */
+export function plainText(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/gs, '$1')
+    .replace(/__(.+?)__/gs, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^(\s*)\*\s+/gm, '$1- ');
+}
+
 function moodFor(source: TeroReplySource): TeroMood {
   if (source === 'disabled' || source === 'budget') return 'sleeping';
   return 'speaking';
@@ -108,7 +162,7 @@ export function parseChatResponse(payload: unknown): TeroReply {
     ? (payload.source as TeroReplySource)
     : 'ai';
   return {
-    text: payload.reply,
+    text: plainText(payload.reply),
     mood: moodFor(source),
     isMock: false,
     source,

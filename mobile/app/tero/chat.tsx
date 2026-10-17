@@ -84,6 +84,9 @@ function TeroChatContent() {
   // Siempre la lista más reciente, para armar el historial sin depender de un cierre viejo.
   const messagesRef = useRef<TeroMessage[]>([]);
   messagesRef.current = messages;
+  // Igual para las tarjetas: el servidor debe saber cómo terminó cada una (confirmada, cancelada...).
+  const cardStatesRef = useRef<Record<string, TeroCardState>>({});
+  cardStatesRef.current = cardStates;
 
   const listRef = useRef<FlatList<TeroMessage>>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -101,6 +104,15 @@ function TeroChatContent() {
     return () => clearTimeout(timer);
   }, [replyMood]);
 
+  // Una tarjeta con botones mide más que un mensaje y la lista aún no conoce su altura cuando
+  // llega: sin este segundo desplazamiento, Confirmar y Cancelar quedan tapados por el campo de
+  // texto. Se repite al cambiar una tarjeta de estado (su texto cambia de alto).
+  useEffect(() => {
+    if (!messages.length) return;
+    const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: animate }), 150);
+    return () => clearTimeout(timer);
+  }, [messages.length, cardStates, animate]);
+
   /** Envía `message` (nuevo o reintento) y espera la respuesta. */
   const deliver = useCallback(
     async (message: TeroMessage, context: TeroContext) => {
@@ -115,7 +127,7 @@ function TeroChatContent() {
       try {
         const reply = await teroClient.send(message.text, context, {
           postContent,
-          history: historyForRequest(messagesRef.current, message.id),
+          history: historyForRequest(messagesRef.current, message.id, cardStatesRef.current),
           signal: controller.signal,
         });
         const cards = reply.cards ?? [];
