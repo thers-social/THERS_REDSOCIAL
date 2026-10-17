@@ -4,13 +4,15 @@
 |---|---|
 | Documento | `docs/architecture/DATABASE_ARCHITECTURE.md` |
 | Identificador propuesto | `DB-001` (sigue el patrón `HB-001`/`ARC-001`/`DS-001`/`WF-001`/`PV-001`/`FAS-001`) — **pendiente de ratificación formal** |
-| Versión | 0.40 |
+| Versión | 0.41 |
 | Estado | **Borrador / Contrato técnico — pendiente de aprobación del equipo** |
 | Depende de | `HB-001` (organización, gobernanza, git flow, seguridad), `REPOSITORY_STRUCTURE.md` (ubicación del backend y carpeta futura `database/`) |
 | Motivo | El `CLAUDE.md` maestro (§4, §14) identificó que la arquitectura de Base de Datos no estaba formalmente documentada |
 | Idioma | Español (documentación oficial), identificadores/código en inglés |
 
 > ⚠️ **Nota de alcance y honestidad de fuentes.** Este documento es un **contrato técnico previo a la implementación**, no una descripción de un esquema ya existente. Al momento de escribirlo (v0.1), el backend **no tenía base de datos, ni ORM, ni driver de PostgreSQL instalado**: la autenticación funcionaba contra credenciales hardcodeadas (ver §4). Todo lo que aquí se define como "decidido" se limita a lo que la documentación oficial ya respalda o a lo que el estado real del código justifica de forma evidente. Todo lo demás está marcado explícitamente como **PENDIENTE DE APROBACIÓN** (§14). No se inventan entidades, columnas, índices ni políticas que el proyecto no necesite hoy.
+>
+> **v0.41 — Tero, gasto mensual de IA (`ADR-041` §8.2):** una migración (`b9e3d7a1c548`) y una tabla nueva, `tero_usage`: un contador **global** por mes UTC (`period` `YYYY-MM`, PK) con `input_tokens`, `output_tokens`, `cost_micro_usd` y `updated_at`. **Sin `user_id` a propósito**: solo sirve para cortar el gasto al llegar al tope y no hay nada que exportar ni borrar por persona (`ADR-028`/`ADR-031`). Dos `CHECK`: formato del periodo y valores no negativos. Se suma con un solo `INSERT ... ON CONFLICT DO UPDATE`. Verificada con `flask db upgrade` contra PostgreSQL 16 real sobre `thers_test`.
 >
 > **v0.21 — rate limiting (`ADR-027-rate-limiting.md`):** una migración (`b6e3a9d4f270`) y una tabla nueva, `rate_limit_buckets` (§5.15). Cierra el ítem 8 de `API_CONTRACT.md` §9, que v0.24 de aquel documento había registrado como pendiente tras descubrir que en `POST /api/2fa/verify` la ausencia de límite era explotable.
 >

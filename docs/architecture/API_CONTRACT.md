@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.56 (Propuesta) |
+| Versión | 0.57 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -43,6 +43,8 @@
 > **v0.16 — verificación obligatoria de email al registrarse (`ADR-011-mandatory-email-verification.md`, reemplaza `send-verification-email`/`verify-email` de v0.14):** `POST /api/register` (§4.1) sigue devolviendo `201` con el usuario creado, pero ahora `email_verified` nace en `false` y de inmediato se envía un código de 6 dígitos — la cuenta no puede iniciar sesión todavía. Registrar de nuevo con un email que existe pero nunca se verificó **actualiza esa misma cuenta** (incluida la contraseña) y reenvía un código, en vez de un `409` — el `409` real solo ocurre si el email ya pertenece a una cuenta verificada. `POST /api/login` (§4.1) gana un caso nuevo: credenciales correctas pero cuenta sin verificar responde `403` con `{"msg": "...", "email_verified": false}`, sin emitir ningún JWT. Se agregan `POST /api/verify-registration-code` y `POST /api/resend-registration-code` (§4.8) — mismo patrón que `verify-reset-code`/`forgot-password` (`ADR-010`): 6 dígitos, hash scrypt, máximo 5 intentos, cooldown de 60s, índice único parcial (a lo sumo un código activo por usuario). Un código de registro nunca sirve para verificar una recuperación de contraseña ni viceversa — viven en tablas/repositorios completamente separados, no un discriminador de tipo sobre una tabla compartida. **Se retiran** `POST /api/send-verification-email` y `POST /api/verify-email` (`ADR-009`, flujo de enlace) — con el login ya bloqueado para cuentas sin verificar, una cuenta sin verificar nunca puede obtener el JWT que el primero exigía, dejando ambos permanentemente inalcanzables. El Frontend queda conectado de punta a punta: `Register.jsx` navega a la nueva pantalla `VerifyRegistrationCode.jsx` en vez de a `/login`; `Login.jsx` distingue el `403` de cuenta sin verificar y redirige a la misma pantalla. Verificado con 36 pruebas nuevas (`test_registration.py`, reemplaza a `test_email_verification.py`) + la suite completa (212/212, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`).
 >
 > **v0.14 — recuperación de contraseña y verificación de email vía Resend (`ADR-009-password-reset-and-email-verification.md`):** se agregan `POST /api/forgot-password`, `POST /api/reset-password`, `POST /api/send-verification-email` y `POST /api/verify-email` (§4.8) — séptima y octava entidad del alcance objetivo del producto (`DATABASE_ARCHITECTURE.md` §4.B, candidata "Verificación de correo, Recuperación de contraseña") en pasar a implementadas. Rutas planas bajo `/api`, sin prefijo `/auth/` — mismo criterio que `/api/register`/`/api/login`. `forgot-password` nunca revela si un email está registrado (mismo mensaje `200` siempre); `reset-password`/`verify-email` usan tokens de un solo uso, expirables, con hash SHA-256 persistido (nunca el valor crudo). `GET`/`PATCH /api/users/me` y `register`/`login` se extienden de forma aditiva con `email_verified` (§4.2, §5) — no rompe el contrato existente. Nuevo servicio de correo centralizado (Resend, SDK oficial) detrás de un `EmailSender` abstracto — ningún endpoint llama a Resend directamente. Verificado con 30 pruebas nuevas + la suite completa (175/175, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`), más una prueba manual end-to-end contra el backend real (los cuatro endpoints, con `NullEmailSender` en desarrollo sin `RESEND_API_KEY`).
+>
+> **v0.57 — Tero, fase 4, chat con IA (`ADR-041`, **ACEPTADO**):** nuevo `POST /api/tero/chat` (§4.37). Exige sesión; apagado por defecto (`TERO_ENABLED`). Variables de entorno nuevas, solo del servidor: `TERO_ENABLED`, `TERO_AI_ENABLED`, `ANTHROPIC_API_KEY`, `TERO_MODEL`, `TERO_AI_TIMEOUT_SECONDS`, `TERO_MONTHLY_BUDGET_USD`, `TERO_PRICE_INPUT_USD_PER_MTOK` y `TERO_PRICE_OUTPUT_USD_PER_MTOK`. Una migración (`b9e3d7a1c548`, tabla `tero_usage`).
 >
 > **v0.56 — THERS Places, fase 16 (parte 2), visitas anónimas (`ADR-040` §33, **PROPUESTO**):** nuevo `POST /api/places/<id>/visits` (§4.36), público, que suma 1 a un contador anónimo por lugar, día local y evento (`view`, `phone`, `website`, `directions`) y responde `204` sin cuerpo. `GET /api/places/<id>/manage/analytics` (§4.34) añade `totals.visits`, `views` en la serie y la clave `visits` en `hidden`. Migración `c9d4a1e7b362` (`place_visit_counts`, sin `user_id`).
 >
@@ -1973,6 +1975,22 @@ Para las cuentas que **ya existían** y no aceptaron nada al registrarse: se les
 - **Opcional por defecto.** Si viene `true`, se guardan `terms_accepted_at` y `terms_version` **después** de crear la cuenta. Solo cuenta el booleano `true`.
 - **Con `TERMS_ACCEPTANCE_REQUIRED` activado** (variable de entorno, **apagada por defecto**), `POST /api/register` responde `400` con `terms_required: true` si falta, y `POST /api/auth/google` hace lo mismo **solo cuando la cuenta de Google es nueva**. Iniciar sesión con una cuenta de Google que ya existe no la necesita. Se activa cuando el Frontend y la app móvil ya envíen la casilla (`ADR-032` fases 3 y 4); activarla antes dejaría sin poder registrarse a quien use un cliente que todavía no la envía.
 - **Versión vigente:** variable `TERMS_VERSION` (una fecha de publicación; **placeholder** hasta que el equipo publique los términos definitivos). Cambiarla hace que `terms_accepted` vuelva a `false` en todas las cuentas y a todo el mundo se le vuelva a pedir aceptar.
+
+---
+
+## 4.37 Tero — chat con IA (`ADR-041`, fase 4) — v0.57
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/tero/chat` | Exige sesión (JWT). Cuerpo `{"message": str, "history"?: [{"role": "user"|"assistant", "content": str}], "context"?: {"screen"?: str, "entity_type"?: "post"|"profile"|"place", "entity_id"?: str}}`. Respuesta `200` `{"reply": str, "source": "ai"|"disabled"|"budget"|"refused"}`. |
+
+**`source`** dice de dónde salió el texto: `ai` es una respuesta del modelo; `disabled` (IA apagada, `TERO_AI_ENABLED=false`), `budget` (se alcanzó el tope mensual de gasto) y `refused` (el modelo se negó) son textos fijos del sistema, con estado `200`.
+
+**Errores.** `400` con `{"msg"}` si el cuerpo no es un objeto JSON, `message` está vacío o supera 1000 caracteres, `history` tiene más de 10 mensajes, un `role` inválido o no empieza con `user`, o `context` tiene un campo mal formado. `401` sin sesión. `429` con `Retry-After` al pasar de 30 mensajes por hora por cuenta (`policy.TERO_CHAT`). `503` con `{"msg"}` si el proveedor falla, vence el tiempo o falta la clave; y `503` con `{"msg", "code": "tero_disabled"}` si el módulo está apagado (`TERO_ENABLED=false`, que es el valor por defecto). Ningún error incluye el texto del proveedor, la clave ni la conversación.
+
+**Qué ve el modelo.** Solo el texto de `message` y de `history`. `context` se valida pero **no se envía**: en la fase 4 no hay herramientas y `entity_id` no es de confianza (`ADR-041` §5.1). El historial no se guarda en el servidor: lo manda el cliente en cada petición. Cada respuesta lleva `Cache-Control: no-store`.
+
+**Gasto.** Cada mensaje suma sus tokens y su costo estimado a `tero_usage` (un contador global por mes UTC, sin `user_id`). Al llegar a `TERO_MONTHLY_BUDGET_USD` (20 por defecto) responde con `source: "budget"` sin llamar al modelo. Los precios son configurables; los valores por defecto (USD 0,10 de entrada y 0,50 de salida por millón de tokens) coinciden con la página oficial de Anthropic para Haiku 5.5 (verificada el 2026-10-17).
 
 ---
 
