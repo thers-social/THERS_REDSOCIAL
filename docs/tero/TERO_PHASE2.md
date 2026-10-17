@@ -62,6 +62,32 @@ salvo el arrastre y el resorte de posición de la burbuja (Fase 1, `PanResponder
 **Rendimiento:** no se midió en el dispositivo (FPS, CPU, batería). El diseño evita animaciones
 infinitas: en reposo, la burbuja solo ejecuta un parpadeo cada 3–7 s y, tras 90 s, nada.
 
+## 4b. Más expresividad, por código (2026-10-17)
+
+Sin dependencias nuevas ni recompilar la parte nativa: lo que el driver nativo de `Animated` permite
+(`transform` y `opacity`). Lógica pura en `animation/expressions.ts`, probada en
+`mobile/tests/teroExpressions.test.mjs`; controlador en `useTeroMotion.ts`; dibujo en `TeroAvatar.tsx`.
+
+| Mejora | Cómo |
+|---|---|
+| **Boca que habla** | Capa propia que se abre y cierra con `scaleY` siguiendo sílabas de 90 a 170 ms (`mouthKeyframes`); tope de 6 s aunque el estado dure más |
+| **Cambio de cara suave** | Dos capas de ojos siempre montadas que se cruzan con fundido de 200 ms (una se ve, la otra recibe la cara nueva sin verse y se intercambian). Un diseño previo con una capa montada tarde dejaba un instante sin ojos: se vio en una captura y se corrigió |
+| **Mirada** | Al escuchar, los ojos bajan hacia el campo de texto; al pensar, barren de lado a lado 3 pasadas y se detienen (`lookFor`) |
+| **Respiración** | Escala sutil (2,5 %) con el mismo valor de la flotación: no añade animaciones |
+| **Celebrar** | Al confirmar una tarjeta: dos saltos, meneo y estado «feliz» (`celebrate`) |
+| **Encogerse** | Si una acción no se pudo completar: se encoge e inclina despacio, sin sacudidas (`droop`); cancelar o que venza no provoca reacción |
+
+En el chat, Tero queda **fijo arriba** (compacto) en vez de dentro de la lista, porque al desplazarse
+la conversación el avatar salía de pantalla y no se le veía hablar.
+
+Se mantienen las reglas de `TERO_PERSONALITY.md`: nada por iniciativa propia, todo se detiene con
+«Animaciones» apagado, «reducir movimiento» o la app en segundo plano.
+
+**Verificado en el moto z3** con series de capturas del avatar: ojos arriba y puntos al pensar, boca de
+tamaño distinto en cada cuadro al hablar, salto con ojos arqueados al confirmar y regreso suave a
+reposo. Las capturas son estáticas: **el movimiento real hay que juzgarlo a simple vista en el
+teléfono**; no se midieron FPS ni batería.
+
 ## 5. Propuesta de Rive (no implementada, requiere decisión)
 
 1. Recurso: un diseñador entrega `tero.riv` con artboard `Tero`, state machine `TeroStateMachine` y un
