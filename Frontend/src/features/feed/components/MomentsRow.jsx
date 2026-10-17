@@ -1,25 +1,45 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Icon from "@shared/components/Icon";
 import Avatar from "@shared/components/Avatar";
-import MomentViewer from "./MomentViewer";
-import { MOODS, mockMoments } from "../data/mockData";
+import Spinner from "@shared/components/Spinner";
+import StoryComposer from "./StoryComposer";
+import StoryViewer from "./StoryViewer";
+import { formatRelativeTime } from "../lib/formatRelativeTime";
+import { fetchStrip } from "../lib/storiesApi";
 
 /**
- * Momentos — sección 1 de REF-FEED-01.
+ * Momentos — sección 1 de REF-FEED-01, ahora con historias REALES (ADR-042).
  *
- * Composición de la referencia: cabecera «Momentos Activos» con
- * `auto_awesome_motion` y enlace «Ver todos», seguida de un carrusel
- * horizontal con snap. La primera tarjeta es la de creación propia (borde
- * discontinuo, avatar con insignia «+»), después las de otras personas.
+ * Composición de la referencia: cabecera «Momentos Activos» y un carrusel horizontal con snap.
+ * La primera tarjeta es la de creación propia (borde discontinuo, avatar con insignia «+»);
+ * después, las personas que tienen historias vigentes que puedes ver (`GET /api/stories`).
  *
  * Medidas literales del prototipo: tarjetas de 128×184px, radio 16px.
  *
- * DATOS: fixture (`data/mockData`). No existe endpoint de momentos; se rotula
- * como ejemplo en vez de presentarse como actividad real de la red
- * (archivo maestro §9.5).
+ * Una historia dura 24 horas y la ven quienes siguen a la persona (ADR-042 §2). Sin historias
+ * vigentes la fila muestra solo la tarjeta de creación y lo dice; no se inventa actividad.
  */
 export default function MomentsRow({ currentUser }) {
-  const [activeIndex, setActiveIndex] = useState(null);
+  const [status, setStatus] = useState("loading");
+  const [authors, setAuthors] = useState([]);
+  const [viewerIndex, setViewerIndex] = useState(null);
+  const [composing, setComposing] = useState(false);
+
+  const load = useCallback(async (signal) => {
+    try {
+      const list = await fetchStrip(signal);
+      setAuthors(list);
+      setStatus("ready");
+    } catch {
+      if (!signal?.aborted) setStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
 
   return (
     <section aria-label="Momentos" className="flex flex-col gap-2">
@@ -27,17 +47,18 @@ export default function MomentsRow({ currentUser }) {
         <h2 className="flex items-center gap-2 text-label-lg font-bold text-th-fg-strong">
           <Icon name="auto_awesome_motion" size={18} className="text-th-brand" />
           Momentos Activos
-          <span className="text-label-md font-normal italic text-th-fg-subtle">(ejemplo)</span>
         </h2>
-        <span className="flex items-center gap-0.5 text-label-md font-semibold text-th-fg-muted">
-          Ver todos
-          <Icon name="chevron_right" size={16} />
-        </span>
+        <span className="text-label-md text-th-fg-subtle">Duran 24 horas</span>
       </header>
 
       <div className="th-scrollbar-none flex snap-x snap-mandatory items-center gap-4 overflow-x-auto pb-1">
         {/* Tarjeta de creación propia */}
-        <div className="group relative flex h-[184px] w-[128px] shrink-0 snap-start cursor-pointer flex-col justify-between overflow-hidden rounded-th-card border-2 border-dashed border-th-border bg-th-surface p-2 shadow-th-card transition-all hover:border-th-border-strong hover:shadow-th-hover">
+        <button
+          type="button"
+          onClick={() => setComposing(true)}
+          aria-label="Crear una historia"
+          className="group relative flex h-[184px] w-[128px] shrink-0 snap-start cursor-pointer flex-col justify-between overflow-hidden rounded-th-card border-2 border-dashed border-th-border bg-th-surface p-2 text-left shadow-th-card transition-all th-focus-ring hover:border-th-border-strong hover:shadow-th-hover"
+        >
           <div className="relative w-fit">
             <Avatar name={currentUser?.name} photo={currentUser?.avatar_url} size="w-10 h-10 text-sm" />
             <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-th-pill bg-th-brand shadow-th-card">
@@ -48,53 +69,78 @@ export default function MomentsRow({ currentUser }) {
             <span className="text-label-md font-bold text-th-fg-strong">Tu momento</span>
             <span className="text-label-md text-th-fg-muted">Compartir ahora</span>
           </div>
-        </div>
+        </button>
 
-        {mockMoments.map((moment, index) => (
+        {status === "loading" && (
+          <div className="flex h-[184px] items-center px-4 text-th-fg-muted" role="status">
+            <Spinner size={20} />
+            <span className="sr-only">Cargando historias…</span>
+          </div>
+        )}
+
+        {status === "error" && (
+          <p className="max-w-[220px] px-2 text-body-sm text-th-fg-muted">
+            No se pudieron cargar las historias.{" "}
+            <button type="button" onClick={() => load()} className="font-semibold text-th-brand-fg underline">
+              Reintentar
+            </button>
+          </p>
+        )}
+
+        {status === "ready" && authors.length === 0 && (
+          <p className="max-w-[240px] px-2 text-body-sm text-th-fg-muted">
+            Nadie a quien sigues tiene historias ahora. Las que publiques tú las verán quienes te siguen.
+          </p>
+        )}
+
+        {authors.map((item, index) => (
           <button
-            key={moment.id}
+            key={item.author.id}
             type="button"
-            onClick={() => setActiveIndex(index)}
-            aria-label={`Ver el momento de ${moment.name}, mood ${MOODS[moment.mood]?.label || ""}`}
-            className="group relative h-[184px] w-[128px] shrink-0 snap-start overflow-hidden rounded-th-card shadow-th-card ring-2 ring-transparent transition-all th-focus-ring hover:ring-th-brand"
+            onClick={() => setViewerIndex(index)}
+            aria-label={
+              item.is_me
+                ? "Ver tus historias"
+                : `Ver las historias de ${item.author.name}${item.has_unseen ? " (sin ver)" : ""}`
+            }
+            className={`group relative h-[184px] w-[128px] shrink-0 snap-start overflow-hidden rounded-th-card bg-th-surface-raised shadow-th-card ring-2 transition-all th-focus-ring hover:ring-th-brand ${
+              item.has_unseen ? "ring-th-brand" : "ring-transparent"
+            }`}
           >
-            <img
-              src={moment.image}
-              alt=""
-              loading="lazy"
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            />
+            {item.latest_image_url && (
+              <img
+                src={item.latest_image_url}
+                alt=""
+                loading="lazy"
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/75 via-slate-900/10 to-slate-900/10" />
 
             <span className="absolute left-2 top-2">
-              <Avatar name={moment.name} photo={moment.photo} size="w-9 h-9 text-xs" ring />
+              <Avatar name={item.author.name} photo={item.author.avatar_url} size="w-9 h-9 text-xs" ring />
             </span>
-
-            <span
-              className="absolute right-2 top-2 h-2.5 w-2.5 rounded-th-pill ring-2 ring-white/80"
-              aria-hidden="true"
-              style={{ backgroundColor: MOODS[moment.mood]?.color }}
-            />
 
             <span className="absolute inset-x-2 bottom-2 flex flex-col text-left">
               <span className="truncate text-label-lg font-bold text-white drop-shadow">
-                {moment.name}
+                {item.is_me ? "Tu historia" : item.author.name}
               </span>
-              <span className="text-label-md text-white/75">{moment.time}</span>
+              <span className="text-label-md text-white/75">{formatRelativeTime(item.latest_at)}</span>
             </span>
           </button>
         ))}
       </div>
 
-      {activeIndex !== null && (
-        <MomentViewer
-          moments={mockMoments}
-          index={activeIndex}
-          onClose={() => setActiveIndex(null)}
-          onPrev={() => setActiveIndex((i) => Math.max(0, i - 1))}
-          onNext={() => setActiveIndex((i) => Math.min(mockMoments.length - 1, i + 1))}
+      {viewerIndex !== null && (
+        <StoryViewer
+          authors={authors}
+          startIndex={viewerIndex}
+          onClose={() => setViewerIndex(null)}
+          onChanged={() => load()}
         />
       )}
+
+      {composing && <StoryComposer onClose={() => setComposing(false)} onPublished={() => load()} />}
     </section>
   );
 }

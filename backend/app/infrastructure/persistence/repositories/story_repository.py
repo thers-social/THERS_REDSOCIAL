@@ -91,6 +91,7 @@ class SQLAlchemyStoryRepository(StoryRepository):
                 SELECT u.id AS author_id, u.username, u.name, u.avatar_path,
                        count(*) AS stories_count,
                        max(s.created_at) AS latest_at,
+                       (array_agg(s.storage_key ORDER BY s.created_at DESC))[1] AS latest_key,
                        bool_or(v.viewer_id IS NULL AND s.author_id <> CAST(:viewer AS uuid))
                            AS has_unseen
                 FROM stories s

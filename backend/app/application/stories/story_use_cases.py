@@ -83,6 +83,7 @@ def list_strip(viewer_id, story_repository, now=None):
             "stories_count": row["stories_count"],
             "has_unseen": bool(row["has_unseen"]),
             "latest_at": row["latest_at"].isoformat(),
+            "latest_image_url": media_url(row["latest_key"]),
             "is_me": str(row["author_id"]) == str(viewer_id),
         }
         for row in rows
