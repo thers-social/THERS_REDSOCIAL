@@ -2104,3 +2104,42 @@ class TeroUsage(db.Model):
             name="ck_tero_usage_nonnegative",
         ),
     )
+
+
+# --- Tero, fase 6: acciones propuestas por el asistente que esperan confirmación (ADR-041 §6.2) ---
+
+
+class TeroPendingAction(db.Model):
+    __tablename__ = "tero_pending_actions"
+
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    # De la persona que chatea (JWT), nunca de lo que diga el modelo. CASCADE: al borrar la
+    # cuenta se borran sus acciones (ADR-031).
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind = db.Column(db.String(32), nullable=False)
+    # Parámetros YA validados por el servidor (ids resueltos, texto limpio). Es lo único que se
+    # ejecuta al confirmar: nada que escriba el modelo después cambia lo que se aprobó.
+    params = db.Column(JSONB, nullable=False)
+    # Lo que ve la persona en la tarjeta de confirmación, redactado por el SERVIDOR a partir de
+    # `params`, no por el modelo: lo que se aprueba es exactamente lo que se ejecuta.
+    summary = db.Column(db.String(300), nullable=False)
+    status = db.Column(db.String(12), nullable=False, server_default="pending")
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'confirmed', 'cancelled', 'failed')",
+            name="ck_tero_pending_actions_status",
+        ),
+        CheckConstraint(
+            "(status = 'pending') = (resolved_at IS NULL)",
+            name="ck_tero_pending_actions_resolved",
+        ),
+        Index("ix_tero_pending_actions_user_created", "user_id", "created_at"),
+    )

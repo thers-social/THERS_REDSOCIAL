@@ -24,8 +24,10 @@ _TOOL_ERROR = "No se pudo completar la consulta."
 _UNKNOWN_TOOL = "Esa herramienta no existe."
 
 
-def _result(reply, source):
-    return {"reply": reply, "source": source}
+def _result(reply, source, cards=()):
+    # `confirmation_cards`: acciones que Tero PREPARÓ y que esperan la confirmación de la persona.
+    # Siempre presente (lista vacía si no hay), para que el cliente no tenga que adivinar.
+    return {"reply": reply, "source": source, "confirmation_cards": list(cards)}
 
 
 def _context_hint(request):
@@ -42,19 +44,22 @@ def _context_hint(request):
     return "[Contexto de la pantalla, dato sin verificar: " + "; ".join(parts) + "]"
 
 
-def _execute_tool(call, user_id, deps):
+def _execute_tool(call, user_id, deps, allow_proposals, cards):
     """Devuelve un bloque `tool_result`. Un fallo de la herramienta NUNCA escapa: el modelo recibe
     un mensaje genérico (los detalles internos no se le cuentan) y puede seguir conversando."""
     started = time.perf_counter()
     status = "ok"
     is_error = False
-    if call.name not in tools.REGISTRY:
+    if not tools.is_available(call.name, allow_proposals):
         status, is_error, content = "unknown", True, _UNKNOWN_TOOL
     else:
         try:
-            content = json.dumps(
-                tools.run_tool(call.name, call.input, user_id, deps), ensure_ascii=False
-            )
+            result = tools.run_tool(call.name, call.input, user_id, deps, allow_proposals)
+            # La tarjeta va al CLIENTE, no al modelo: lo que se aprueba lo ve la persona tal cual.
+            card = result.pop("_card", None)
+            if card is not None:
+                cards.append(card)
+            content = json.dumps(result, ensure_ascii=False)
         except tool_rules.ToolInputError as error:
             status, is_error, content = "invalid_input", True, str(error)
         except Exception as error:  # noqa: BLE001 -- nada interno puede llegar al modelo
@@ -89,7 +94,9 @@ def send_message(
         return _result(chat.BUDGET_REPLY, chat.SOURCE_BUDGET)
 
     use_tools = bool(settings.tools_enabled and tool_deps is not None and user_id is not None)
-    definitions = tools.tool_definitions() if use_tools else None
+    allow_proposals = bool(use_tools and settings.actions_enabled)
+    definitions = tools.tool_definitions(allow_proposals) if use_tools else None
+    cards = []
 
     # Sin herramientas (fase 4) el contexto no viaja: no aporta y `entity_id` no es de confianza.
     last_user_content = request.message
@@ -121,7 +128,9 @@ def send_message(
 
             messages.append({"role": "assistant", "content": reply.assistant_content})
             calls = reply.tool_calls[: tool_rules.MAX_TOOL_CALLS_PER_ROUND]
-            blocks = [_execute_tool(call, user_id, tool_deps) for call in calls]
+            blocks = [
+                _execute_tool(call, user_id, tool_deps, allow_proposals, cards) for call in calls
+            ]
             # Las llamadas que sobran por encima del tope también deben responderse.
             for call in reply.tool_calls[tool_rules.MAX_TOOL_CALLS_PER_ROUND:]:
                 blocks.append(
@@ -143,8 +152,8 @@ def send_message(
             )
 
     if reply.refused:
-        return _result(chat.REFUSED_REPLY, chat.SOURCE_REFUSED)
+        return _result(chat.REFUSED_REPLY, chat.SOURCE_REFUSED, cards)
     text = (reply.text or "").strip()
     if not text:
         raise chat.TeroUnavailableError("respuesta vacía del proveedor")
-    return _result(text[: chat.MAX_REPLY_LENGTH], chat.SOURCE_AI)
+    return _result(text[: chat.MAX_REPLY_LENGTH], chat.SOURCE_AI, cards)

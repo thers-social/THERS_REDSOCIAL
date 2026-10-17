@@ -176,3 +176,7 @@ def routing_daily_rule(budget):
 # Mensajes a Tero (ADR-041 §8.2): por CUENTA. Cada mensaje cuesta dinero, así que el tope es más
 # bajo que el de cualquier endpoint normal; el acierto ES el uso (`clear_on_success=False`).
 TERO_CHAT = RateLimitRule("tero_chat", 30, _HOUR, clear_on_success=False)
+
+# Confirmar o cancelar una acción de Tero (ADR-041 §6.2): por CUENTA. No cuesta IA, pero ejecuta
+# cambios reales, así que también tiene tope.
+TERO_ACTION = RateLimitRule("tero_action", 30, _HOUR, clear_on_success=False)

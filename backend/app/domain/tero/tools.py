@@ -1,12 +1,12 @@
 # Herramientas de lectura de Tero (ADR-041 §6.1). Solo tipos nativos de Python: domain/ no importa
 # Flask ni SQLAlchemy.
 #
-# Reglas que este módulo hace cumplir:
+# Reglas que este módulo hace cumplir (fase 6: hay además herramientas que solo PROPONEN):
 #   · Cada herramienta declara un esquema estricto (sin propiedades extra, todo tipado). La
 #     validación se repite SIEMPRE en el servidor: el esquema que ve el modelo es una guía, no una
 #     garantía (el modelo puede equivocarse, y un texto malicioso puede empujarlo a hacerlo).
-#   · Todas son de lectura (`risk = "read"`). Las acciones con efecto son la fase 6 y exigen
-#     confirmación humana; no hay forma de registrar una aquí.
+#   · Ninguna herramienta ejecuta un cambio. Las de lectura consultan; las `propose_*` solo crean una
+#     acción pendiente que exige confirmación humana aparte. Se prueba que no cambian datos.
 #   · Los nombres usan guion bajo (`profile_read`): la API del proveedor no admite puntos.
 
 import re
@@ -15,7 +15,10 @@ import re
 MAX_TOOL_ROUNDS = 3
 MAX_TOOL_CALLS_PER_ROUND = 4
 
+#: `read` consulta datos. `propose` NO ejecuta nada: guarda una acción pendiente y devuelve una
+#: tarjeta; solo la persona, con una llamada aparte, la confirma (ADR-041 §6.2).
 RISK_READ = "read"
+RISK_PROPOSE = "propose"
 
 _UUID = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"

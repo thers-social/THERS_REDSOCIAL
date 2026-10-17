@@ -110,7 +110,9 @@ def test_a_message_reaches_the_model_and_the_reply_comes_back(client, tero):
     token, _, provider = tero
     response = _chat(client, token)
     assert response.status_code == 200
-    assert response.get_json() == {"reply": "¡Hola! Soy Tero.", "source": "ai"}
+    assert response.get_json() == {
+        "reply": "¡Hola! Soy Tero.", "source": "ai", "confirmation_cards": [],
+    }
     assert response.headers["Cache-Control"] == "no-store"
 
     call = provider.calls[0]

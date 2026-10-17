@@ -114,9 +114,15 @@ def test_the_five_read_tools_are_offered_and_none_takes_an_identity(app, client,
         assert not {"user_id", "viewer_id", "owner_id", "email"} & set(schema["properties"])
 
 
-def test_every_registered_tool_is_read_only():
+def test_every_tool_either_reads_or_only_proposes():
     assert tero_tools.REGISTRY
-    assert all(tool.spec.risk == tool_rules.RISK_READ for tool in tero_tools.REGISTRY.values())
+    risks = {tool.spec.risk for tool in tero_tools.REGISTRY.values()}
+    assert risks == {tool_rules.RISK_READ, tool_rules.RISK_PROPOSE}
+    # Con las acciones apagadas (el valor por defecto) solo existen las de lectura.
+    assert all(
+        tool_rules.RISK_READ == tero_tools.REGISTRY[item["name"]].spec.risk
+        for item in tero_tools.tool_definitions()
+    )
 
 
 def test_with_the_tools_switched_off_none_are_offered(app, client, world):
@@ -322,7 +328,9 @@ def test_the_assistant_turn_is_sent_back_unchanged_and_results_share_one_message
     ]
     provider = _install(app, ScriptedProvider(first, final("Eres ana.")))
     response = _chat(client, world["ana"][0])
-    assert response.get_json() == {"reply": "Eres ana.", "source": "ai"}
+    assert response.get_json() == {
+        "reply": "Eres ana.", "source": "ai", "confirmation_cards": [],
+    }
 
     sent = provider.calls[1]["messages"]
     assert sent[-2] == {"role": "assistant", "content": first.assistant_content}
