@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
+import { searchPlaces } from '@features/places/api';
+import type { PlaceSummary } from '@features/places/types';
 import { fetchSuggestions, followUser, unfollowUser } from '@features/posts/api';
 import type { SuggestedUser } from '@features/posts/api';
 import { PostCard } from '@features/posts/PostCard';
@@ -36,6 +38,7 @@ export default function Search() {
 
   const results = useMemo(() => searchPosts(posts.posts, query, sort, date), [posts.posts, query, sort, date]);
   const searching = query.trim().length > 0;
+  const places = usePlaceMatches(query);
 
   if (!user) return null;
 
@@ -72,6 +75,32 @@ export default function Search() {
               <View style={styles.sortRow}>
                 <SortChip label="Recientes" active={sort === 'recent'} onPress={() => setSort('recent')} />
                 <SortChip label="Más me gusta" active={sort === 'likes'} onPress={() => setSort('likes')} />
+              </View>
+            ) : null}
+            {searching && places.length > 0 ? (
+              <View style={styles.suggest}>
+                <Text style={styles.suggestTitle}>Lugares</Text>
+                {places.map((place) => (
+                  <Pressable
+                    key={place.id}
+                    style={styles.person}
+                    onPress={() => router.push({ pathname: '/places/[id]', params: { id: place.id } })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Lugar ${place.name}`}
+                  >
+                    <Icon name="pin" size={22} color={colors.brandText} />
+                    <View style={styles.personText}>
+                      <Text style={styles.personName} numberOfLines={1}>
+                        {place.name}
+                      </Text>
+                      <Text style={styles.personUser} numberOfLines={1}>
+                        {place.category.name}
+                        {place.address ? ` · ${place.address}` : ''}
+                      </Text>
+                    </View>
+                    <Icon name="chevron" size={18} color={colors.fgMuted} />
+                  </Pressable>
+                ))}
               </View>
             ) : null}
             {searching ? (
@@ -140,6 +169,37 @@ export default function Search() {
       {menu.element}
     </Screen>
   );
+}
+
+/**
+ * Lugares cuyo nombre coincide con la consulta (`GET /api/places/search`, ADR-040). Se pide al
+ * servidor con 350 ms de retardo y solo desde 2 letras; un error se ignora a propósito: los
+ * lugares son un extra y no deben tapar los resultados de publicaciones.
+ */
+function usePlaceMatches(query: string): PlaceSummary[] {
+  const [places, setPlaces] = useState<PlaceSummary[]>([]);
+  const text = query.trim();
+
+  useEffect(() => {
+    if (text.length < 2) {
+      setPlaces([]);
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      searchPlaces({ q: text, limit: 5 }, controller.signal)
+        .then(setPlaces)
+        .catch(() => {
+          if (!controller.signal.aborted) setPlaces([]);
+        });
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [text]);
+
+  return places;
 }
 
 function SortChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
