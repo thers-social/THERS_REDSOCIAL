@@ -148,3 +148,107 @@ def test_provider_errors_are_hidden_behind_a_generic_error():
         _provider(client).complete("s", [{"role": "user", "content": "hi"}], 512)
     assert secret not in str(caught.value)
     assert caught.value.__cause__ is None
+
+
+# --- Validación de argumentos de herramientas (fase 5) ------------------------------------
+
+from app.domain.tero import tools as tool_rules  # noqa: E402
+
+_SPEC = tool_rules.ToolSpec(
+    "demo",
+    "herramienta de prueba",
+    {
+        "query": tool_rules.string_prop("texto", 2, 10),
+        "limit": tool_rules.integer_prop("tope", 1, 5),
+        "post_id": tool_rules.uuid_prop("id"),
+    },
+    required=("query",),
+)
+
+
+def test_valid_arguments_are_cleaned():
+    clean = tool_rules.validate_arguments(_SPEC, {"query": "  hola   mundo ", "limit": 3})
+    assert clean == {"query": "hola mundo", "limit": 3}
+
+
+def test_missing_arguments_default_to_an_empty_object():
+    spec = tool_rules.ToolSpec("sin_args", "no pide nada")
+    assert tool_rules.validate_arguments(spec, None) == {}
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        [],
+        "query",
+        {},                                         # falta lo obligatorio
+        {"query": "hola", "user_id": "otro"},       # propiedad que el esquema no declara
+        {"query": 5},
+        {"query": "a"},                             # demasiado corto
+        {"query": "x" * 11},                        # demasiado largo
+        {"query": "ho\x00la"},                      # carácter de control
+        {"query": "hola", "limit": True},           # un booleano no es un entero
+        {"query": "hola", "limit": "3"},
+        {"query": "hola", "limit": 0},
+        {"query": "hola", "limit": 6},
+        {"query": "hola", "post_id": "no-es-uuid"},
+        {"query": "hola", "post_id": "../../etc/passwd"},
+    ],
+)
+def test_arguments_outside_the_schema_are_rejected(arguments):
+    with pytest.raises(tool_rules.ToolInputError):
+        tool_rules.validate_arguments(_SPEC, arguments)
+
+
+def test_the_schema_sent_to_the_model_is_strict():
+    schema = _SPEC.to_definition()["input_schema"]
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["query"]
+
+
+# --- Adaptador con herramientas -----------------------------------------------------------
+
+
+class _Block:
+    def __init__(self, data):
+        self._data = data
+        self.__dict__.update(data)
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+def test_tools_are_sent_without_a_forced_tool_choice():
+    client = FakeClient(_response([_block("text", "ok")]))
+    definitions = [{"name": "profile_read", "description": "x", "input_schema": {"type": "object"}}]
+    _provider(client).complete("s", [{"role": "user", "content": "hi"}], 512, definitions)
+    call = client.calls[0]
+    assert call["tools"] == definitions
+    assert "tool_choice" not in call
+
+
+def test_no_tools_key_is_sent_when_there_are_none():
+    client = FakeClient(_response([_block("text", "ok")]))
+    _provider(client).complete("s", [{"role": "user", "content": "hi"}], 512)
+    assert "tools" not in client.calls[0]
+
+
+def test_a_tool_request_returns_the_calls_and_the_turn_untouched():
+    thinking = _Block({"type": "thinking", "thinking": "", "signature": "firma"})
+    tool_use = _Block({"type": "tool_use", "id": "toolu_9", "name": "users_search", "input": {"query": "ana"}})
+    client = FakeClient(_response([thinking, tool_use], stop_reason="tool_use"))
+    reply = _provider(client).complete("s", [{"role": "user", "content": "hi"}], 512)
+    assert [(c.id, c.name, c.input) for c in reply.tool_calls] == [
+        ("toolu_9", "users_search", {"query": "ana"})
+    ]
+    assert reply.assistant_content == [
+        {"type": "thinking", "thinking": "", "signature": "firma"},
+        {"type": "tool_use", "id": "toolu_9", "name": "users_search", "input": {"query": "ana"}},
+    ]
+
+
+def test_a_plain_answer_has_no_calls_and_no_turn_to_replay():
+    client = FakeClient(_response([_block("text", "hola")]))
+    reply = _provider(client).complete("s", [{"role": "user", "content": "hi"}], 512)
+    assert reply.tool_calls == []
+    assert reply.assistant_content is None

@@ -24,12 +24,14 @@ DEFAULT_LIMIT = 50
 def list_posts(
     post_repository, like_repository, comment_repository, follow_repository,
     mention_repository, muted_keyword_repository, viewer_id, limit=DEFAULT_LIMIT,
-    place_id=None,
+    place_id=None, post_id=None,
 ):
     # Una sola consulta de términos para toda la página, no una por post.
     muted_keywords = muted_keyword_repository.list_for_user(viewer_id)
 
-    posts = post_repository.list_recent(limit, viewer_id, muted_keywords, place_id=place_id)
+    posts = post_repository.list_recent(
+        limit, viewer_id, muted_keywords, place_id=place_id, post_id=post_id
+    )
     post_ids = [post.id for post in posts]
     author_ids = {post.author.id for post in posts}
 

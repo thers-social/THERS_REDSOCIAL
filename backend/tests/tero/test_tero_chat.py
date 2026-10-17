@@ -24,8 +24,10 @@ class FakeProvider(AiProvider):
         self.calls = []
         self.text, self.error, self.refused, self.tokens = text, error, refused, tokens
 
-    def complete(self, system, messages, max_tokens):
-        self.calls.append({"system": system, "messages": messages, "max_tokens": max_tokens})
+    def complete(self, system, messages, max_tokens, tools=None):
+        self.calls.append(
+            {"system": system, "messages": messages, "max_tokens": max_tokens, "tools": tools}
+        )
         if self.error:
             raise self.error
         return AiReply(self.text, self.tokens[0], self.tokens[1], refused=self.refused)
@@ -127,7 +129,7 @@ def test_history_goes_first_and_in_order(client, tero):
     assert provider.calls[0]["messages"] == history + [{"role": "user", "content": "¿y ahora?"}]
 
 
-def test_the_untrusted_context_never_reaches_the_model(client, tero):
+def test_without_tools_the_untrusted_context_never_reaches_the_model(client, tero):
     token, user_id, provider = tero
     context = {"screen": "post/[id]", "entity_type": "post", "entity_id": "ENTITY-ID-777"}
     assert _chat(client, token, context=context).status_code == 200

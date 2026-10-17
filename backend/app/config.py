@@ -300,6 +300,9 @@ def _positive_float_env(name, default):
 
 
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
+# Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
+# es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.
+Config.TERO_TOOLS_ENABLED = _flag_env("TERO_TOOLS_ENABLED")
 Config.TERO_AI_ENABLED = _flag_env("TERO_AI_ENABLED")
 Config.ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY") or "").strip() or None
 Config.TERO_MODEL = (os.environ.get("TERO_MODEL") or "").strip() or "claude-haiku-5-5"
