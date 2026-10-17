@@ -247,6 +247,19 @@ def test_a_tool_request_returns_the_calls_and_the_turn_untouched():
     ]
 
 
+def test_the_prompt_asks_for_plain_text_and_trusts_the_apps_card_lines():
+    from app.application.tero.prompt import SYSTEM_PROMPT
+
+    # La app muestra el texto tal cual: sin Markdown se ven los asteriscos.
+    assert "texto plano" in SYSTEM_PROMPT and "Markdown" in SYSTEM_PROMPT
+    # Las líneas de resultado de las tarjetas las añade la app y el modelo debe creerlas...
+    assert "[Tarjeta" in SYSTEM_PROMPT and "fiables" in SYSTEM_PROMPT
+    # ...pero la pantalla/identificador que manda el cliente sigue siendo un dato sin verificar.
+    assert "dato sin verificar" in SYSTEM_PROMPT
+    # Y sigue siendo un texto fijo, sin datos de nadie.
+    assert "@" not in SYSTEM_PROMPT
+
+
 def test_a_plain_answer_has_no_calls_and_no_turn_to_replay():
     client = FakeClient(_response([_block("text", "hola")]))
     reply = _provider(client).complete("s", [{"role": "user", "content": "hi"}], 512)
