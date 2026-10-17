@@ -8,7 +8,8 @@ import type { SuggestedUser } from '@features/posts/api';
 import { PostCard } from '@features/posts/PostCard';
 import { messageOf, usePosts } from '@features/posts/PostsContext';
 import { searchPosts } from '@features/posts/searchPosts';
-import type { SearchSort } from '@features/posts/searchPosts';
+import { SEARCH_DATES } from '@features/posts/searchPosts';
+import type { SearchDate, SearchSort } from '@features/posts/searchPosts';
 import { usePostMenu } from '@features/posts/usePostMenu';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
@@ -31,8 +32,9 @@ export default function Search() {
 
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SearchSort>('recent');
+  const [date, setDate] = useState<SearchDate>('any');
 
-  const results = useMemo(() => searchPosts(posts.posts, query, sort), [posts.posts, query, sort]);
+  const results = useMemo(() => searchPosts(posts.posts, query, sort, date), [posts.posts, query, sort, date]);
   const searching = query.trim().length > 0;
 
   if (!user) return null;
@@ -70,6 +72,18 @@ export default function Search() {
               <View style={styles.sortRow}>
                 <SortChip label="Recientes" active={sort === 'recent'} onPress={() => setSort('recent')} />
                 <SortChip label="Más me gusta" active={sort === 'likes'} onPress={() => setSort('likes')} />
+              </View>
+            ) : null}
+            {searching ? (
+              <View style={styles.sortRow}>
+                {SEARCH_DATES.map((range) => (
+                  <SortChip
+                    key={range.id}
+                    label={range.label}
+                    active={date === range.id}
+                    onPress={() => setDate(range.id)}
+                  />
+                ))}
               </View>
             ) : (
               <>
@@ -240,7 +254,7 @@ const styles = themedStyles(() => ({
   discoverTitle: { fontSize: fontSize.bodyMd, fontWeight: '700', color: colors.fg },
   discoverHint: { fontSize: fontSize.bodySm, color: colors.fgMuted, marginTop: 2 },
   scope: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginTop: space[2], marginBottom: space[3] },
-  sortRow: { flexDirection: 'row', gap: space[2], marginBottom: space[3] },
+  sortRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2], marginBottom: space[3] },
   chip: {
     borderWidth: 1,
     borderColor: colors.borderStrong,

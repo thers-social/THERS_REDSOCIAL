@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import Icon from "@shared/components/Icon";
 import Spinner from "@shared/components/Spinner";
 import CapsuleCard from "../components/CapsuleCard";
 import SearchRail from "../components/SearchRail";
+import PlaceCard from "@features/places/components/PlaceCard";
+import { searchPlaces } from "@features/places/lib/placesApi";
+import { DATE_RANGES, isDateRange, withinDateRange } from "../lib/searchDate";
 
 /**
  * Buscar — REF-SEARCH-01.
@@ -41,7 +44,7 @@ const SCOPES = [
 ];
 
 /** Ámbitos que hoy tienen contenido real detrás. */
-const SUPPORTED_SCOPES = new Set(["all", "capsules"]);
+const SUPPORTED_SCOPES = new Set(["all", "capsules", "places"]);
 
 const SORTS = [
   { id: "recent", label: "Más recientes" },
@@ -76,6 +79,7 @@ export default function Search() {
   } = useOutletContext();
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const queryParam = searchParams.get("q") ?? "";
   const scopeParam = SCOPES.some((s) => s.id === searchParams.get("scope"))
     ? searchParams.get("scope")
@@ -83,6 +87,7 @@ export default function Search() {
   const sortParam = SORTS.some((s) => s.id === searchParams.get("sort"))
     ? searchParams.get("sort")
     : "recent";
+  const dateParam = isDateRange(searchParams.get("date")) ? searchParams.get("date") : "any";
 
   // El input es controlado por su propio estado y se sincroniza con la URL con
   // un pequeño retardo: escribir no debe crear una entrada de historial por
@@ -118,21 +123,41 @@ export default function Search() {
   const results = useMemo(() => {
     const needle = normalize(queryParam);
     const scoped = SUPPORTED_SCOPES.has(scopeParam) ? capsules : [];
+    const now = Date.now();
+    const byDate = scoped.filter((c) => withinDateRange(c.created_at, dateParam, now));
     const filtered = needle
-      ? scoped.filter(
+      ? byDate.filter(
           (c) =>
             normalize(c.content).includes(needle) ||
             normalize(c.author?.name).includes(needle) ||
             normalize(c.author?.username).includes(needle)
         )
-      : scoped;
+      : byDate;
 
     return [...filtered].sort((a, b) =>
       sortParam === "resonance"
         ? (b.likes_count ?? 0) - (a.likes_count ?? 0)
         : new Date(b.created_at) - new Date(a.created_at)
     );
-  }, [capsules, queryParam, scopeParam, sortParam]);
+  }, [capsules, queryParam, scopeParam, sortParam, dateParam]);
+
+  // Ámbito «Lugares»: sí tiene endpoint real (`GET /api/places/search`, ADR-040), así que se
+  // consulta al servidor en vez de filtrar en cliente. Solo se llama con ≥ 2 caracteres.
+  const placesQuery = queryParam.trim();
+  const placesActive = scopeParam === "places" && placesQuery.length >= 2;
+  const [placesState, setPlacesState] = useState({ status: "idle", places: [] });
+
+  useEffect(() => {
+    if (!placesActive) return undefined;
+    const controller = new AbortController();
+    setPlacesState({ status: "loading", places: [] });
+    searchPlaces({ q: placesQuery, limit: 20 }, controller.signal)
+      .then((places) => setPlacesState({ status: "ready", places }))
+      .catch(() => {
+        if (!controller.signal.aborted) setPlacesState({ status: "error", places: [] });
+      });
+    return () => controller.abort();
+  }, [placesActive, placesQuery]);
 
   const spotlight = sortParam === "resonance" && results.length > 0 && (results[0].likes_count ?? 0) > 0
     ? results[0]
@@ -244,18 +269,37 @@ export default function Search() {
                 existe en el modelo de datos. Se conservan visibles y
                 deshabilitados en vez de omitirse (§1) o fingir (§9.4). */}
             <PendingSelect label="Duración" />
-            <PendingSelect label="Fecha" />
+
+            {/* Fecha SÍ es real: `created_at` viaja con cada publicación. */}
+            <label className="flex items-center gap-2 text-body-sm text-th-fg-muted">
+              <span className="sr-only">Fecha de publicación</span>
+              <select
+                value={dateParam}
+                onChange={(event) => setParam("date", event.target.value, "any")}
+                className="min-h-[40px] rounded-th-sm border border-th-border bg-th-surface px-3 py-1.5 text-body-sm font-semibold text-th-fg th-focus-ring"
+              >
+                {DATE_RANGES.map((range) => (
+                  <option key={range.id} value={range.id}>
+                    Fecha: {range.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <PendingSelect label="Calidad" />
           </div>
 
           <p className="flex items-center gap-2 text-body-sm text-th-fg-muted">
             <Icon name="sort" size={16} />
             <span aria-live="polite">
-              {capsulesLoading
-                ? "Cargando…"
-                : `${results.length.toLocaleString("es")} ${
-                    results.length === 1 ? "resultado" : "resultados"
-                  }`}
+              {scopeParam === "places"
+                ? placesActive && placesState.status === "ready"
+                  ? `${placesState.places.length} ${placesState.places.length === 1 ? "lugar" : "lugares"}`
+                  : ""
+                : capsulesLoading
+                  ? "Cargando…"
+                  : `${results.length.toLocaleString("es")} ${
+                      results.length === 1 ? "resultado" : "resultados"
+                    }`}
             </span>
           </p>
         </div>
@@ -285,6 +329,42 @@ export default function Search() {
               title={`«${SCOPES.find((s) => s.id === scopeParam)?.label}» todavía no es buscable`}
               description="THERS aún no tiene un modelo de datos para este tipo de contenido, así que no hay nada que indexar. El ámbito se conserva porque está en el diseño de referencia."
             />
+          ) : scopeParam === "places" ? (
+            !placesActive ? (
+              <EmptyState
+                icon="near_me"
+                title="Buscá un lugar por su nombre"
+                description="Escribí al menos dos letras. Se busca en el nombre, sin importar mayúsculas ni tildes."
+              />
+            ) : placesState.status === "loading" ? (
+              <div className="flex items-center justify-center gap-2 py-16 text-th-fg-muted" role="status">
+                <Spinner size={20} />
+                <span className="text-body-md">Buscando lugares…</span>
+              </div>
+            ) : placesState.status === "error" ? (
+              <EmptyState
+                icon="cloud_off"
+                title="No se pudo buscar lugares"
+                description="El servidor no respondió. Probá de nuevo en unos segundos."
+              />
+            ) : placesState.places.length === 0 ? (
+              <EmptyState
+                icon="search_off"
+                title={`Sin lugares para «${queryParam}»`}
+                description="No hay lugares con ese nombre."
+              />
+            ) : (
+              <ul className="flex flex-col gap-3" aria-label="Lugares encontrados">
+                {placesState.places.map((place) => (
+                  <PlaceCard
+                    key={place.id}
+                    place={place}
+                    selected={false}
+                    onSelect={(id) => navigate(`/places/${id}`)}
+                  />
+                ))}
+              </ul>
+            )
           ) : capsulesLoading ? (
             <div className="flex items-center justify-center gap-2 py-16 text-th-fg-muted" role="status">
               <Spinner size={20} />

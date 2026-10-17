@@ -83,3 +83,18 @@ describe('formatRelativeTime', () => {
     assert.equal(formatRelativeTime('no-es-fecha', NOW), '');
   });
 });
+
+describe('filtro de fecha', () => {
+  const NOW = Date.parse('2026-10-03T10:00:00Z');
+  it('«any» no filtra', () => {
+    assert.equal(searchPosts(POSTS, 'a', 'recent', 'any', NOW).length, searchPosts(POSTS, 'a', 'recent').length);
+  });
+  it('«day» deja solo lo publicado en las últimas 24 horas', () => {
+    const ids = searchPosts(POSTS, 'a', 'recent', 'day', NOW).map((p) => p.id);
+    assert.deepEqual(ids, ['2']);
+  });
+  it('«week» excluye lo más viejo que 7 días', () => {
+    const old = [post('9', 'antiguo', 'Ana', 'ana', '2026-09-01T10:00:00Z'), ...POSTS];
+    assert.equal(searchPosts(old, 'a', 'recent', 'week', NOW).some((p) => p.id === '9'), false);
+  });
+});
