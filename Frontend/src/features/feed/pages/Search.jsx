@@ -4,6 +4,7 @@ import Icon from "@shared/components/Icon";
 import Spinner from "@shared/components/Spinner";
 import CapsuleCard from "../components/CapsuleCard";
 import SearchRail from "../components/SearchRail";
+import { PlaceSuggestions, VideoSuggestions } from "../components/SearchSuggestions";
 
 /**
  * Buscar — REF-SEARCH-01.
@@ -23,9 +24,10 @@ import SearchRail from "../components/SearchRail";
  * «todavía no buscaste», «cargando» y «error»: eso sí se cumple con datos
  * reales.
  *
- * Los ámbitos Videos, Sonidos, Creadores y Lugares se conservan como en la
- * referencia, cada uno con su estado honesto: no hay modelo de vídeo, audio,
- * directorio de usuarios ni lugares.
+ * Los ámbitos «Sonidos» y «Creadores» se retiraron (pedido del propietario).
+ * «Lugares» muestra los mejor valorados de THERS Places, o su búsqueda si hay
+ * texto; «Videos» avisa que las sugerencias saldrán cuando haya videos y las
+ * muestra en cuanto existan (SearchSuggestions.jsx).
  *
  * `?q=` y `?scope=` viven en la URL, así que una búsqueda se puede compartir
  * y recargar (§8.2).
@@ -35,8 +37,6 @@ const SCOPES = [
   { id: "all", label: "Todos los resultados", icon: null },
   { id: "videos", label: "Videos", icon: "videocam" },
   { id: "capsules", label: "Cápsulas", icon: "history_toggle_off" },
-  { id: "sounds", label: "Sonidos", icon: "graphic_eq" },
-  { id: "creators", label: "Creadores", icon: "group" },
   { id: "places", label: "Lugares", icon: "near_me" },
 ];
 
@@ -63,8 +63,6 @@ export default function Search() {
     currentUser,
     capsules,
     capsulesLoading,
-    followingIds,
-    onToggleFollow,
     onToggleLike,
     onLoadComments,
     onPostComment,
@@ -161,7 +159,7 @@ export default function Search() {
               type="search"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder="Buscar videos, creadores, resonancias sonoras, eventos..."
+              placeholder="Buscar publicaciones, lugares, videos..."
               className="min-h-[48px] w-full rounded-th-input border border-th-border bg-th-surface-subtle py-2.5 pl-12 pr-11 text-body-md text-th-fg placeholder:text-th-fg-muted transition-colors th-focus-ring focus:bg-th-surface"
             />
             {draft && (
@@ -258,7 +256,9 @@ export default function Search() {
           <p className="flex items-center gap-2 text-body-sm text-th-fg-muted">
             <Icon name="sort" size={16} />
             <span aria-live="polite">
-              {capsulesLoading
+              {scopeParam === "places" || scopeParam === "videos"
+                ? "Sugerencias"
+                : capsulesLoading
                 ? "Cargando…"
                 : `${results.length.toLocaleString("es")} ${
                     results.length === 1 ? "resultado" : "resultados"
@@ -286,7 +286,11 @@ export default function Search() {
       {/* 3. Rejilla de 12 columnas */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="flex flex-col gap-6 lg:col-span-8">
-          {!scopeSupported ? (
+          {scopeParam === "places" ? (
+            <PlaceSuggestions query={queryParam} />
+          ) : scopeParam === "videos" ? (
+            <VideoSuggestions />
+          ) : !scopeSupported ? (
             <EmptyState
               icon={SCOPES.find((s) => s.id === scopeParam)?.icon || "search_off"}
               title={`«${SCOPES.find((s) => s.id === scopeParam)?.label}» todavía no es buscable`}
@@ -368,7 +372,7 @@ export default function Search() {
           )}
         </div>
 
-        <SearchRail followingIds={followingIds} onToggleFollow={onToggleFollow} />
+        <SearchRail />
       </div>
     </div>
   );

@@ -18,12 +18,8 @@ export const PRIMARY_NAV = [
   { id: "home", to: "/feed", icon: "home", labelKey: "nav.home" },
   { id: "search", to: "/search", icon: "search", labelKey: "nav.search" },
   { id: "videos", to: "/videos", icon: "play_circle", labelKey: "nav.videos", badge: "live" },
-  {
-    id: "capsules",
-    to: "/capsules",
-    icon: "history_toggle_off",
-    labelKey: "nav.capsules",
-  },
+  // "Cápsulas" se retiró de la barra (pedido del propietario). La ruta `/capsules` sigue existiendo
+  // para no romper enlaces guardados.
   // THERS Places (ADR-040, fase 3): catálogo de lugares con mapa. Sustituyó al antiguo destino
   // "Ubicación" (`/radar`, un marcador de posición sin servicio), que se retiró.
   { id: "places", to: "/places", icon: "location_on", labelKey: "nav.places" },
@@ -48,31 +44,18 @@ export const PRIMARY_NAV = [
 export const MOBILE_NAV_IDS = ["home", "search", "__create__", "messages", "notifications"];
 
 /**
- * Las 12 secciones de Configuración, en el orden del encargo.
+ * Secciones de Configuración que funcionan. Se retiraron Suscripción, Herramientas (radar),
+ * Notificaciones, Audio y Permisos porque no tenían nada configurable detrás (pedido del
+ * propietario); sus referencias REF-SET-04..07 y 11 quedan sin pantalla a propósito.
  * `ref` apunta al ID del manifiesto que sirve de referencia canónica.
  */
 export const SETTINGS_SECTIONS = [
   { id: "profile", icon: "person", labelKey: "settings.nav.profile", ref: "REF-SET-01" },
   { id: "privacy", icon: "lock", labelKey: "settings.nav.privacy", ref: "REF-SET-02" },
   { id: "security", icon: "shield", labelKey: "settings.nav.security", ref: "REF-SET-03" },
-  {
-    id: "subscription",
-    icon: "workspace_premium",
-    labelKey: "settings.nav.subscription",
-    ref: "REF-SET-04",
-  },
-  { id: "tools", icon: "tune", labelKey: "settings.nav.tools", ref: "REF-SET-05" },
-  {
-    id: "notifications",
-    icon: "notifications",
-    labelKey: "settings.nav.notifications",
-    ref: "REF-SET-06",
-  },
-  { id: "audio", icon: "graphic_eq", labelKey: "settings.nav.audio", ref: "REF-SET-07" },
   { id: "links", icon: "link", labelKey: "settings.nav.links", ref: "REF-SET-08" },
   { id: "data", icon: "download", labelKey: "settings.nav.data", ref: "REF-SET-09" },
   { id: "blocked", icon: "block", labelKey: "settings.nav.blocked", ref: "REF-SET-10" },
-  { id: "permissions", icon: "apps", labelKey: "settings.nav.permissions", ref: "REF-SET-11" },
   { id: "content", icon: "feed", labelKey: "settings.nav.content", ref: "REF-SET-12" },
 ];
 

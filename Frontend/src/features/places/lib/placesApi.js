@@ -39,6 +39,12 @@ export async function searchPlaces({ q, lat, lng, category, limit }, signal) {
   return data.places;
 }
 
+/** Mejor valorados, sin ubicación (`GET /api/places/top`, API_CONTRACT.md §4.46). */
+export async function fetchTopPlaces({ category, limit } = {}, signal) {
+  const { data } = await api.get("/places/top", authConfig({ signal, params: { category, limit } }));
+  return data.places;
+}
+
 export async function fetchPlace(id, signal) {
   const { data } = await api.get(`/places/${id}`, authConfig({ signal }));
   return data.place;
