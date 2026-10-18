@@ -1,4 +1,5 @@
-import { Image, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Image, Pressable, Text, View } from 'react-native';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
@@ -13,6 +14,7 @@ import type { SharedPost } from './types';
  * Una publicación sensible llega sin texto ni miniatura. Todo se pinta como texto de React.
  */
 export function SharedPostCard({ post, mine }: { post: SharedPost; mine: boolean }) {
+  const router = useRouter();
   const tint = mine ? colors.onBrand : colors.fg;
   const box = [styles.card, mine ? styles.cardMine : styles.cardTheirs];
 
@@ -25,8 +27,15 @@ export function SharedPostCard({ post, mine }: { post: SharedPost; mine: boolean
   }
 
   const hiddenSensitive = post.is_sensitive && post.excerpt === null;
+  // Abre la publicación completa. El servidor ya comprobó que esta persona puede verla
+  // (`available: true`); el detalle vuelve a comprobarlo al cargarla.
   return (
-    <View style={box} accessibilityLabel={`Publicación de ${post.author.name}`}>
+    <Pressable
+      style={box}
+      accessibilityRole="button"
+      accessibilityLabel={`Abrir la publicación de ${post.author.name}`}
+      onPress={() => router.push({ pathname: '/post/[id]', params: { id: post.id } })}
+    >
       <View style={styles.author}>
         <Avatar name={post.author.name} uri={post.author.avatar_url} size={24} />
         <Text style={[styles.name, { color: tint }]} numberOfLines={1}>
@@ -54,7 +63,7 @@ export function SharedPostCard({ post, mine }: { post: SharedPost; mine: boolean
           ) : null}
         </>
       )}
-    </View>
+    </Pressable>
   );
 }
 
