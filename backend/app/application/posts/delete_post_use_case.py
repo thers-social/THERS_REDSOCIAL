@@ -7,11 +7,16 @@ from app.application.media.attachments import discard_files
 from app.domain.posts.exceptions import PostNotFoundError
 
 
-def delete_post(post_id, author_id, post_repository, media_repository=None, media_storage=None):
+def delete_post(
+    post_id, author_id, post_repository, media_repository=None, media_storage=None, video_repository=None,
+):
     # Las claves de las imágenes se leen ANTES de borrar: el borrado en cascada
     # elimina las filas. Filtradas por dueño, así que quien no es el autor
     # obtiene una lista vacía y el borrado de abajo igualmente falla (ADR-039).
     keys = media_repository.keys_for_post(post_id, author_id) if media_repository else []
+    # El video (ADR-046) y su miniatura también tienen archivo: se recogen igual, antes del borrado.
+    if video_repository:
+        keys += video_repository.keys_for_post(post_id, author_id)
 
     deleted = post_repository.delete(post_id, author_id)
     if deleted:

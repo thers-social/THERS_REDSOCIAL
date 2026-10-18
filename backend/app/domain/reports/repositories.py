@@ -23,6 +23,9 @@ class ResolvedTarget:
     text: str
     post: object = None
     recipient_id: str = None
+    # Solo para mensajes de un grupo (ADR-048): ids de quienes están en él. Pueden reportarlo todos
+    # menos quien lo escribió.
+    group_member_ids: tuple = None
 
 
 class ReportTargetResolver(ABC):

@@ -27,6 +27,7 @@ Contenido (un archivo JSON por sección):
   restrictions.json    Cuentas que bloqueaste o restringiste.
   sessions.json        Dispositivos desde los que iniciaste sesión.
   saved_places.json    Lugares que guardaste.
+  saved_posts.json     Publicaciones que guardaste.
   place_reports.json   Reportes de datos incorrectos de lugares que hiciste.
   place_reviews.json   Reseñas de lugares que escribiste.
   place_plans.json     Planes con amistades en los que participas.

@@ -16,6 +16,10 @@ def serve_media(filename):
     # audio/mp4a-latm…) y Safari es quisquilloso: siempre audio/mp4.
     if filename.endswith(".m4a"):
         response.mimetype = "audio/mp4"
+    # Videos (ADR-046): siempre video/mp4. `send_from_directory` atiende `Range` (206), que los
+    # navegadores y la app necesitan para buscar dentro del video.
+    if filename.endswith(".mp4"):
+        response.mimetype = "video/mp4"
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response

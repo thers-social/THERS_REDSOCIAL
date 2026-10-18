@@ -51,6 +51,7 @@ os.environ["ROUTING_API_KEY"] = ""
 # corre. Sin clave y con el módulo apagado; cada prueba inyecta un proveedor simulado.
 os.environ["ANTHROPIC_API_KEY"] = ""
 os.environ["TERO_ENABLED"] = ""
+os.environ["TERO_IMAGES_ENABLED"] = ""
 os.environ["TERO_AI_ENABLED"] = ""
 os.environ["TERO_TOOLS_ENABLED"] = ""
 os.environ["TERO_ACTIONS_ENABLED"] = ""
@@ -63,6 +64,7 @@ os.environ["N8N_WEBHOOK_SECRET"] = ""
 
 # Notas de voz (ADR-042): apagadas por defecto; las pruebas que las usan las encienden por app.
 os.environ["VOICE_MESSAGES_ENABLED"] = ""
+os.environ["VIDEO_UPLOADS_ENABLED"] = ""
 os.environ["TERO_MONTHLY_BUDGET_USD"] = ""
 os.environ["TERO_PRICE_INPUT_USD_PER_MTOK"] = ""
 os.environ["TERO_PRICE_OUTPUT_USD_PER_MTOK"] = ""
@@ -186,8 +188,8 @@ def _clean_tables(app):
                 "account_deletion_codes, "
                 "user_identities, notifications, messages, mentions, muted_keywords, "
                 "sessions, two_factor_recovery_codes, rate_limit_buckets, data_exports, user_restrictions, muted_topics, "
-                "media_attachments, audio_attachments, "
-                "comments, likes, follows, posts, reports, saved_places, place_reviews, place_reports, place_plan_members, place_plans, place_managers, place_claims, place_review_replies, place_reservations, place_reservation_settings, place_opening_hours, place_closures, place_quote_lines, place_quotes, place_quote_items, place_visit_counts, tero_usage, tero_pending_actions, admin_audit_log, places, users"
+                "media_attachments, audio_attachments, video_attachments, "
+                "comments, likes, follows, saved_posts, group_members, group_chats, posts, reports, saved_places, place_reviews, place_reports, place_plan_members, place_plans, place_managers, place_claims, place_review_replies, place_reservations, place_reservation_settings, place_opening_hours, place_closures, place_quote_lines, place_quotes, place_quote_items, place_visit_counts, tero_usage, tero_pending_actions, admin_audit_log, places, users"
             )
         )
         db.session.commit()

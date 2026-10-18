@@ -13,7 +13,7 @@ from app.domain.posts.exceptions import PostNotFoundError
 def update_post(
     post_id, author_id, content, post_repository, like_repository, comment_repository,
     user_repository, follow_repository, mention_repository, notification_repository,
-    muted_keyword_repository, restriction_repository,
+    muted_keyword_repository, restriction_repository, saved_repository=None,
 ):
     post = post_repository.update_content(post_id, author_id, content)
     if post is None:
@@ -43,8 +43,11 @@ def update_post(
     muted_keywords = muted_keyword_repository.list_for_user(author_id)
     comment_counts = comment_repository.counts_for_posts(post_ids, author_id, muted_keywords)
 
+    saved_ids = saved_repository.saved_post_ids(author_id, post_ids) if saved_repository else set()
+
     return to_public_post(
         post,
+        saved_by_me=post.id in saved_ids,
         likes_count=likes_counts.get(post.id, 0),
         liked_by_me=post.id in liked_ids,
         comments_count=comment_counts.get(post.id, 0),

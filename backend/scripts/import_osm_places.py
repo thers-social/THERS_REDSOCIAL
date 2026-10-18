@@ -5,8 +5,8 @@ Fuente: la API Overpass pública. Los datos son de OpenStreetMap y están bajo l
 verse donde se muestren (el mapa ya la conserva) y lo importado queda marcado con
 `source = 'osm'` y su identificador de OSM para poder separarlo. No se copia nada de Google Maps.
 
-Cada lugar entra como `unverified` (visible, con la etiqueta «sin verificar»). Es idempotente:
-se identifica por `(osm_type, osm_id)` y solo se actualiza mientras siga `unverified`; uno que un
+Cada lugar entra como `verified` por decisión del propietario (ADR-052; antes entraba como `unverified`). Es idempotente:
+se identifica por `(osm_type, osm_id)` y solo se actualiza mientras ninguna persona lo haya verificado; uno que un
 negocio reclamó o que moderación verificó, editó o desactivó **no se toca**.
 
 Uso (desde `backend/`, con `DATABASE_URL` apuntando a la base):
@@ -129,7 +129,7 @@ _UPSERT = text(
     ) VALUES (
         :name, :slug, :category_id, ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography,
         :address, :municipality, :department, :website,
-        'unverified', 'osm', 'imported', :osm_type, :osm_id, true
+        'verified', 'osm', 'imported', :osm_type, :osm_id, true
     )
     ON CONFLICT (osm_type, osm_id) WHERE osm_id IS NOT NULL DO UPDATE SET
         name = EXCLUDED.name,
@@ -140,7 +140,8 @@ _UPSERT = text(
         department = EXCLUDED.department,
         website = EXCLUDED.website,
         updated_at = now()
-    WHERE places.source = 'osm' AND places.verification_status = 'unverified'
+    WHERE places.source = 'osm' AND places.verification_status IN ('unverified', 'verified')
+      AND places.verified_by_user_id IS NULL
     """
 )
 
@@ -197,7 +198,7 @@ def main():
             print("\n--dry-run: no se escribió nada.")
             return
         save(rows)
-        print(f"\nListo. Estado de los importados: {kinds.STATUS_UNVERIFIED}. © colaboradores de OpenStreetMap (ODbL).")
+        print(f"\nListo. Estado de los importados: {kinds.STATUS_VERIFIED}. © colaboradores de OpenStreetMap (ODbL).")
 
 
 if __name__ == "__main__":

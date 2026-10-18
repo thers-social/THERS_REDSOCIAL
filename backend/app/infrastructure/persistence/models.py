@@ -293,6 +293,15 @@ class Post(db.Model):
         viewonly=True,
     )
 
+    # Video corto (ADR-046): como mucho uno por publicación. Misma estrategia de carga que `images`.
+    video = db.relationship(
+        "VideoAttachment",
+        primaryjoin="Post.id == VideoAttachment.post_id",
+        uselist=False,
+        lazy="selectin",
+        viewonly=True,
+    )
+
     def __repr__(self):
         return f"<Post id={self.id} author_id={self.author_id}>"
 
@@ -567,10 +576,17 @@ class Message(db.Model):
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # NULL en un mensaje de grupo (ADR-048): exactamente uno de `recipient_id` y `group_id` (CHECK).
     recipient_id = db.Column(
         PG_UUID(as_uuid=True),
         db.ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+    )
+    # Chat grupal al que pertenece el mensaje (ADR-048). NULL = mensaje directo.
+    group_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("group_chats.id", ondelete="CASCADE"),
+        nullable=True,
     )
 
     # Sin límite de longitud a nivel de esquema -- la validación de negocio
@@ -612,6 +628,12 @@ class Message(db.Model):
         nullable=True,
     )
 
+    # Publicación compartida por mensaje (ADR-047). SET NULL: si se borra la publicación, el mensaje
+    # queda y la tarjeta se muestra como no disponible.
+    post_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("posts.id", ondelete="SET NULL"), nullable=True
+    )
+
     sender = db.relationship("User", foreign_keys=[sender_id], lazy="joined")
     recipient = db.relationship("User", foreign_keys=[recipient_id], lazy="joined")
 
@@ -633,6 +655,15 @@ class Message(db.Model):
         viewonly=True,
     )
 
+    # Video corto (ADR-046): como mucho uno por mensaje.
+    video = db.relationship(
+        "VideoAttachment",
+        primaryjoin="Message.id == VideoAttachment.message_id",
+        uselist=False,
+        lazy="selectin",
+        viewonly=True,
+    )
+
     __table_args__ = (
         # Sin UNIQUE: dos mensajes entre las mismas dos personas son eventos
         # legítimos e independientes, no un duplicado a impedir (mismo
@@ -640,6 +671,10 @@ class Message(db.Model):
         db.CheckConstraint(
             "sender_id <> recipient_id", name="ck_messages_no_self_message"
         ),
+        db.CheckConstraint(
+            "(recipient_id IS NULL) <> (group_id IS NULL)", name="ck_messages_one_target"
+        ),
+        db.Index("ix_messages_group_created", "group_id", "created_at"),
         # El hilo entre A y B se busca con
         # (sender_id=A AND recipient_id=B) OR (sender_id=B AND recipient_id=A),
         # ordenado por created_at -- ninguna columna única cubre ese acceso,
@@ -665,6 +700,59 @@ class Message(db.Model):
 
     def __repr__(self):
         return f"<Message sender_id={self.sender_id} recipient_id={self.recipient_id}>"
+
+
+class GroupChat(db.Model):
+    __tablename__ = "group_chats"
+
+    # Chat grupal (ADR-048). Los mensajes viven en `messages` con `group_id`; aquí solo el grupo.
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    name = db.Column(db.String(60), nullable=False)
+    # SET NULL: si quien lo creó borra su cuenta, el grupo sigue para los demás.
+    created_by = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    def __repr__(self):
+        return f"<GroupChat id={self.id} name={self.name!r}>"
+
+
+class GroupMember(db.Model):
+    __tablename__ = "group_members"
+
+    group_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("group_chats.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    role = db.Column(db.String(10), nullable=False, server_default="member")
+    joined_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    # Cada miembro lee a su ritmo: sin `read_at` por mensaje (en un grupo no tiene sentido un único
+    # booleano). Los no leídos son los de otras personas posteriores a este instante.
+    last_read_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    user = db.relationship("User", lazy="joined")
+
+    __table_args__ = (
+        db.CheckConstraint("role IN ('admin', 'member')", name="ck_group_members_role"),
+        db.Index("ix_group_members_user_id", "user_id"),
+    )
 
 
 class MediaAttachment(db.Model):
@@ -728,6 +816,60 @@ class MediaAttachment(db.Model):
 
     def __repr__(self):
         return f"<MediaAttachment id={self.id} key={self.storage_key}>"
+
+
+class VideoAttachment(db.Model):
+    __tablename__ = "video_attachments"
+
+    # Video corto de una publicación o de un mensaje directo (ADR-046). Tabla propia, no
+    # `media_attachments`: esa asume imágenes (`width`/`height` de una foto, varias por post).
+    # Los archivos viven en el almacenamiento de medios; aquí solo sus claves.
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    # Quién lo subió: permite recoger sus archivos al eliminar la cuenta (ADR-031).
+    owner_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # EXACTAMENTE uno de los dos (CHECK); UNIQUE: un solo video por publicación o mensaje.
+    post_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+    message_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+    # `videos/<uuid4>.mp4` y `videos/<uuid4>.webp` (miniatura): aleatorios e impredecibles. Únicos.
+    storage_key = db.Column(db.Text, nullable=False, unique=True)
+    thumb_key = db.Column(db.Text, nullable=False, unique=True)
+    # Las calcula el servidor al decodificar; nunca las que declara el cliente.
+    width = db.Column(db.Integer, nullable=False)
+    height = db.Column(db.Integer, nullable=False)
+    duration_ms = db.Column(db.Integer, nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "(post_id IS NOT NULL)::int + (message_id IS NOT NULL)::int = 1",
+            name="ck_video_attachments_one_target",
+        ),
+        db.CheckConstraint("duration_ms > 0", name="ck_video_attachments_duration_positive"),
+        db.CheckConstraint("size_bytes > 0", name="ck_video_attachments_size_positive"),
+        db.CheckConstraint("width > 0 AND height > 0", name="ck_video_attachments_size_dims"),
+        db.Index("ix_video_attachments_owner_id", "owner_id"),
+    )
 
 
 class AudioAttachment(db.Model):
@@ -1681,6 +1823,9 @@ class Place(db.Model):
     )
     source = db.Column(db.String(20), nullable=False)
     coordinate_source = db.Column(db.String(20), nullable=False)
+    # Imagen que identifica al lugar (ADR-046): clave en el almacenamiento de medios, o NULL. La sube
+    # quien lo gestiona; el archivo lo re-codifica el servidor (sin EXIF) igual que el resto de imágenes.
+    image_key = db.Column(db.Text, nullable=True)
     # Trazabilidad de OpenStreetMap (ADR-043): `node`/`way`/`relation` y su identificador. Con
     # ellos la importación es idempotente y se puede separar (`source = 'osm'`) lo que sigue ODbL.
     osm_type = db.Column(db.String(10), nullable=True)
@@ -1730,6 +1875,29 @@ class SavedPlace(db.Model):
     created_at = db.Column(
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class SavedPost(db.Model):
+    __tablename__ = "saved_posts"
+
+    # Publicaciones guardadas por una persona (ADR-047). PK compuesta: la base impide guardar dos
+    # veces la misma. CASCADE en ambas FKs: al borrar la publicación o la cuenta (ADR-031)
+    # desaparece el guardado. Es PRIVADO: nadie más ve qué guardó una persona.
+    user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    post_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("posts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (db.Index("ix_saved_posts_user_created", "user_id", "created_at"),)
 
 
 class PlaceReport(db.Model):

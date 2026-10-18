@@ -12,7 +12,7 @@
 #
 # La identidad sale del JWT. Los campos no listados se ignoran.
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.application.rate_limiting import rate_limit_guard
@@ -113,6 +113,24 @@ def create(place_id):
 @jwt_required()
 def list_own():
     return jsonify({"reservations": use_cases.list_own(get_jwt_identity(), _repository)}), 200
+
+
+@reservations_bp.route("/reservations/<uuid:reservation_id>/pdf", methods=["GET"])
+@jwt_required()
+def reservation_pdf(reservation_id):
+    try:
+        pdf = use_cases.reservation_pdf(reservation_id, get_jwt_identity(), _repository)
+    except _DOMAIN_ERRORS as error:
+        return _failure(error)
+    return Response(
+        pdf,
+        mimetype="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="reserva-{str(reservation_id)[:8]}.pdf"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @reservations_bp.route("/reservations/<uuid:reservation_id>", methods=["DELETE"])

@@ -27,7 +27,7 @@ _LIKE_ESCAPE = "!"
 _BASE_COLUMNS = """
     p.id, p.name, p.slug, p.description, p.address, p.municipality, p.department,
     p.phone, p.website, p.verification_status, p.source, p.coordinate_source,
-    p.last_verified_at,
+    p.last_verified_at, p.image_key,
     ST_Y(p.location::geometry) AS latitude, ST_X(p.location::geometry) AS longitude,
     c.id AS category_id, c.slug AS category_slug, c.name AS category_name,
     (SELECT round(avg(rv.rating), 1) FROM place_reviews rv
@@ -657,6 +657,24 @@ class SQLAlchemyPlaceRepository(PlaceRepository):
             self._audit(actor_id, kinds.AUDIT_PLACE_UPDATED, "place", place_id, audit)
         db.session.commit()
         return True
+
+    def set_image(self, actor_id, place_id, key):
+        """Fija (o quita, con `None`) la imagen del lugar y audita el cambio en la misma transacción.
+        Devuelve `(existe, clave_anterior)`: la anterior se borra del almacenamiento fuera de aquí."""
+        row = db.session.execute(
+            text("SELECT image_key FROM places WHERE id = :id FOR UPDATE"), {"id": str(place_id)}
+        ).first()
+        if row is None:
+            db.session.rollback()
+            return False, None
+        previous = row[0]
+        db.session.execute(
+            text("UPDATE places SET image_key = :k, updated_at = now() WHERE id = :id"),
+            {"k": key, "id": str(place_id)},
+        )
+        self._audit(actor_id, kinds.AUDIT_PLACE_UPDATED, "place", place_id, {"image": [bool(previous), bool(key)]})
+        db.session.commit()
+        return True, previous
 
     def set_place_status(self, actor_id, place_id, changes):
         """Cambia `verification_status` y/o `is_active`. Al verificar, registra quién y

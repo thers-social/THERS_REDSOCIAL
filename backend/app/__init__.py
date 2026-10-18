@@ -97,6 +97,8 @@ def create_app():
 
     from app.interfaces.routes.message_routes import messages_bp
     app.register_blueprint(messages_bp, url_prefix="/api")
+    from app.interfaces.routes.group_routes import groups_bp
+    app.register_blueprint(groups_bp, url_prefix="/api")
 
     from app.interfaces.routes.privacy_routes import privacy_bp
     app.register_blueprint(privacy_bp, url_prefix="/api")

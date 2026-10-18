@@ -140,3 +140,23 @@ class SQLAlchemyFollowRepository(FollowRepository):
             )
         ).all()
         return {followed_id: status for followed_id, status in rows}
+
+    def list_followers(self, user_id, limit, offset):
+        return db.session.execute(
+            select(User)
+            .join(Follow, Follow.follower_id == User.id)
+            .where(Follow.followed_id == user_id, Follow.status == ACCEPTED)
+            .order_by(Follow.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        ).scalars().all()
+
+    def list_following(self, user_id, limit, offset):
+        return db.session.execute(
+            select(User)
+            .join(Follow, Follow.followed_id == User.id)
+            .where(Follow.follower_id == user_id, Follow.status == ACCEPTED)
+            .order_by(Follow.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        ).scalars().all()

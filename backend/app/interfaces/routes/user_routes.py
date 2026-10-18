@@ -18,6 +18,7 @@ from app.application.auth.update_profile_media_use_case import (
     remove_profile_image,
     set_profile_image,
 )
+from app.application.auth.get_public_profile_use_case import get_public_profile
 from app.application.auth.update_profile_use_case import update_profile
 from app.domain.auth.exceptions import (
     UserNotFoundError,
@@ -38,6 +39,9 @@ from app.infrastructure.media.image_processor import process_image
 from app.infrastructure.persistence.repositories.follow_repository import (
     SQLAlchemyFollowRepository,
 )
+from app.infrastructure.persistence.repositories.restriction_repository import (
+    SQLAlchemyRestrictionRepository,
+)
 from app.infrastructure.persistence.repositories.user_repository import (
     SQLAlchemyUserRepository,
 )
@@ -46,6 +50,7 @@ users_bp = Blueprint("users", __name__)
 
 _user_repository = SQLAlchemyUserRepository()
 _follow_repository = SQLAlchemyFollowRepository()
+_restriction_repository = SQLAlchemyRestrictionRepository()
 # POST /api/send-verification-email (protegido, JWT) se retiró en
 # ADR-011-mandatory-email-verification.md: con la verificación obligatoria
 # al registrarse (ADR-011), una cuenta sin verificar nunca puede obtener un
@@ -76,6 +81,21 @@ def me():
         return jsonify({"msg": "Usuario no encontrado"}), 404
 
     return jsonify({"user": user}), 200
+
+
+@users_bp.route("/users/<uuid:user_id>", methods=["GET"])
+@jwt_required()
+def public_profile(user_id):
+    """Perfil de otra persona (ADR-049). Una cuenta bloqueada en cualquier sentido es 404."""
+    try:
+        profile = get_public_profile(
+            str(user_id), get_jwt_identity(), _user_repository, _follow_repository,
+            _restriction_repository,
+        )
+    except UserNotFoundError:
+        return jsonify({"msg": "Usuario no encontrado"}), 404
+
+    return jsonify({"user": profile}), 200
 
 
 @users_bp.route("/users/me", methods=["PATCH"])

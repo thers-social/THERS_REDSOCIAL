@@ -17,4 +17,4 @@ def update_message(message_id, sender_id, content, message_repository):
     # devuelve a no leído (ADR-021 §Decisión) -- el separador de "mensajes no
     # leídos" de Messages.jsx no debe reordenarse porque alguien corrigió una
     # palabra.
-    return to_public_messages([message], message_repository)[0]
+    return to_public_messages([message], message_repository, sender_id)[0]

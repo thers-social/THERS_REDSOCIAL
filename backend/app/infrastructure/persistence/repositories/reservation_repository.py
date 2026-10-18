@@ -141,6 +141,12 @@ class SQLAlchemyReservationRepository(PlaceNotifierMixin):
         ).mappings().first()
         return dict(row) if row else None
 
+    def requester_name(self, user_id):
+        row = db.session.execute(
+            text("SELECT name, username FROM users WHERE id = :u"), {"u": str(user_id)}
+        ).mappings().first()
+        return (row["name"] or row["username"]) if row else None
+
     def list_for_user(self, user_id, limit):
         rows = db.session.execute(
             text(

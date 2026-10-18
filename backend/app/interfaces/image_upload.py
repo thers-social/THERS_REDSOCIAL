@@ -13,10 +13,21 @@
 from flask import jsonify, request
 
 from app.domain.media.storage import ImageTooLargeError, InvalidImageError
+from app.domain.media.video import (
+    MAX_VIDEO_SECONDS,
+    MAX_VIDEO_UPLOAD_BYTES,
+    InvalidVideoError,
+    VideoTooLargeError,
+    VideoTooLongError,
+)
 from app.infrastructure.media.image_processor import MAX_UPLOAD_BYTES, process_attachment
+from app.infrastructure.media.video_processor import process_video
 
 #: 4 imágenes de 5 MiB más el sobrecoste del formato multipart.
 MULTIPART_LIMIT_BYTES = 22 * 1024 * 1024
+#: Techo cuando la petición lleva un video (25 MiB, ADR-046). Imágenes y video son excluyentes, así que
+#: basta con el mayor de los dos más el sobrecoste del multipart.
+MULTIPART_LIMIT_WITH_VIDEO_BYTES = 28 * 1024 * 1024
 
 _TRUE = {"true", "1"}
 _FALSE = {"false", "0", ""}
@@ -26,7 +37,7 @@ def read_request_data():
     """`(data, files)`: el cuerpo como diccionario y la lista de archivos del campo
     `images` (vacía con JSON). `data` es `None` si no llegó nada utilizable."""
     if request.mimetype == "multipart/form-data":
-        request.max_content_length = MULTIPART_LIMIT_BYTES
+        request.max_content_length = MULTIPART_LIMIT_WITH_VIDEO_BYTES
         data = request.form.to_dict()
         # En multipart todo llega como texto: `is_sensitive` se convierte aquí.
         if "is_sensitive" in data:
@@ -39,6 +50,33 @@ def read_request_data():
         return data, files
 
     return request.get_json(silent=True), []
+
+
+def read_video_upload():
+    """El archivo del campo `video` de una petición multipart (ADR-046), o `None`."""
+    if request.mimetype != "multipart/form-data":
+        return None
+    upload = request.files.get("video")
+    return upload if upload is not None and upload.filename else None
+
+
+def process_video_upload(upload):
+    """`(prepared, error_response)` para un video subido: lo decodifica por su CONTENIDO real y lo
+    re-codifica. Los errores del cliente salen como respuesta HTTP; un video inválido anula la petición."""
+    try:
+        # +1 para detectar el exceso sin leer un archivo gigante entero.
+        raw = upload.read(MAX_VIDEO_UPLOAD_BYTES + 1)
+        return process_video(raw), None
+    except VideoTooLargeError:
+        return None, (jsonify({"msg": "El video puede pesar como máximo 25 MB"}), 413)
+    except VideoTooLongError:
+        return None, (jsonify({"msg": f"El video puede durar como máximo {MAX_VIDEO_SECONDS} segundos"}), 400)
+    except InvalidVideoError:
+        return None, (jsonify({"msg": "El archivo debe ser un video válido (MP4, MOV o WebM)"}), 400)
+
+
+def video_disabled_response():
+    return jsonify({"msg": "Los videos no están disponibles ahora", "code": "video_disabled"}), 503
 
 
 def too_many_images_response(limit):

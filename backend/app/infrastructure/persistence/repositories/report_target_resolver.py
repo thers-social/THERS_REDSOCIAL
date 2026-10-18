@@ -9,9 +9,9 @@
 from app.domain.reports import kinds
 from app.domain.reports.repositories import ReportTargetResolver, ResolvedTarget
 from app.extensions import db
-from sqlalchemy import text
+from sqlalchemy import select, text
 
-from app.infrastructure.persistence.models import Comment, Message, Post, User
+from app.infrastructure.persistence.models import Comment, GroupMember, Message, Post, User
 
 
 def _profile_text(user):
@@ -60,7 +60,17 @@ class SQLAlchemyReportTargetResolver(ReportTargetResolver):
                 target_id=str(message.id),
                 owner_id=str(message.sender_id),
                 text=message.content or "",
-                recipient_id=str(message.recipient_id),
+                recipient_id=str(message.recipient_id) if message.recipient_id else None,
+                group_member_ids=(
+                    tuple(
+                        str(uid)
+                        for uid in db.session.execute(
+                            select(GroupMember.user_id).where(GroupMember.group_id == message.group_id)
+                        ).scalars()
+                    )
+                    if message.group_id
+                    else None
+                ),
             )
 
         if target_type == kinds.TARGET_USER:

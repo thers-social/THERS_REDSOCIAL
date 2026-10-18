@@ -13,6 +13,7 @@ from app.infrastructure.persistence.models import (
     DataExport,
     Follow,
     Like,
+    GroupChat,
     Message,
     MutedKeyword,
     MutedTopic,
@@ -134,10 +135,13 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
         ):
             sent = m.sender_id == user_id
             other = m.recipient if sent else m.sender
+            # Mensaje de grupo (ADR-048): no hay una sola "otra persona"; se da el nombre del grupo.
+            group = db.session.get(GroupChat, m.group_id) if m.group_id else None
             messages.append(
                 {
                     "direction": "sent" if sent else "received",
-                    "with_username": other.username,
+                    "with_username": other.username if other is not None else None,
+                    "group_name": group.name if group is not None else None,
                     "content": m.content,
                     "created_at": _iso(m.created_at),
                     "read": m.read_at is not None,
@@ -147,6 +151,10 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
                     # ADR-042: duración (s) de la nota de voz, si la hubo. El archivo no se incluye.
                     "voice_note_seconds": (
                         round(m.audio.duration_ms / 1000) if m.audio is not None else None
+                    ),
+                    # ADR-046: duración (s) del video, si lo hubo. El archivo no se incluye.
+                    "video_seconds": (
+                        round(m.video.duration_ms / 1000) if m.video is not None else None
                     ),
                 }
             )
@@ -243,6 +251,15 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
                     "SELECT p.name, p.slug, s.created_at FROM saved_places s "
                     "JOIN places p ON p.id = s.place_id WHERE s.user_id = :u "
                     "ORDER BY s.created_at"
+                ),
+                {"u": str(user_id)},
+            )
+        ]
+        saved_posts = [
+            {"post_id": str(post_id), "saved_at": _iso(saved_at)}
+            for post_id, saved_at in db.session.execute(
+                db.text(
+                    "SELECT post_id, created_at FROM saved_posts WHERE user_id = :u ORDER BY created_at"
                 ),
                 {"u": str(user_id)},
             )
@@ -424,6 +441,7 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
             "restrictions": restrictions,
             "sessions": sessions,
             "saved_places": saved_places,
+            "saved_posts": saved_posts,
             "place_reports": place_reports,
             "place_reviews": place_reviews,
             "place_plans": place_plans,

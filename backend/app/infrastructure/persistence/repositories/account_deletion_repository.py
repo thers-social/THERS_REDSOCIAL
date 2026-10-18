@@ -14,9 +14,13 @@ from app.extensions import db
 from app.infrastructure.persistence.models import (
     AccountDeletionCode,
     AudioAttachment,
+    GroupChat,
+    GroupMember,
+    VideoAttachment,
     MediaAttachment,
     User,
 )
+from app.infrastructure.persistence.repositories.group_repository import SQLAlchemyGroupRepository
 
 # Mismo razonamiento que password_reset_repository: dos "pedir código"
 # simultáneos pueden chocar con el índice único parcial; se reintenta.
@@ -114,6 +118,12 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
             ).scalars()
         )
 
+        # Videos de sus publicaciones y mensajes (ADR-046) y sus miniaturas: igual que lo anterior.
+        for column in (VideoAttachment.storage_key, VideoAttachment.thumb_key):
+            media_keys += list(
+                db.session.execute(select(column).where(VideoAttachment.owner_id == user_id)).scalars()
+            )
+
         # Documentos de reclamos pendientes (almacenamiento PRIVADO, ADR-040 fase 6): las
         # filas caen en cascada, los archivos no.
         private_keys = list(
@@ -126,6 +136,26 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
             ).scalars()
         )
 
+        # Chats grupales (ADR-048): sus mensajes caen en cascada con la cuenta, pero un grupo del que
+        # era la ÚNICA persona se quedaría vacío (con los archivos de los demás), y uno del que era
+        # el único administrador se quedaría sin quien lo gestione. Se resuelve antes de borrar.
+        empty_group_ids = []
+        for group_id in db.session.execute(
+            select(GroupMember.group_id).where(GroupMember.user_id == user_id)
+        ).scalars().all():
+            others = db.session.execute(
+                select(GroupMember)
+                .where(GroupMember.group_id == group_id, GroupMember.user_id != user_id)
+                .order_by(GroupMember.joined_at, GroupMember.user_id)
+            ).scalars().all()
+            if not others:
+                empty_group_ids.append(group_id)
+            elif not any(m.role == "admin" for m in others):
+                others[0].role = "admin"
+        group_repository = SQLAlchemyGroupRepository()
+        for group_id in empty_group_ids:
+            media_keys += group_repository.media_keys(group_id)
+
         # Un solo DELETE: las 22 claves foráneas hacia `users` son ON DELETE
         # CASCADE (publicaciones, comentarios, me gusta, seguidos, notificaciones,
         # mensajes en ambos lados, tokens, sesiones, identidades de Google,
@@ -133,6 +163,8 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
         # tests/test_account_deletion.py recorre `information_schema` y falla si
         # alguna tabla nueva deja de cumplirlo.
         db.session.execute(delete(User).where(User.id == user_id))
+        if empty_group_ids:
+            db.session.execute(delete(GroupChat).where(GroupChat.id.in_(empty_group_ids)))
         db.session.commit()
 
         # `rate_limit_buckets` identifica por hash de "user:<id>" y no tiene clave

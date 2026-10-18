@@ -55,7 +55,7 @@ def process_image(raw, kind):
 # Imágenes de publicaciones y mensajes (ADR-039): se conserva la proporción
 # (sin recortar) y solo se reduce si el lado mayor pasa de este máximo. Se
 # re-codifica a WebP, así se descartan EXIF/GPS y cualquier carga escondida.
-ATTACHMENT_MAX_SIDE = {"post": 1600, "message": 1280, "review": 1280}
+ATTACHMENT_MAX_SIDE = {"post": 1600, "message": 1280, "review": 1280, "place": 1200}
 
 
 def process_attachment(raw, kind):
@@ -68,6 +68,32 @@ def process_attachment(raw, kind):
 
     image = _decode(raw, _fit)
     return _encode(image), "image/webp", image.width, image.height
+
+
+# Imagen que se adjunta a una pregunta para Tero (ADR-046). Se decodifica por CONTENIDO, se endereza y
+# se reduce: el modelo cobra por tamaño de imagen y no gana nada con más de ~1,2 Mpx. Se devuelve como
+# JPEG (sin transparencia ni EXIF/GPS). Nunca se guarda: solo viaja al proveedor de IA.
+AI_IMAGE_MAX_SIDE = 1280
+
+
+def process_for_ai(raw):
+    """Devuelve `(bytes_jpeg, "image/jpeg")` o lanza InvalidImageError / ImageTooLargeError."""
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise ImageTooLargeError()
+
+    def _fit(img):
+        img.thumbnail((AI_IMAGE_MAX_SIDE, AI_IMAGE_MAX_SIDE), Image.LANCZOS)
+        return img
+
+    image = _decode(raw, _fit)
+    if image.mode != "RGB":
+        # Lo transparente se aplana sobre blanco: JPEG no tiene canal alfa.
+        flat = Image.new("RGB", image.size, (255, 255, 255))
+        flat.paste(image, mask=image.getchannel("A") if "A" in image.getbands() else None)
+        image = flat
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=85)
+    return buffer.getvalue(), "image/jpeg"
 
 
 # Documentos de reclamo de negocio (ADR-040 fase 6): imagen (se re-codifica como las demás,

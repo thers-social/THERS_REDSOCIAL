@@ -244,9 +244,13 @@ def test_availability_edge_cases(client, world):
     headers = auth(users["beto"][0])
     day = _local_day()
     url = f"/api/places/{place_id}/availability"
-    # Sin horario cargado no hay huecos que ofrecer.
-    assert client.get(f"{url}?date={day.isoformat()}", headers=headers).get_json()["availability"]["slots"] == []
+    # Sin horario cargado se ofrece el horario por defecto (ADR-051): 10:00 a 21:00, cada media hora.
+    default = client.get(f"{url}?date={day.isoformat()}", headers=headers).get_json()["availability"]
+    assert default["default_hours"] is True
+    starts = [s["starts_at"] for s in default["slots"]]
+    assert starts[0] == _at(day, 10) and starts[-1] == _at(day, 20, 30) and len(starts) == 22
     _put_hours(client, users["ana"][0], place_id, _open_every_day())
+    assert client.get(f"{url}?date={day.isoformat()}", headers=headers).get_json()["availability"]["default_hours"] is False
     client.post(f"/api/places/{place_id}/manage/closures", json={"date": day.isoformat()}, headers=auth(users["ana"][0]))
     assert client.get(f"{url}?date={day.isoformat()}", headers=headers).get_json()["availability"]["slots"] == []
     for bad in ("ayer", "2020-01-01", (date.today() + timedelta(days=200)).isoformat()):

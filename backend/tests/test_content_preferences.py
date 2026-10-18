@@ -288,7 +288,14 @@ class TestSuggestions:
         ta, _ = _register_and_login(client, "ada")
         _register_and_login(client, "bob")
         suggestion = client.get("/api/users/suggestions", headers=_h(ta)).get_json()["suggestions"][0]
-        assert set(suggestion) == {"id", "name", "username", "is_private"}
+        assert set(suggestion) == {"id", "name", "username", "is_private", "avatar_url"}
+
+    def test_limit_is_optional_and_validated(self, client):
+        ta, _ = _register_and_login(client, "ada")
+        for name in ("bob", "carol", "dave"):
+            _register_and_login(client, name)
+        assert len(client.get("/api/users/suggestions?limit=2", headers=_h(ta)).get_json()["suggestions"]) == 2
+        assert client.get("/api/users/suggestions?limit=x", headers=_h(ta)).status_code == 400
 
     def test_excludes_accounts_already_followed_or_requested(self, client):
         ta, _ = _register_and_login(client, "ada")

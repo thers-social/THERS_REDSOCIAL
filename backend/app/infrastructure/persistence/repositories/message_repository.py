@@ -11,18 +11,27 @@ from app.domain.messages.repositories import MessageRepository
 from app.extensions import db
 from app.infrastructure.persistence.models import Message, User
 from app.infrastructure.persistence.repositories.place_cards import fetch_place_cards
+from app.infrastructure.persistence.repositories.post_cards import fetch_visible_posts
 
 
 class SQLAlchemyMessageRepository(MessageRepository):
-    def create(self, sender_id, recipient_id, content, place_id=None):
+    def create(self, sender_id, recipient_id, content, place_id=None, post_id=None, group_id=None):
         message = Message(
-            sender_id=sender_id, recipient_id=recipient_id, content=content, place_id=place_id
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            group_id=group_id,
+            content=content,
+            place_id=place_id,
+            post_id=post_id,
         )
         db.session.add(message)
         db.session.commit()
         return message
 
-    def create_idempotent(self, sender_id, recipient_id, content, client_id, place_id=None):
+    def create_idempotent(
+        self, sender_id, recipient_id, content, client_id, place_id=None, post_id=None,
+        group_id=None,
+    ):
         existing = self._find_by_client_id(sender_id, client_id)
         if existing is not None:
             return existing, False
@@ -30,9 +39,11 @@ class SQLAlchemyMessageRepository(MessageRepository):
         message = Message(
             sender_id=sender_id,
             recipient_id=recipient_id,
+            group_id=group_id,
             content=content,
             client_id=client_id,
             place_id=place_id,
+            post_id=post_id,
         )
         db.session.add(message)
         try:
@@ -51,6 +62,9 @@ class SQLAlchemyMessageRepository(MessageRepository):
         """Tarjeta mínima de cada lugar PÚBLICO de `place_ids` (ADR-040 fase 4c). Los que no
         son públicos (o ya no existen) no aparecen: quien presenta decide cómo mostrarlo."""
         return fetch_place_cards(place_ids)
+
+    def visible_posts(self, post_ids, viewer_id):
+        return fetch_visible_posts(post_ids, viewer_id)
 
     def _find_by_client_id(self, sender_id, client_id):
         return db.session.execute(
@@ -132,7 +146,11 @@ class SQLAlchemyMessageRepository(MessageRepository):
         # de esta entidad, aceptable al volumen de esta tarea).
         last_message_rows = db.session.execute(
             select(Message, other_id)
-            .where(or_(Message.sender_id == user_id, Message.recipient_id == user_id))
+            .where(
+                or_(Message.sender_id == user_id, Message.recipient_id == user_id),
+                # Los mensajes de grupo (ADR-048) tienen su propia lista.
+                Message.group_id.is_(None),
+            )
             .distinct(other_id)
             .order_by(other_id, Message.created_at.desc())
         ).all()

@@ -15,10 +15,15 @@
 # (ninguna ruta matchea) para cualquier segmento que no sea un UUID válido,
 # sin necesidad de validarlo a mano (mismo criterio que like_routes.py).
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.application.follows.follow_user_use_case import follow_user
+from app.application.follows.list_connections_use_case import (
+    DEFAULT_LIMIT as DEFAULT_CONNECTIONS_LIMIT,
+    MAX_LIMIT as MAX_CONNECTIONS_LIMIT,
+    list_connections,
+)
 from app.application.follows.list_follow_requests_use_case import (
     DEFAULT_LIMIT,
     list_follow_requests,
@@ -31,6 +36,7 @@ from app.application.follows.unfollow_user_use_case import unfollow_user
 from app.domain.auth.exceptions import UserNotFoundError
 from app.domain.follows.exceptions import (
     CannotFollowSelfError,
+    CannotViewConnectionsError,
     FollowRequestNotFoundError,
 )
 from app.domain.restrictions.exceptions import AccountBlockedError
@@ -143,3 +149,34 @@ def reject_request(user_id):
         return jsonify({"msg": "Solicitud no encontrada"}), 404
 
     return jsonify(result), 200
+
+
+def _connections(user_id, kind):
+    """Seguidores / seguidos de `user_id` (ADR-050). `limit` (máx. 100) y `offset` opcionales."""
+    try:
+        limit = min(max(int(request.args.get("limit", DEFAULT_CONNECTIONS_LIMIT)), 1), MAX_CONNECTIONS_LIMIT)
+        offset = max(int(request.args.get("offset", 0)), 0)
+    except ValueError:
+        return jsonify({"msg": "limit y offset deben ser números"}), 400
+    try:
+        people = list_connections(
+            str(user_id), get_jwt_identity(), kind, _user_repository, _follow_repository,
+            _restriction_repository, limit, offset,
+        )
+    except UserNotFoundError:
+        return jsonify({"msg": "Usuario no encontrado"}), 404
+    except CannotViewConnectionsError:
+        return jsonify({"msg": "Esta cuenta es privada"}), 403
+    return jsonify({"users": people, "has_more": len(people) == limit}), 200
+
+
+@follows_bp.route("/users/<uuid:user_id>/followers", methods=["GET"])
+@jwt_required()
+def followers(user_id):
+    return _connections(user_id, "followers")
+
+
+@follows_bp.route("/users/<uuid:user_id>/following", methods=["GET"])
+@jwt_required()
+def following(user_id):
+    return _connections(user_id, "following")

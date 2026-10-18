@@ -328,3 +328,24 @@ def test_deleting_the_person_removes_their_reservations(client, app, open_world)
         db.session.execute(text("DELETE FROM users WHERE id = :i"), {"i": users["beto"][1]})
         db.session.commit()
     assert _scalar(app, "SELECT count(*) FROM place_reservations") == 0
+
+
+# --- PDF del comprobante (ADR-052) -------------------------------------------------
+
+
+def test_reservation_pdf_is_only_for_its_owner(client, open_world):
+    users, place_id = open_world
+    reservation_id = _book(client, users["beto"][0], place_id, note="Mesa junto a la ventana").get_json()["reservation"]["id"]
+    url = f"/api/reservations/{reservation_id}/pdf"
+
+    mine = client.get(url, headers=auth(users["beto"][0]))
+
+    assert mine.status_code == 200
+    assert mine.mimetype == "application/pdf"
+    assert mine.data.startswith(b"%PDF") and b"Caf" in mine.data  # nombre del lugar dibujado
+    assert "reserva-" in mine.headers["Content-Disposition"]
+    # Ni quien gestiona el lugar ni nadie más lo descarga por esta ruta: 404, como el resto de la reserva.
+    assert client.get(url, headers=auth(users["ana"][0])).status_code == 404
+    assert client.get(url, headers=auth(users["mod"][0])).status_code == 404
+    assert client.get(f"/api/reservations/{MISSING}/pdf", headers=auth(users["beto"][0])).status_code == 404
+    assert client.get(url).status_code == 401

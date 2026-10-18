@@ -90,3 +90,11 @@ class FollowRepository(ABC):
         estados del botón -- Seguir, Solicitado, Siguiendo -- y resolverlos
         con dos consultas (una por estado) sería un N+1 evitable
         (ADR-022 §Contrato API)."""
+
+    @abstractmethod
+    def list_followers(self, user_id, limit, offset):
+        """Los `User` que siguen a `user_id` con un follow **aceptado**, el más reciente primero."""
+
+    @abstractmethod
+    def list_following(self, user_id, limit, offset):
+        """Los `User` a quienes `user_id` sigue (follow **aceptado**), el más reciente primero."""

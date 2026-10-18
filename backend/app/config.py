@@ -304,6 +304,8 @@ def _positive_float_env(name, default):
 # Notas de voz en mensajes (ADR-042). Apagado por defecto: con el interruptor apagado un envío con
 # audio responde 503 `voice_disabled` y el resto de la mensajería no cambia.
 Config.VOICE_MESSAGES_ENABLED = _flag_env("VOICE_MESSAGES_ENABLED")
+# Videos cortos en publicaciones y mensajes (ADR-046). Apagado por defecto: re-codificar video cuesta CPU.
+Config.VIDEO_UPLOADS_ENABLED = _flag_env("VIDEO_UPLOADS_ENABLED")
 
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
 # Automatizaciones con n8n (ADR-041 §7): aviso de reporte resuelto y resumen semanal. Apagadas por
@@ -329,6 +331,8 @@ Config.TERO_TOOLS_ENABLED = _flag_env("TERO_TOOLS_ENABLED")
 # editar nombre o biografía; la persona confirma aparte. Otro interruptor, apagado por defecto.
 Config.TERO_ACTIONS_ENABLED = _flag_env("TERO_ACTIONS_ENABLED")
 Config.TERO_AI_ENABLED = _flag_env("TERO_AI_ENABLED")
+# Preguntas con imagen (ADR-046): la imagen sale a Anthropic y cuesta por uso. Apagado por defecto.
+Config.TERO_IMAGES_ENABLED = _flag_env("TERO_IMAGES_ENABLED")
 Config.ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY") or "").strip() or None
 Config.TERO_MODEL = (os.environ.get("TERO_MODEL") or "").strip() or "claude-haiku-5-5"
 Config.TERO_AI_TIMEOUT_SECONDS = _positive_float_env("TERO_AI_TIMEOUT_SECONDS", 20.0)
