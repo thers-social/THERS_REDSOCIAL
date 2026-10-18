@@ -697,7 +697,22 @@ class MediaAttachment(db.Model):
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
 
+    # Moderación (ADR-044). El valor por defecto de la BASE es 'pending': una fila que no dice su
+    # estado no se publica (falla cerrado). La aplicación lo fija siempre de forma explícita
+    # (`content_moderation.initial_status`). Las filas anteriores a la migración son 'approved'.
+    moderation_status = db.Column(
+        db.String(10), nullable=False, server_default=text("'pending'")
+    )
+    # `auto` (motor de políticas) o el id de la persona que decidió.
+    moderation_decided_by = db.Column(db.String(40), nullable=True)
+    moderation_decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     __table_args__ = (
+        db.CheckConstraint(
+            "moderation_status IN ('pending', 'approved', 'held', 'rejected')",
+            name="ck_media_attachments_moderation_status",
+        ),
+        db.Index("ix_media_attachments_moderation_status", "moderation_status"),
         db.CheckConstraint(
             "((post_id IS NOT NULL)::int + (message_id IS NOT NULL)::int "
             "+ (review_id IS NOT NULL)::int) = 1",
@@ -1726,6 +1741,8 @@ class AdminAuditLog(db.Model):
     resource_type = db.Column(db.String(30), nullable=False)
     resource_id = db.Column(PG_UUID(as_uuid=True), nullable=True)
     changes = db.Column(JSONB, nullable=True)
+    # `human` | `system` (ADR-044): distingue una decisión automática de una de una persona.
+    actor_kind = db.Column(db.String(8), nullable=False, server_default=text("'human'"))
     created_at = db.Column(
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -2142,6 +2159,79 @@ class TeroPendingAction(db.Model):
             name="ck_tero_pending_actions_resolved",
         ),
         Index("ix_tero_pending_actions_user_created", "user_id", "created_at"),
+    )
+
+
+# --- Moderación de contenido (ADR-044) ---
+
+
+class ModerationJob(db.Model):
+    __tablename__ = "moderation_jobs"
+
+    # Cola persistente (outbox). El payload son SOLO identificadores: nunca el contenido.
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    kind = db.Column(db.String(24), nullable=False)
+    subject_type = db.Column(db.String(24), nullable=False)
+    subject_id = db.Column(PG_UUID(as_uuid=True), nullable=False)
+    # Único: encolar dos veces el mismo hecho no crea un segundo trabajo.
+    idempotency_key = db.Column(db.String(120), nullable=False, unique=True)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'queued'"))
+    attempts = db.Column(db.SmallInteger, nullable=False, server_default=text("0"))
+    next_attempt_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    locked_by = db.Column(db.String(60), nullable=True)
+    locked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Clase del error, nunca texto del proveedor ni del contenido.
+    last_error = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    finished_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'dead')",
+            name="ck_moderation_jobs_status",
+        ),
+        db.Index("ix_moderation_jobs_subject", "subject_type", "subject_id"),
+    )
+
+
+class ModerationResult(db.Model):
+    __tablename__ = "moderation_results"
+
+    # Lo que dijo el clasificador y lo que decidió el motor. SIN el contenido evaluado.
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    job_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("moderation_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    provider = db.Column(db.String(40), nullable=False)
+    model_version = db.Column(db.String(60), nullable=False)
+    categories = db.Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    scores = db.Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    # Sin 'rejected': la base impide que una decisión automática rechace (ADR-044 §2.3).
+    decision = db.Column(db.String(10), nullable=False)
+    priority = db.Column(db.String(8), nullable=False, server_default=text("'normal'"))
+    policy_version = db.Column(db.String(20), nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "decision IN ('approved', 'held', 'pending')", name="ck_moderation_results_decision"
+        ),
+        db.CheckConstraint(
+            "priority IN ('normal', 'high', 'critical')", name="ck_moderation_results_priority"
+        ),
     )
 
 

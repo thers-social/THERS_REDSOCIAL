@@ -31,6 +31,8 @@ def create_app():
 
     app.extensions["media_storage"] = build_media_storage(app.config)
     configure_media_url(app.config["MEDIA_PUBLIC_BASE_URL"])
+    from app.application.media.image_visibility import configure_moderation
+    configure_moderation(app.config.get("MODERATION_ENABLED"))
 
     # Documentos privados de reclamos (ADR-040 fase 6): almacenamiento aparte, nunca público.
     from app.infrastructure.media.private_storage import build_private_storage
@@ -142,6 +144,11 @@ def create_app():
     # Tero, asistente con IA (ADR-041, fase 4): chat. Apagado por defecto (TERO_ENABLED).
     from app.interfaces.routes.tero_routes import tero_bp
     app.register_blueprint(tero_bp, url_prefix="/api")
+
+    # Moderación de contenido (ADR-044): clasificador de imágenes. Solo existe el simulado y solo si
+    # se pide explícitamente; sin él, el worker deja todo retenido (falla cerrado).
+    from app.infrastructure.content_moderation.factory import image_classifier
+    app.extensions["thers_content_moderation"] = {"image_classifier": image_classifier(app)}
 
     # Comandos de línea de comandos (flask set-moderator, flask unsuspend-user).
     from app.interfaces.cli import register_cli

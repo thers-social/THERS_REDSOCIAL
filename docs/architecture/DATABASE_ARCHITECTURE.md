@@ -4,6 +4,8 @@
 |---|---|
 | Documento | `docs/architecture/DATABASE_ARCHITECTURE.md` |
 | Identificador propuesto | `DB-001` (sigue el patrón `HB-001`/`ARC-001`/`DS-001`/`WF-001`/`PV-001`/`FAS-001`) — **pendiente de ratificación formal** |
+| Versión | 0.44 |
+
 | Versión | 0.43 |
 | Estado | **Borrador / Contrato técnico — pendiente de aprobación del equipo** |
 | Depende de | `HB-001` (organización, gobernanza, git flow, seguridad), `REPOSITORY_STRUCTURE.md` (ubicación del backend y carpeta futura `database/`) |
@@ -12,6 +14,18 @@
 
 > ⚠️ **Nota de alcance y honestidad de fuentes.** Este documento es un **contrato técnico previo a la implementación**, no una descripción de un esquema ya existente. Al momento de escribirlo (v0.1), el backend **no tenía base de datos, ni ORM, ni driver de PostgreSQL instalado**: la autenticación funcionaba contra credenciales hardcodeadas (ver §4). Todo lo que aquí se define como "decidido" se limita a lo que la documentación oficial ya respalda o a lo que el estado real del código justifica de forma evidente. Todo lo demás está marcado explícitamente como **PENDIENTE DE APROBACIÓN** (§14). No se inventan entidades, columnas, índices ni políticas que el proyecto no necesite hoy.
 >
+> **v0.44 — moderación de contenido, base (`ADR-044`, **PROPUESTO — sin ratificar**, rama `feature/moderation-core`; la fusión espera la decisión del Comité Técnico):** dos migraciones aditivas (`d7a3f9c1b852`, `e2b8c4d6a931`).
+>
+> · `media_attachments` gana `moderation_status` (`pending`/`approved`/`held`/`rejected`, `CHECK`), `moderation_decided_by` (`auto` o el id de la persona) y `moderation_decided_at`. **Las filas existentes pasan a `approved`** (nada ya publicado desaparece) y, a continuación, el valor por defecto de la columna se cambia a `pending`: una fila insertada sin decir su estado **falla cerrado**. La aplicación lo fija siempre de forma explícita (`approved` con `MODERATION_ENABLED` apagado, `pending` encendido).
+>
+> · `admin_audit_log` gana `actor_kind` (`human`/`system`, por defecto `human`): las decisiones automáticas dejan fila con `system`.
+>
+> · `moderation_jobs`: cola persistente (outbox). `idempotency_key` **único** evita duplicados; estados `queued`/`running`/`succeeded`/`failed`/`dead`; `attempts`, `next_attempt_at`, `locked_by`/`locked_at` (el worker reclama con `FOR UPDATE SKIP LOCKED` y recupera reservas vencidas). **Solo identificadores: nunca el contenido.** Sin FK al sujeto (es genérico): si el contenido se borra, el trabajo termina sin hacer nada.
+>
+> · `moderation_results`: un resultado por trabajo (`job_id` único, `ON DELETE CASCADE`) con `provider`, `model_version`, `categories`/`scores` (`JSONB`), `decision`, `priority`, `policy_version`. **Sin el contenido evaluado.** El `CHECK` de `decision` **no admite `rejected`**: la base impide que una decisión automática rechace.
+>
+> · Migración `head`: `e2b8c4d6a931` (cuelga de `c4f8a2d6e913`). Cabeza única sobre `develop` `db84edc`; si `feature/stories-integration` se fusiona antes, hay que rebasar con una migración de unión. Verificado el 2026-10-18 sobre bases desechables: desde cero, desde datos preexistentes (las filas antiguas quedan `approved`), `downgrade` a `c4f8a2d6e913` sin perder filas y `upgrade` otra vez.
+
 > **v0.43 — Historias de 24 horas (`ADR-042`) y migración de unión:** la migración `d1e5b8f2a640` crea `stories` (`id` UUID, `author_id` FK a `users` con `ON DELETE CASCADE`, `content` texto opcional de hasta 200 caracteres, `storage_key` único, `width`, `height`, `created_at` y `expires_at`, **guardado al crear y no recalculado**; índices `(author_id, expires_at)` y `expires_at`) y `story_views` (PK compuesta `(story_id, viewer_id)`, ambas FK con `CASCADE`, `viewed_at`). El archivo de la imagen vive en el almacenamiento de medios, que hoy es **público** (riesgo documentado en `ADR-042` §4); **no hay `moderation_status`** todavía (`ADR-044`, propuesta). La revisión `c8dcd63b24d4` es una **unión vacía** (sin cambios de esquema) de las cabezas `c4f8a2d6e913` (Tero) y `d1e5b8f2a640` (Historias), que colgaban de la misma revisión `c9d4a1e7b362`; no se editó ninguna migración existente. Cabeza actual: `c8dcd63b24d4`. El módulo está detrás del flag `STORIES_ENABLED` (apagado por defecto).
 >
 > **v0.42 — Tero, acciones pendientes de confirmación (`ADR-041` §6.2):** una migración (`c4f8a2d6e913`) y una tabla nueva, `tero_pending_actions`: `id` (UUID), `user_id` (FK a `users`, `ON DELETE CASCADE`), `kind`, `params` (`JSONB`, ya validados por el servidor), `summary` (texto de la tarjeta, redactado por el servidor), `status` (`pending`/`confirmed`/`cancelled`/`failed`), `expires_at`, `created_at` y `resolved_at`. Dos `CHECK`: el estado, y que `resolved_at` sea nulo **si y solo si** sigue `pending`. Índice `(user_id, created_at)`. **Sí lleva `user_id`** (a diferencia de `tero_usage`): la acción pertenece a una persona y solo ella puede confirmarla. Se borra con la cuenta (`CASCADE`, `ADR-031`) y por retención a los 90 días (`ADR-037`). La confirmación es un único `UPDATE ... WHERE status = 'pending' AND expires_at > now() RETURNING`, que es lo que garantiza que una acción se ejecute una sola vez aunque lleguen dos confirmaciones a la vez. Verificada con `flask db upgrade` contra PostgreSQL 16 real sobre `thers_test`.

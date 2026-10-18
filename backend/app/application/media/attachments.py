@@ -8,6 +8,7 @@
 import logging
 import uuid
 
+from app.application.media.image_visibility import visible_images
 from app.application.media.media_url import media_url
 
 _logger = logging.getLogger(__name__)
@@ -43,11 +44,23 @@ def discard_files(keys, storage):
             _logger.warning("Archivo huérfano en el almacenamiento: %s", key)
 
 
-def to_public_images(images):
+def to_public_images(images, viewer_id=None):
     """Forma pública de las imágenes de un post/mensaje. Nunca expone la clave
     interna ni quién la subió: solo la URL y las dimensiones, que el cliente
-    necesita para reservar el espacio y evitar saltos de diseño."""
-    return [
-        {"url": media_url(image.storage_key), "width": image.width, "height": image.height}
-        for image in (images or [])
-    ]
+    necesita para reservar el espacio y evitar saltos de diseño.
+
+    Moderación (ADR-044): se filtran con `visible_images`. Una imagen de `viewer_id` que aún no
+    está aprobada llega sin URL y con su `moderation_status`; con la moderación apagada la forma es
+    exactamente la de siempre."""
+    result = []
+    for image in visible_images(images, viewer_id):
+        approved = image.moderation_status == "approved"
+        item = {
+            "url": media_url(image.storage_key) if approved else None,
+            "width": image.width,
+            "height": image.height,
+        }
+        if not approved:
+            item["moderation_status"] = image.moderation_status
+        result.append(item)
+    return result
