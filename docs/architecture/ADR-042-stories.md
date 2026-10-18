@@ -214,3 +214,27 @@ Tero, PR #99) en `feature/stories-integration`, **sin reescribir sus commits**.
 
 **Por eso el flag debe seguir apagado en cualquier entorno público** hasta resolver, como mínimo, los
 puntos 1 y 2.
+
+### Verificación de las migraciones (2026-10-17, solo bases desechables)
+
+Contenedor nuevo de PostGIS 16 (`thers_stories_test_pg`, solo en `127.0.0.1`, sin volúmenes, contraseña
+aleatoria), con bases propias distintas de `thers_dev`:
+
+| Escenario | Resultado |
+|---|---|
+| `flask db heads` | Una sola cabeza: `c8dcd63b24d4` |
+| `upgrade` desde base **vacía** | Termina en `c8dcd63b24d4`; existen `stories`, `story_views`, `tero_usage` y `tero_pending_actions` |
+| `upgrade` desde el estado de `develop` (`c4f8a2d6e913`) | Aplica solo `d1e5b8f2a640` y la unión |
+| `upgrade` desde el estado de Historias (`d1e5b8f2a640`) | Aplica `b9e3d7a1c548`, `c4f8a2d6e913` y la unión |
+| `downgrade c4f8a2d6e913` desde la unión | Deja las dos cabezas anteriores y **ninguna tabla se pierde**; volver a subir restaura la unión |
+| `downgrade` hasta la base común `c9d4a1e7b362` | Quita las cuatro tablas y deja intacto lo anterior; subir de nuevo las recrea |
+| `downgrade` hasta la base (`base`) | Termina sin error |
+
+**Límites del `downgrade` (no es un fallo del cambio):**
+
+- `flask db downgrade -- -1` desde la unión falla con `Ambiguous walk`: Alembic no puede dar «un paso»
+  desde una revisión con dos padres. Se baja con un destino explícito.
+- **No se puede bajar solo Historias y conservar Tero.** Ambas cuelgan de `c9d4a1e7b362`, y bajar
+  `d1e5b8f2a640` baja también la rama de Tero. **La reversión de Historias en un entorno con datos es
+  apagar `STORIES_ENABLED` y, si hace falta, revertir el PR**, no bajar el esquema; las migraciones
+  son aditivas y las tablas vacías no estorban.
