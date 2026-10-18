@@ -481,9 +481,13 @@ class TestEveryTableThatPointsToUsersIsDeleted:
         # Y las referencias de AUTORÍA ajena que quedan en NULL sin conservar datos de la persona
         # (ADR-040 fases 5-6): quién invitó a un plan, quién resolvió un reclamo y quién otorgó la
         # gestión de un lugar. La fila pertenece a OTRA persona, que sigue ahí.
+        # Y `moderation_appeals` (ADR-044 §2.7): la apelación pertenece a quien apeló (su `user_id`
+        # cae en cascada); `reviewer_id` es la OTRA persona, que sigue ahí, y queda en NULL al
+        # borrar su cuenta sin conservar nada de ella.
         set_null_on_purpose = {
             "reports", "places", "place_reports", "admin_audit_log",
             "place_plan_members", "place_claims", "place_managers", "place_reservations", "place_quotes",
+            "moderation_appeals",
         }
         not_cascading = [
             (t, n) for t, n, d in rows if d != "c" and not (t in set_null_on_purpose and d == "n")
