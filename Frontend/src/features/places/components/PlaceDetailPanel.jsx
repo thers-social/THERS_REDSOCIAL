@@ -119,6 +119,12 @@ export default function PlaceDetailPanel({ status, place, error, onBack, onRetry
       <header className="space-y-1">
         <h2 className="text-lg font-semibold text-ink dark:text-ink-dark">{place.name}</h2>
         <p className="text-sm text-muted dark:text-muted-dark">{place.category.name}</p>
+        {place.verification_status === "unverified" && (
+          <p className="text-xs text-muted dark:text-muted-dark">
+            {t("places.unverifiedNotice")}
+            {place.source === "osm" && ` ${t("places.osmAttribution")}`}
+          </p>
+        )}
         {place.verification_status === "verified" && (
           <p className="inline-flex items-center gap-1 text-xs font-semibold text-th-success-fg">
             <Icon name="verified" size={16} fill={1} />

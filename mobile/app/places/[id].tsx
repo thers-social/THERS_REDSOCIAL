@@ -108,6 +108,11 @@ export default function PlaceDetailScreen() {
               ? ` · el ${new Date(place.last_verified_at).toLocaleDateString()}`
               : ''}
           </Text>
+        ) : place.verification_status === 'unverified' ? (
+          <Text style={styles.unverified}>
+            Sin verificar: los datos pueden estar incompletos o desactualizados.
+            {place.source === 'osm' ? ' Datos © colaboradores de OpenStreetMap.' : ''}
+          </Text>
         ) : null}
         <PlacePulse placeId={place.id} />
       </View>
@@ -161,7 +166,11 @@ export default function PlaceDetailScreen() {
 
       <PlaceRoute place={place} />
 
-      <PlaceReservations placeId={place.id} accepts={!!place.accepts_reservations} />
+      <PlaceReservations
+        placeId={place.id}
+        accepts={!!place.accepts_reservations}
+        claimed={!!place.is_claimed}
+        />
 
       <PlaceQuote placeId={place.id} />
 
@@ -210,6 +219,7 @@ const styles = themedStyles(() => ({
   name: { fontSize: fontSize.headlineSm, fontWeight: '700', color: colors.fg },
   category: { fontSize: fontSize.bodyMd, color: colors.fgMuted },
   verified: { fontSize: fontSize.labelLg, fontWeight: '700', color: colors.successFg },
+  unverified: { fontSize: fontSize.labelMd, color: colors.fgMuted },
   actions: { flexDirection: 'row', gap: space[2], marginBottom: space[4] },
   flex: { flex: 1 },
   manage: { marginTop: space[4] },

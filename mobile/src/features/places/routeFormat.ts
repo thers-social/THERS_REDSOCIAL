@@ -45,7 +45,7 @@ export function boundsOf(
 }
 
 /** Texto de atribución que exige el proveedor y OpenStreetMap. */
-export const ROUTE_ATTRIBUTION = 'Ruta: OpenRouteService · Datos © colaboradores de OpenStreetMap';
+export const ROUTE_ATTRIBUTION = 'Ruta: OpenRouteService / OpenStreetMap · Datos © colaboradores de OpenStreetMap';
 
 /** Calle de una indicación, o «Sin nombre» cuando la vía no lo tiene. */
 export function stepTitle(step: { street: string | null }): string {

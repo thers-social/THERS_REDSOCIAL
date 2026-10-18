@@ -84,7 +84,7 @@ class SQLAlchemyReportTargetResolver(ReportTargetResolver):
                     "JOIN places p ON p.id = r.place_id "
                     "JOIN place_categories c ON c.id = p.category_id "
                     "WHERE r.id = :id AND NOT r.is_hidden AND p.is_active "
-                    "AND p.verification_status = 'verified' AND c.is_active"
+                    "AND p.verification_status IN ('verified', 'unverified') AND c.is_active"
                 ),
                 {"id": str(target_id)},
             ).mappings().first()

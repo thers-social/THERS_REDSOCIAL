@@ -44,6 +44,9 @@ export default function PlaceCard({ place, selected, onSelect }) {
                   {t("places.verified")}
                 </span>
               )}
+              {place.verification_status === "unverified" && (
+                <span className="text-muted dark:text-muted-dark">{t("places.unverified")}</span>
+              )}
             </div>
           </div>
         </div>

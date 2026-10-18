@@ -39,6 +39,8 @@ export function PlaceCard({ place, selected = false, onPress }: Props) {
           {distance ? <Text style={styles.distance}>{distance}</Text> : null}
           {place.verification_status === 'verified' ? (
             <Text style={styles.verified}>Verificado</Text>
+          ) : place.verification_status === 'unverified' ? (
+            <Text style={styles.unverified}>Sin verificar</Text>
           ) : null}
         </View>
       </View>
@@ -74,4 +76,5 @@ const styles = themedStyles(() => ({
   meta: { flexDirection: 'row', gap: space[3], marginTop: space[1] },
   distance: { fontSize: fontSize.labelMd, fontWeight: '700', color: colors.fg },
   verified: { fontSize: fontSize.labelMd, color: colors.successFg },
+  unverified: { fontSize: fontSize.labelMd, color: colors.fgMuted },
 }));

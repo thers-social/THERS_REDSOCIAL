@@ -47,7 +47,7 @@ def list_managed(user_id, repository):
             "municipality": row["municipality"],
             "department": row["department"],
             "category": {"slug": row["category_slug"], "name": row["category_name"]},
-            "is_public": bool(row["is_active"]) and row["verification_status"] == kinds.STATUS_VERIFIED,
+            "is_public": bool(row["is_active"]) and row["verification_status"] in kinds.PUBLIC_STATUSES,
             "rating_average": None if row["rating_average"] is None else float(row["rating_average"]),
             "reviews_count": int(row["reviews_count"]),
         }

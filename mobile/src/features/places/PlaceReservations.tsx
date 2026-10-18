@@ -195,9 +195,12 @@ function ReservationForm({ placeId, onDone }: FormProps) {
 export function PlaceReservations({
   placeId,
   accepts,
+  claimed = true,
 }: {
   placeId: string;
   accepts: boolean;
+  /** `false`: nadie gestiona el lugar en THERS, así que la solicitud puede no ser atendida. */
+  claimed?: boolean;
 }) {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [mine, setMine] = useState<Reservation[]>([]);
@@ -257,6 +260,11 @@ export function PlaceReservations({
         Reservas
       </Text>
       {schedule ? <Hours schedule={schedule} /> : null}
+      {!claimed ? (
+        <Text style={styles.muted}>
+          Este negocio aún no ha reclamado su lugar en THERS: tu solicitud puede no ser atendida.
+        </Text>
+      ) : null}
       {loadError ? <Banner tone="error">{loadError}</Banner> : null}
 
       {accepts ? (

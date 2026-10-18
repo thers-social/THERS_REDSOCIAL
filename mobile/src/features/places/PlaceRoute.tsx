@@ -92,7 +92,8 @@ export function PlaceRoute({ place }: { place: PlaceDetail }) {
       {!route ? (
         <Text style={styles.muted}>
           Al tocar el botón, tu ubicación aproximada (a unos 100 m) se envía a nuestro servidor y a
-          OpenRouteService para calcular la ruta. No la guardamos.
+          OpenRouteService (o, si este no responde, al enrutador público de OpenStreetMap) para
+          calcular la ruta. No la guardamos.
         </Text>
       ) : null}
 

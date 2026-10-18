@@ -27,7 +27,7 @@ class SQLAlchemyClaimRepository(PlaceNotifierMixin, ClaimRepository):
             db.session.execute(
                 text(
                     "SELECT 1 FROM places p JOIN place_categories c ON c.id = p.category_id "
-                    "WHERE p.id = :id AND p.is_active AND p.verification_status = 'verified' "
+                    "WHERE p.id = :id AND p.is_active AND p.verification_status IN ('verified', 'unverified') "
                     "AND c.is_active"
                 ),
                 {"id": str(place_id)},

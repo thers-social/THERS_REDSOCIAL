@@ -79,6 +79,9 @@ export default function PlaceReservations({ place }) {
           </button>
         )}
       </div>
+      {!place.is_claimed && (
+        <p className="mt-2 text-xs text-muted dark:text-muted-dark">{t("places.reservations.unclaimed")}</p>
+      )}
       {open && (
         <BookingForm
           placeId={place.id}

@@ -70,7 +70,7 @@ def test_only_the_manager_configures_reservations(client, world):
 def test_settings_defaults_and_validation(client, world):
     users, place_id = world
     got = client.get(f"/api/places/{place_id}/manage/reservations/settings", headers=auth(users["ana"][0]))
-    assert got.get_json()["settings"] == {"enabled": False, "capacity": 10, "max_party_size": 8}
+    assert got.get_json()["settings"] == {"enabled": True, "capacity": 10, "max_party_size": 8}  # activas por defecto (ADR-043)
     for bad in (
         {"enabled": "yes"}, {"capacity": 0}, {"capacity": 501}, {"capacity": True},
         {"max_party_size": 51}, {"capacity": 4, "max_party_size": 5}, {"capacity": "10"},
@@ -83,6 +83,8 @@ def test_settings_defaults_and_validation(client, world):
 def test_place_detail_says_whether_it_accepts_reservations(client, world):
     users, place_id = world
     url = f"/api/places/{place_id}"
+    assert client.get(url, headers=auth(users["beto"][0])).get_json()["place"]["accepts_reservations"] is True
+    _settings(client, users["ana"][0], place_id, enabled=False)
     assert client.get(url, headers=auth(users["beto"][0])).get_json()["place"]["accepts_reservations"] is False
     _settings(client, users["ana"][0], place_id, enabled=True)
     assert client.get(url, headers=auth(users["beto"][0])).get_json()["place"]["accepts_reservations"] is True
@@ -111,12 +113,29 @@ def test_requires_a_session(client, open_world):
     assert client.get("/api/reservations").status_code == 401
 
 
-def test_closed_or_unconfigured_places_do_not_take_reservations(client, world):
+def test_a_place_nobody_configured_takes_reservations_until_the_manager_turns_them_off(client, world):
     users, place_id = world
-    assert _book(client, users["beto"][0], place_id).status_code == 409  # sin configurar
-    _settings(client, users["ana"][0], place_id, enabled=True)
+    assert _book(client, users["beto"][0], place_id).status_code == 201  # sin configurar: activas
     _settings(client, users["ana"][0], place_id, enabled=False)
-    assert _book(client, users["beto"][0], place_id).status_code == 409
+    assert _book(client, users["beto"][0], place_id).status_code == 409  # apagadas por quien gestiona
+
+
+def test_unverified_imported_places_take_reservations_too(client, app, world):
+    users, _ = world
+    with app.app_context():
+        place = insert_place("Restaurante OSM", status="unverified", source="osm")
+    response = _book(client, users["beto"][0], place)
+    detail = client.get(f"/api/places/{place}", headers=auth(users["beto"][0])).get_json()["place"]
+
+    assert response.status_code == 201
+    assert detail["accepts_reservations"] is True and detail["is_claimed"] is False
+
+
+def test_pending_places_still_do_not_take_reservations(client, app, world):
+    users, _ = world
+    with app.app_context():
+        place = insert_place("Pendiente", status="pending")
+    assert _book(client, users["beto"][0], place).status_code == 404
 
 
 def test_only_public_places(client, app, open_world):

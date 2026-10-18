@@ -6,9 +6,12 @@
 # PostgreSQL: agregar un valor nuevo no debería exigir una migración (mismo
 # criterio que `domain/reports/kinds.py`, ADR-029/ADR-032).
 
-# Estado de verificación del lugar. Solo `verified` (y activo) es público.
+# Estado de verificación del lugar. Son públicos `verified` y `unverified` (y activo). `unverified`
+# (ADR-043) es un lugar importado de una fuente abierta que nadie ha revisado: se ve y se busca,
+# pero la app lo etiqueta; reservas y cotizaciones exigen `verified`.
 STATUS_PENDING = "pending"
 STATUS_VERIFIED = "verified"
+STATUS_UNVERIFIED = "unverified"
 STATUS_NEEDS_REVIEW = "needs_review"
 STATUS_REJECTED = "rejected"
 STATUS_INACTIVE = "inactive"
@@ -19,7 +22,10 @@ VERIFICATION_STATUSES = (
     STATUS_NEEDS_REVIEW,
     STATUS_REJECTED,
     STATUS_INACTIVE,
+    STATUS_UNVERIFIED,
 )
+
+PUBLIC_STATUSES = (STATUS_VERIFIED, STATUS_UNVERIFIED)
 
 # Procedencia del registro. Se conserva siempre: el catálogo propio debe poder
 # convivir con fuentes externas sin perderla.

@@ -113,7 +113,7 @@ def test_parse_category_slug_none_means_no_filter():
 
 
 def test_documented_values_match_the_adr():
-    assert kinds.VERIFICATION_STATUSES == ("pending", "verified", "needs_review", "rejected", "inactive")
+    assert kinds.VERIFICATION_STATUSES == ("pending", "verified", "needs_review", "rejected", "inactive", "unverified")
     assert kinds.SOURCES == ("thers_field", "business", "community", "osm", "official")
     assert kinds.COORDINATE_SOURCES == ("gps", "map_selected", "geocoded", "imported")
     assert kinds.MAX_RADIUS_METERS == 50000

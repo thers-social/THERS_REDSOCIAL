@@ -29,7 +29,7 @@ class SQLAlchemyReservationRepository(PlaceNotifierMixin):
             db.session.execute(
                 text(
                     "SELECT 1 FROM places p JOIN place_categories c ON c.id = p.category_id "
-                    "WHERE p.id = :id AND p.is_active AND p.verification_status = 'verified' "
+                    "WHERE p.id = :id AND p.is_active AND p.verification_status IN ('verified', 'unverified') "
                     "AND c.is_active"
                 ),
                 {"id": str(place_id)},
@@ -58,7 +58,9 @@ class SQLAlchemyReservationRepository(PlaceNotifierMixin):
             {"p": str(place_id)},
         ).mappings().first()
         if row is None:
-            return {"enabled": False, "capacity": kinds.DEFAULT_CAPACITY,
+            # Sin fila, las reservas están ACTIVAS con los valores por defecto (ADR-043 §2.7): quien
+            # gestiona el lugar las apaga guardando `enabled = false`.
+            return {"enabled": True, "capacity": kinds.DEFAULT_CAPACITY,
                     "max_party_size": kinds.DEFAULT_MAX_PARTY}
         return dict(row)
 
@@ -75,6 +77,15 @@ class SQLAlchemyReservationRepository(PlaceNotifierMixin):
         db.session.commit()
 
     def create(self, user_id, place_id, starts_at, party_size, note):
+        # La fila se crea con los valores por defecto la primera vez, para poder bloquearla
+        # (`FOR UPDATE`) y serializar las reservas simultáneas. Si ya existe, no se toca.
+        db.session.execute(
+            text(
+                "INSERT INTO place_reservation_settings (place_id, enabled, capacity, max_party_size) "
+                "VALUES (:p, true, :c, :m) ON CONFLICT (place_id) DO NOTHING"
+            ),
+            {"p": str(place_id), "c": kinds.DEFAULT_CAPACITY, "m": kinds.DEFAULT_MAX_PARTY},
+        )
         settings = db.session.execute(
             text(
                 "SELECT enabled, capacity, max_party_size FROM place_reservation_settings "
