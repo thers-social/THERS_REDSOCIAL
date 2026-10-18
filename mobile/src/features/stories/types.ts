@@ -1,4 +1,4 @@
-/** Formas de la API de historias (`API_CONTRACT.md` §4.37, ADR-042). */
+/** Formas de la API de historias (`API_CONTRACT.md` §4.38, ADR-042). */
 
 export type StoryAuthor = {
   id: string;

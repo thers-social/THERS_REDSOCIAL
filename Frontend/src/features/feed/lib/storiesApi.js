@@ -1,4 +1,4 @@
-// Cliente HTTP de las historias de 24 horas (contrato: API_CONTRACT.md §4.37, ADR-042).
+// Cliente HTTP de las historias de 24 horas (contrato: API_CONTRACT.md §4.38, ADR-042).
 
 import { api } from "@shared/lib/api";
 import { getStoredToken } from "@features/auth";

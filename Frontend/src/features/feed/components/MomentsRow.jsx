@@ -30,8 +30,11 @@ export default function MomentsRow({ currentUser }) {
       const list = await fetchStrip(signal);
       setAuthors(list);
       setStatus("ready");
-    } catch {
-      if (!signal?.aborted) setStatus("error");
+    } catch (error) {
+      if (signal?.aborted) return;
+      // 404 = el módulo está apagado en el servidor (STORIES_ENABLED, ADR-042 §11): no hay
+      // historias, así que la fila entera se oculta, sin error ni botón de crear.
+      setStatus(error?.response?.status === 404 ? "disabled" : "error");
     }
   }, []);
 
@@ -40,6 +43,8 @@ export default function MomentsRow({ currentUser }) {
     load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  if (status === "disabled") return null;
 
   return (
     <section aria-label="Momentos" className="flex flex-col gap-2">

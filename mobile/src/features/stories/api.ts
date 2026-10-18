@@ -1,5 +1,5 @@
 /**
- * Llamadas HTTP de las historias (`API_CONTRACT.md` §4.37). Una función por petición; el estado
+ * Llamadas HTTP de las historias (`API_CONTRACT.md` §4.38). Una función por petición; el estado
  * vive en las pantallas.
  */
 

@@ -7,6 +7,8 @@ import { themedStyles } from '@shared/design/theme';
 import { Avatar } from '@shared/ui/Avatar';
 import { Icon } from '@shared/ui/Icon';
 
+import { ApiError } from '@shared/lib/api';
+
 import { fetchStrip } from './api';
 import type { PickedImage } from './api';
 import { StoryComposerModal } from './StoryComposerModal';
@@ -25,7 +27,7 @@ type Props = {
  * historias lo dice, no inventa nada.
  */
 export function StoriesStrip({ me, canPublish }: Props) {
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'disabled'>('loading');
   const [authors, setAuthors] = useState<StripAuthor[]>([]);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [picked, setPicked] = useState<PickedImage | null>(null);
@@ -34,8 +36,11 @@ export function StoriesStrip({ me, canPublish }: Props) {
     try {
       setAuthors(await fetchStrip(signal));
       setStatus('ready');
-    } catch {
-      if (!signal?.aborted) setStatus('error');
+    } catch (error) {
+      if (signal?.aborted) return;
+      // 404 = el módulo está apagado en el servidor (STORIES_ENABLED, ADR-042 §11): no hay
+      // historias, así que la tira se oculta, sin error ni botón de crear.
+      setStatus(error instanceof ApiError && error.status === 404 ? 'disabled' : 'error');
     }
   }, []);
 
@@ -65,6 +70,8 @@ export function StoriesStrip({ me, canPublish }: Props) {
     const asset = result.assets[0];
     setPicked({ uri: asset.uri, mimeType: asset.mimeType, fileName: asset.fileName });
   }
+
+  if (status === 'disabled') return null;
 
   const myIndex = authors.findIndex((item) => item.is_me);
   const others = authors.map((item, index) => ({ item, index })).filter(({ item }) => !item.is_me);
