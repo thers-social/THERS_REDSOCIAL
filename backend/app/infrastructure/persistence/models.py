@@ -2143,3 +2143,53 @@ class TeroPendingAction(db.Model):
         ),
         Index("ix_tero_pending_actions_user_created", "user_id", "created_at"),
     )
+
+
+class Story(db.Model):
+    __tablename__ = "stories"
+
+    # Historia: una imagen con texto opcional que caduca a las 24 h (ADR-042). El archivo vive
+    # en el almacenamiento de medios; aquí solo su clave. `expires_at` se GUARDA (no se
+    # recalcula) para que cambiar la duración no reescriba historias ya publicadas.
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    author_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    content = db.Column(db.String(200), nullable=True)
+    storage_key = db.Column(db.Text, nullable=False, unique=True)
+    width = db.Column(db.Integer, nullable=False)
+    height = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        db.Index("ix_stories_author_expires", "author_id", "expires_at"),
+        db.Index("ix_stories_expires_at", "expires_at"),
+    )
+
+
+class StoryView(db.Model):
+    __tablename__ = "story_views"
+
+    # Quién vio cada historia (ADR-042). Clave compuesta: una persona cuenta una sola vez.
+    story_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("stories.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    viewer_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    viewed_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
