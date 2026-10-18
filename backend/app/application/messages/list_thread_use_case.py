@@ -38,7 +38,7 @@ def list_thread(
     # mensajes que esta misma llamada acaba de marcar. Armando la respuesta
     # primero, el Frontend recibe el estado real de "antes de abrir el
     # hilo" y puede ubicar el separador de "mensajes no leídos".
-    public_messages = to_public_messages(messages, message_repository, user_id)
+    public_messages = to_public_messages(messages, message_repository, viewer_id=user_id)
 
     message_repository.mark_thread_as_read(recipient_id=user_id, sender_id=other_user_id)
 

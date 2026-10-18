@@ -33,9 +33,21 @@ depends_on = None
 def upgrade():
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     op.execute("CREATE EXTENSION IF NOT EXISTS unaccent")
+    # Se califica `unaccent` con el esquema donde quedó la extensión: PostgreSQL 17+ ejecuta
+    # las expresiones de un índice con un `search_path` mínimo, y en Supabase la extensión
+    # vive en el esquema `extensions` (no en `public`), así que sin calificar el
+    # `CREATE INDEX` falla con «function unaccent(unknown, text) does not exist».
+    unaccent_schema = op.get_bind().execute(
+        sa.text(
+            "SELECT n.nspname FROM pg_extension e "
+            "JOIN pg_namespace n ON n.oid = e.extnamespace "
+            "WHERE e.extname = 'unaccent'"
+        )
+    ).scalar_one()
     op.execute(
         "CREATE OR REPLACE FUNCTION thers_unaccent(text) RETURNS text "
-        "AS $$ SELECT unaccent('unaccent', $1) $$ "
+        f"AS $$ SELECT \"{unaccent_schema}\".unaccent("
+        f"'\"{unaccent_schema}\".unaccent'::regdictionary, $1) $$ "
         "LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT"
     )
     op.execute(

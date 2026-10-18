@@ -15,7 +15,7 @@ def list_conversations(user_id, message_repository, restriction_repository):
     # conversación, y el conjunto de bloqueados es chico.
     blocked_ids = restriction_repository.blocked_ids_either_way(user_id)
     return [
-        to_public_conversation(conversation)
+        to_public_conversation(conversation, viewer_id=user_id)
         for conversation in conversations
         if str(conversation["other_user"].id) not in blocked_ids
     ]

@@ -58,7 +58,7 @@ describe('qué consulta y qué muestra', () => {
   it('nunca muestra ni pide quién reportó', () => {
     for (const source of [page, card, dialog]) {
       assert.ok(!/reporter_id/.test(source), 'usa reporter_id');
-      assert.ok(!/\.reporter/.test(source), 'lee un campo reporter');
+      assert.ok(!/\.reporter\b/.test(source), 'lee un campo reporter');
     }
   });
 

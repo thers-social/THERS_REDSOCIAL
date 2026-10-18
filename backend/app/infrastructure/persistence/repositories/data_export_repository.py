@@ -427,9 +427,41 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
             )
         ]
 
+        # Historias propias (ADR-042): sin la clave del archivo, y las historias que esta
+        # persona vio (son datos personales: ADR-042 §4.3).
+        stories = [
+            {
+                "id": str(row.id),
+                "content": row.content,
+                "created_at": _iso(row.created_at),
+                "expires_at": _iso(row.expires_at),
+                "views_count": row.views_count,
+            }
+            for row in db.session.execute(
+                db.text(
+                    "SELECT s.id, s.content, s.created_at, s.expires_at, "
+                    "(SELECT count(*) FROM story_views v WHERE v.story_id = s.id) AS views_count "
+                    "FROM stories s WHERE s.author_id = :u ORDER BY s.created_at"
+                ),
+                {"u": str(user_id)},
+            )
+        ]
+        story_views = [
+            {"story_id": str(row.story_id), "viewed_at": _iso(row.viewed_at)}
+            for row in db.session.execute(
+                db.text(
+                    "SELECT story_id, viewed_at FROM story_views "
+                    "WHERE viewer_id = :u ORDER BY viewed_at"
+                ),
+                {"u": str(user_id)},
+            )
+        ]
+
         return {
             "profile": profile,
             "posts": posts,
+            "stories": stories,
+            "story_views": story_views,
             "comments": comments,
             "likes": likes,
             "following": following,

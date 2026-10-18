@@ -3,7 +3,7 @@
 # Fase 1: solo se puede REPORTAR. Las rutas de moderación (cola, resolver,
 # suspender) son de la fase 2 y no existen todavía.
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.application.rate_limiting import rate_limit_guard
@@ -15,6 +15,9 @@ from app.domain.reports.exceptions import (
     CannotReportSelfError,
     InvalidReportError,
     ReportTargetNotFoundError,
+)
+from app.infrastructure.persistence.repositories.domain_event_repository import (
+    SQLAlchemyDomainEventRepository,
 )
 from app.infrastructure.persistence.repositories.follow_repository import (
     SQLAlchemyFollowRepository,
@@ -36,6 +39,7 @@ from app.interfaces.rate_limited_response import rate_limited_response
 reports_bp = Blueprint("reports", __name__)
 
 _report_repository = SQLAlchemyReportRepository()
+_events = SQLAlchemyDomainEventRepository()
 _target_resolver = SQLAlchemyReportTargetResolver()
 _follow_repository = SQLAlchemyFollowRepository()
 _restriction_repository = SQLAlchemyRestrictionRepository()
@@ -87,5 +91,24 @@ def post_report():
     except CannotReportSelfError:
         return jsonify({"msg": "No puedes reportar tu propio contenido ni tu cuenta"}), 400
 
+    if created and report["priority"] == "critical":
+        _notify_critical(report)
+
     # 201 si es nuevo; 200 si ya lo habías reportado (idempotente).
     return jsonify({"report": report}), 201 if created else 200
+
+
+def _notify_critical(report):
+    """Reporte crítico (ADR-038/ADR-044): aviso DIRECTO por correo desde Flask, sin depender de
+    n8n, y un evento para n8n. Ningún fallo de esto puede romper el reporte ya guardado."""
+    try:
+        _events.enqueue("report.critical_created", {
+            "report_id": report["id"], "target_type": report["target_type"],
+            "reason": report["reason"],
+        }, report["id"])
+        _events.commit()
+    except Exception:  # noqa: BLE001
+        _events.rollback()
+    alerter = current_app.extensions.get("team_alerter")
+    if alerter is not None:
+        alerter.alert("report_critical")

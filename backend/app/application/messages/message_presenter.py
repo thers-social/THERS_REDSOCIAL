@@ -6,6 +6,7 @@
 
 from app.application.auth.user_presenter import to_author_summary
 from app.application.media.attachments import to_public_audio, to_public_images, to_public_video
+from app.application.media.image_visibility import visible_images
 from app.application.places.place_card import to_place_card
 from app.application.posts.post_card import to_post_card
 
@@ -51,7 +52,7 @@ def to_public_message(
         "sender": to_author_summary(message.sender) if in_group else None,
         "content": message.content,
         # Imagen adjunta (ADR-039): `[]` si no tiene.
-        "images": to_public_images(message.images),
+        "images": to_public_images(message.images, viewer_id),
         # Nota de voz (ADR-042): `null` si no tiene.
         "audio": to_public_audio(message.audio),
         # Video corto (ADR-046): `null` si no tiene.
@@ -76,7 +77,7 @@ def to_public_message(
     }
 
 
-def to_public_conversation(conversation):
+def to_public_conversation(conversation, viewer_id=None):
     other_user = conversation["other_user"]
     last_message = conversation["last_message"]
     return {
@@ -102,7 +103,7 @@ def to_public_conversation(conversation):
             "content": last_message.content,
             # Un mensaje de solo imagen tiene `content` vacío: la lista de
             # conversaciones necesita saberlo para mostrar "Foto" (ADR-039).
-            "has_image": bool(last_message.images),
+            "has_image": bool(visible_images(last_message.images, viewer_id)),
             # Lo mismo para la nota de voz: la lista muestra "Nota de voz" (ADR-042).
             "has_audio": last_message.audio is not None,
             # Y para el video: la lista muestra «Video» (ADR-046).

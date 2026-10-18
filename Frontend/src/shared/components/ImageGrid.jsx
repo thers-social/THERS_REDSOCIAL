@@ -10,10 +10,22 @@ import Icon from "@shared/components/Icon";
  *
  * `compact`: miniaturas más pequeñas, para dentro de una burbuja de chat.
  */
-export default function ImageGrid({ images, alt = "Imagen adjunta", compact = false }) {
+export default function ImageGrid({ images: allImages, alt = "Imagen adjunta", compact = false }) {
   const [openIndex, setOpenIndex] = useState(null);
 
-  if (!images || images.length === 0) return null;
+  if (!allImages || allImages.length === 0) return null;
+
+  // Moderación (ADR-044): una imagen que aún no está aprobada llega SIN URL, solo a quien la subió.
+  // No se dibuja; se avisa con una nota en lugar de dejar un hueco roto.
+  const images = allImages.filter((image) => image.url);
+  const underReview = allImages.length - images.length;
+  if (images.length === 0) {
+    return (
+      <p className="rounded-2xl border border-th-border px-3 py-2 text-sm text-th-text-muted">
+        {underReview === 1 ? "Tu imagen está en revisión." : "Tus imágenes están en revisión."}
+      </p>
+    );
+  }
 
   const count = images.length;
   const maxWidth = compact ? "max-w-[16rem]" : "max-w-full";

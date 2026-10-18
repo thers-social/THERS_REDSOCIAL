@@ -62,6 +62,7 @@ def list_posts(
             follow_status=author_follow_statuses.get(post.author.id),
             mentions=mentions_by_post.get(post.id),
             place_cards=cards,
+            viewer_id=viewer_id,
         )
         for post in posts
     ]

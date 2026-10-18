@@ -7,6 +7,11 @@ import Spinner from "@shared/components/Spinner";
 import NotFound from "@shared/seo/NotFound";
 import ReportCard from "../components/ReportCard";
 import ResolveDialog from "../components/ResolveDialog";
+import MediaQueue from "../components/MediaQueue";
+import AppealsQueue from "../components/AppealsQueue";
+import StatsPanel from "../components/StatsPanel";
+import AuditPanel from "../components/AuditPanel";
+import { SECTIONS, canSeeSection, isTwoFactorRequired } from "../lib/contentLabels";
 import { ACTIONS, STATUS_TABS, moderationErrorMessage } from "../lib/reportLabels";
 
 // Página de moderación (ADR-032-content-reports-and-moderation.md §3, fase 3).
@@ -53,6 +58,7 @@ function ModerationQueue({ currentUserId }) {
         // 404: el servidor dice que esta cuenta ya no es moderadora (por ejemplo, se le
         // retiró el rol con la sesión abierta).
         if (error.response?.status === 404) setDenied(true);
+        else if (isTwoFactorRequired(error)) toast.error("Activa la verificación en dos pasos para moderar");
         else toast.error(getErrorMessage(error, t));
       } finally {
         if (!cancelled) setLoading(false);
@@ -195,9 +201,56 @@ function ModerationQueue({ currentUserId }) {
   );
 }
 
+// Secciones del panel (ADR-044 §2.6). Es UN solo panel: Reportes es el de siempre. Ocultar una
+// sección a quien no tiene el rol es comodidad; cada ruta del servidor lo vuelve a comprobar.
+function ModerationShell({ user }) {
+  const [section, setSection] = useState("reports");
+  const [needsTwoFactor, setNeedsTwoFactor] = useState(false);
+  const visible = SECTIONS.filter((entry) => canSeeSection(entry, user));
+
+  return (
+    <div className="space-y-6">
+      <div role="tablist" aria-label="Secciones de moderación" className="max-w-2xl mx-auto flex flex-wrap gap-2">
+        {visible.map((entry) => (
+          <button
+            key={entry.value}
+            type="button"
+            role="tab"
+            aria-selected={section === entry.value}
+            onClick={() => setSection(entry.value)}
+            className={`text-sm font-semibold px-4 py-2 rounded-full border transition ${
+              section === entry.value
+                ? "bg-ink dark:bg-ink-dark text-canvas dark:text-canvas-dark border-transparent"
+                : "border-line dark:border-line-dark text-ink dark:text-ink-dark"
+            }`}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      {needsTwoFactor && (
+        <p role="alert" className="max-w-2xl mx-auto text-sm rounded-2xl border border-ember-300 text-ember-700 dark:text-ember-300 px-4 py-3">
+          Para moderar necesitas activar la verificación en dos pasos en Configuración › Seguridad.
+        </p>
+      )}
+
+      {section === "reports" && <ModerationQueue currentUserId={user.id} />}
+      {section !== "reports" && (
+        <div className="max-w-2xl mx-auto">
+          {section === "media" && <MediaQueue onTwoFactorRequired={() => setNeedsTwoFactor(true)} />}
+          {section === "appeals" && <AppealsQueue onTwoFactorRequired={() => setNeedsTwoFactor(true)} />}
+          {section === "stats" && <StatsPanel onTwoFactorRequired={() => setNeedsTwoFactor(true)} />}
+          {section === "audit" && <AuditPanel />}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Moderation() {
   const { user } = useAuth();
   // Comodidad, no seguridad (ver el comentario de arriba).
   if (!user?.is_moderator) return <NotFound />;
-  return <ModerationQueue currentUserId={user.id} />;
+  return <ModerationShell user={user} />;
 }

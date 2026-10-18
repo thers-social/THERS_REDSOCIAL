@@ -52,6 +52,7 @@ def update_post(
         liked_by_me=post.id in liked_ids,
         comments_count=comment_counts.get(post.id, 0),
         mentions=mentions,
+        viewer_id=author_id,
         # La edición no cambia el lugar, pero la respuesta tiene que seguir llevando su tarjeta
         # (ADR-040 fase 4d): sin esto un lugar válido se vería como "no disponible".
         place_cards=post_repository.place_cards([post.place_id] if post.place_id else []),

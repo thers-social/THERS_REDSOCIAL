@@ -17,7 +17,7 @@ from app.application.auth.user_presenter import to_author_summary
 
 def to_public_post(
     post, likes_count=0, liked_by_me=False, comments_count=0, follow_status=None,
-    mentions=None, place_cards=None, saved_by_me=False,
+    mentions=None, place_cards=None, saved_by_me=False, viewer_id=None,
 ):
     # Defaults en 0/False: un post recién creado (create_post_use_case.py)
     # no tiene resumen de likes/comentarios que calcular todavía (ADR-005/
@@ -42,7 +42,7 @@ def to_public_post(
         },
         "content": post.content,
         # Imágenes adjuntas (ADR-039): `[]` si no tiene. Solo URL y dimensiones.
-        "images": to_public_images(post.images),
+        "images": to_public_images(post.images, viewer_id),
         # Video corto (ADR-046): `null` si no tiene.
         "video": to_public_video(post.video),
         # Lo que el AUTOR declaró al publicar (ADR-030-content-preferences.md);

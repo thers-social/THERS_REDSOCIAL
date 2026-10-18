@@ -89,4 +89,4 @@ def send_message(
             prepared_audio=prepared_audio, prepared_video=prepared_video,
         )
 
-    return to_public_messages([message], message_repository, sender_id)[0], created
+    return to_public_messages([message], message_repository, viewer_id=sender_id)[0], created

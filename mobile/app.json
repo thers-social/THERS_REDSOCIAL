@@ -56,7 +56,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "THERS usa tu galería solo cuando eliges una foto o un video para tu foto de perfil, una publicación, un mensaje, una pregunta a Tero o la imagen de tu negocio.",
+          "photosPermission": "THERS usa tu galería solo cuando eliges una foto o un video para tu foto de perfil, una publicación, un mensaje, una pregunta a Tero la imagen de tu negocio o una historia.",
           "cameraPermission": false
         }
       ],

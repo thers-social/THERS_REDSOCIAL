@@ -69,4 +69,4 @@ def create_post(
         mention_repository, notification_repository, restriction_repository,
     )
 
-    return to_public_post(post, mentions=mentions, place_cards=cards)
+    return to_public_post(post, mentions=mentions, place_cards=cards, viewer_id=author_id)

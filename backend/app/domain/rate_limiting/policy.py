@@ -146,6 +146,10 @@ PLACE_REVIEW = RateLimitRule("place_review", 20, _HOUR, clear_on_success=False)
 # (fase 5): por cuenta.
 PLAN_WRITE = RateLimitRule("plan_write", 30, _HOUR, clear_on_success=False)
 
+#: `POST /api/stories` (ADR-042): 20 historias al día y por cuenta. Cuenta cada intento, no solo
+#: los aciertos (decodificar una imagen cuesta CPU), igual que `IMAGE_UPLOAD`.
+STORY_CREATE = RateLimitRule("story_create", 20, 24 * _HOUR, clear_on_success=False)
+
 # Reclamos de negocio (ADR-040 fase 6): crear y retirar. Incluye subir un documento.
 CLAIM_WRITE = RateLimitRule("claim_write", 5, 24 * _HOUR, clear_on_success=False)
 
@@ -188,3 +192,15 @@ TERO_CHAT = RateLimitRule("tero_chat", 30, _HOUR, clear_on_success=False)
 # Confirmar o cancelar una acción de Tero (ADR-041 §6.2): por CUENTA. No cuesta IA, pero ejecuta
 # cambios reales, así que también tiene tope.
 TERO_ACTION = RateLimitRule("tero_action", 30, _HOUR, clear_on_success=False)
+
+# Apelar una decisión de moderación (ADR-044 §2.7): por CUENTA. Cada apelación cuesta tiempo de
+# revisión; además hay un tope de apelaciones abiertas por persona.
+MODERATION_APPEAL = RateLimitRule("moderation_appeal", 10, _HOUR, clear_on_success=False)
+
+# Avisos pedidos por n8n a las rutas internas (ADR-044 §2.8): un tope global, sin identidad de
+# persona. Un secreto filtrado no puede convertirse en una avalancha de correos.
+INTERNAL_NOTICE = RateLimitRule("internal_notice", 20, _HOUR, clear_on_success=False)
+
+# Reservar una subida de video (ADR-043-A): 10 por día y cuenta. Cuenta cada intento, también los que
+# fallan en Mux (cada reserva puede crear una subida que cuesta).
+VIDEO_UPLOAD = RateLimitRule("video_upload", 10, 24 * _HOUR, clear_on_success=False)

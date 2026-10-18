@@ -1,15 +1,14 @@
 import { Link } from 'expo-router';
-import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { FlatList, RefreshControl, Text, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { Composer } from '@features/posts/Composer';
 import { PostCard } from '@features/posts/PostCard';
 import { messageOf, usePosts } from '@features/posts/PostsContext';
 import { usePostMenu } from '@features/posts/usePostMenu';
+import { StoriesStrip } from '@features/stories/StoriesStrip';
 import { colors, fontSize, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
-import { comingSoon } from '@shared/lib/comingSoon';
-import { Avatar } from '@shared/ui/Avatar';
 import { Icon } from '@shared/ui/Icon';
 import { Screen } from '@shared/ui/Screen';
 import { StateMessage } from '@shared/ui/StateMessage';
@@ -61,22 +60,7 @@ export default function Home() {
         }
         ListHeaderComponent={
           <View>
-            <View style={styles.stories}>
-              <Pressable
-                onPress={() => comingSoon('Las historias')}
-                style={styles.story}
-                accessibilityRole="button"
-                accessibilityLabel="Tu historia (próximamente)"
-              >
-                <View>
-                  <Avatar name={user.name} uri={user.avatar_url} size={56} />
-                  <View style={styles.storyPlus}>
-                    <Icon name="plus" size={12} color={colors.onBrand} />
-                  </View>
-                </View>
-                <Text style={styles.storyLabel}>Tu historia</Text>
-              </Pressable>
-            </View>
+            <StoriesStrip me={user} canPublish={user.profile_completed} />
             {user.profile_completed ? (
               <Composer
                 onPublish={async (content, sensitive, media) => {
@@ -138,22 +122,6 @@ const styles = themedStyles(() => ({
   headerLinks: { flexDirection: 'row', gap: space[4] },
   headerLink: { padding: space[2] },
   list: { padding: space[4], paddingBottom: space[8] },
-  stories: { flexDirection: 'row', marginBottom: space[4] },
-  story: { alignItems: 'center', width: 72 },
-  storyPlus: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: colors.brand,
-    borderWidth: 2,
-    borderColor: colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  storyLabel: { fontSize: fontSize.labelSm, color: colors.fgMuted, marginTop: space[1] },
   notice: {
     backgroundColor: colors.brandSoft,
     borderRadius: 12,
