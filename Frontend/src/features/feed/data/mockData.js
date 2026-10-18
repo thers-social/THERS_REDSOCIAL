@@ -21,15 +21,6 @@ export const MOODS = {
   studying: { label: "Estudiando", color: "#228BE6" },
 };
 
-export const mockMoments = [
-  { id: 1, name: "Alex", photo: photo("alex"), image: portrait("hiking"), mood: "motivated", time: "hace 1 h" },
-  { id: 2, name: "Sofia", photo: photo("sofia"), image: portrait("sunset"), mood: "inspired", time: "hace 2 h" },
-  { id: 3, name: "Carlos", photo: photo("carlos"), image: portrait("gaming"), mood: "playing", time: "hace 3 h" },
-  { id: 4, name: "Daniel", photo: photo("daniel"), image: portrait("citynight"), mood: "calm", time: "hace 5 h" },
-  { id: 5, name: "Maria", photo: photo("maria"), image: portrait("books"), mood: "studying", time: "hace 6 h" },
-  { id: 6, name: "Kevin", photo: photo("kevin"), image: portrait("beach"), mood: "happy", time: "hace 8 h" },
-];
-
 export const mockCapsules = [
   {
     id: 1,

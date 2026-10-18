@@ -175,6 +175,16 @@ class TestVisibility:
         listing = client.get(f"/api/users/{id_a}/stories", headers=_auth_headers(token_b))
         assert [s["content"] for s in listing.get_json()["stories"]] == ["Hola"]
 
+    def test_the_strip_carries_the_latest_image_for_the_card(self, client):
+        token_a, id_a, token_b, _ = _users(client)
+        _publish(client, token_a)
+        second = _publish(client, token_a).get_json()["story"]["image"]["url"]
+        _follow(client, token_b, id_a)
+
+        authors = _strip(client, token_b)
+
+        assert authors[0]["latest_image_url"] == second
+
     def test_the_author_sees_their_own_story_first_and_never_unseen(self, client):
         token_a, id_a, token_b, id_b = _users(client)
         _publish(client, token_a, "mía")
