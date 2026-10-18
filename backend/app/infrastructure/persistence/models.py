@@ -167,6 +167,14 @@ class User(db.Model):
         db.Boolean, nullable=False, server_default=text("true")
     )
 
+    # Resumen semanal de actividad por correo (ADR-041 §7, n8n). Nace en `false`: nadie recibe
+    # correos que no pidió. `weekly_summary_sent_at` marca el último resumen entregado y es lo que
+    # impide mandar dos veces el de la misma semana, aunque el flujo de n8n se repita.
+    weekly_summary_email = db.Column(
+        db.Boolean, nullable=False, server_default=text("false")
+    )
+    weekly_summary_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     # Autenticación en dos pasos con TOTP (ADR-026-two-factor-authentication.md).
     #
     # `totp_secret` se guarda **recuperable, no hasheado**, y es inevitable:
@@ -616,6 +624,15 @@ class Message(db.Model):
         viewonly=True,
     )
 
+    # Nota de voz (ADR-042): como mucho una por mensaje. Misma estrategia de carga que `images`.
+    audio = db.relationship(
+        "AudioAttachment",
+        primaryjoin="Message.id == AudioAttachment.message_id",
+        uselist=False,
+        lazy="selectin",
+        viewonly=True,
+    )
+
     __table_args__ = (
         # Sin UNIQUE: dos mensajes entre las mismas dos personas son eventos
         # legítimos e independientes, no un duplicado a impedir (mismo
@@ -711,6 +728,49 @@ class MediaAttachment(db.Model):
 
     def __repr__(self):
         return f"<MediaAttachment id={self.id} key={self.storage_key}>"
+
+
+class AudioAttachment(db.Model):
+    __tablename__ = "audio_attachments"
+
+    # Nota de voz de un mensaje directo (ADR-042). Tabla propia, no `media_attachments`: esa
+    # exige `width`/`height` y su CHECK de exclusividad, y todo lo que la lee asume imágenes.
+    # El archivo vive en el almacenamiento de medios; aquí solo su clave.
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    # Quién la subió: permite recoger sus archivos al eliminar la cuenta (ADR-031).
+    owner_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # UNIQUE: una sola nota de voz por mensaje.
+    message_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    # `voice/<uuid4>.m4a`: aleatorio e impredecible. Único.
+    storage_key = db.Column(db.Text, nullable=False, unique=True)
+    # La calcula el servidor al decodificar; nunca la que declara el cliente.
+    duration_ms = db.Column(db.Integer, nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        db.CheckConstraint("duration_ms > 0", name="ck_audio_attachments_duration_positive"),
+        db.CheckConstraint("size_bytes > 0", name="ck_audio_attachments_size_positive"),
+        db.Index("ix_audio_attachments_owner_id", "owner_id"),
+    )
+
+    def __repr__(self):
+        return f"<AudioAttachment id={self.id} key={self.storage_key}>"
 
 
 class PasswordResetToken(db.Model):
@@ -1565,7 +1625,7 @@ class Place(db.Model):
     # un valor inválido nunca llega a guardarse.
     __table_args__ = (
         CheckConstraint(
-            "verification_status IN ('pending','verified','needs_review','rejected','inactive')",
+            "verification_status IN ('pending','verified','needs_review','rejected','inactive','unverified')",
             name="ck_places_verification_status",
         ),
         CheckConstraint(
@@ -1576,9 +1636,20 @@ class Place(db.Model):
             "coordinate_source IN ('gps','map_selected','geocoded','imported')",
             name="ck_places_coordinate_source",
         ),
+        CheckConstraint(
+            "osm_type IS NULL OR osm_type IN ('node','way','relation')",
+            name="ck_places_osm_type",
+        ),
         Index("ix_places_location", "location", postgresql_using="gist"),
         Index("ix_places_category_id", "category_id"),
         Index("ix_places_public", "is_active", "verification_status"),
+        Index(
+            "uq_places_osm_ref",
+            "osm_type",
+            "osm_id",
+            unique=True,
+            postgresql_where=text("osm_id IS NOT NULL"),
+        ),
     )
 
     id = db.Column(
@@ -1610,6 +1681,10 @@ class Place(db.Model):
     )
     source = db.Column(db.String(20), nullable=False)
     coordinate_source = db.Column(db.String(20), nullable=False)
+    # Trazabilidad de OpenStreetMap (ADR-043): `node`/`way`/`relation` y su identificador. Con
+    # ellos la importación es idempotente y se puede separar (`source = 'osm'`) lo que sigue ODbL.
+    osm_type = db.Column(db.String(10), nullable=True)
+    osm_id = db.Column(db.BigInteger, nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, server_default=text("true"))
 
     # SET NULL: si quien creó o verificó elimina su cuenta (ADR-031), el lugar

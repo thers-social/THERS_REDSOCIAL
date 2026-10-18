@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.59 (Propuesta) |
+| Versión | 0.61 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -43,6 +43,16 @@
 > **v0.16 — verificación obligatoria de email al registrarse (`ADR-011-mandatory-email-verification.md`, reemplaza `send-verification-email`/`verify-email` de v0.14):** `POST /api/register` (§4.1) sigue devolviendo `201` con el usuario creado, pero ahora `email_verified` nace en `false` y de inmediato se envía un código de 6 dígitos — la cuenta no puede iniciar sesión todavía. Registrar de nuevo con un email que existe pero nunca se verificó **actualiza esa misma cuenta** (incluida la contraseña) y reenvía un código, en vez de un `409` — el `409` real solo ocurre si el email ya pertenece a una cuenta verificada. `POST /api/login` (§4.1) gana un caso nuevo: credenciales correctas pero cuenta sin verificar responde `403` con `{"msg": "...", "email_verified": false}`, sin emitir ningún JWT. Se agregan `POST /api/verify-registration-code` y `POST /api/resend-registration-code` (§4.8) — mismo patrón que `verify-reset-code`/`forgot-password` (`ADR-010`): 6 dígitos, hash scrypt, máximo 5 intentos, cooldown de 60s, índice único parcial (a lo sumo un código activo por usuario). Un código de registro nunca sirve para verificar una recuperación de contraseña ni viceversa — viven en tablas/repositorios completamente separados, no un discriminador de tipo sobre una tabla compartida. **Se retiran** `POST /api/send-verification-email` y `POST /api/verify-email` (`ADR-009`, flujo de enlace) — con el login ya bloqueado para cuentas sin verificar, una cuenta sin verificar nunca puede obtener el JWT que el primero exigía, dejando ambos permanentemente inalcanzables. El Frontend queda conectado de punta a punta: `Register.jsx` navega a la nueva pantalla `VerifyRegistrationCode.jsx` en vez de a `/login`; `Login.jsx` distingue el `403` de cuenta sin verificar y redirige a la misma pantalla. Verificado con 36 pruebas nuevas (`test_registration.py`, reemplaza a `test_email_verification.py`) + la suite completa (212/212, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`).
 >
 > **v0.14 — recuperación de contraseña y verificación de email vía Resend (`ADR-009-password-reset-and-email-verification.md`):** se agregan `POST /api/forgot-password`, `POST /api/reset-password`, `POST /api/send-verification-email` y `POST /api/verify-email` (§4.8) — séptima y octava entidad del alcance objetivo del producto (`DATABASE_ARCHITECTURE.md` §4.B, candidata "Verificación de correo, Recuperación de contraseña") en pasar a implementadas. Rutas planas bajo `/api`, sin prefijo `/auth/` — mismo criterio que `/api/register`/`/api/login`. `forgot-password` nunca revela si un email está registrado (mismo mensaje `200` siempre); `reset-password`/`verify-email` usan tokens de un solo uso, expirables, con hash SHA-256 persistido (nunca el valor crudo). `GET`/`PATCH /api/users/me` y `register`/`login` se extienden de forma aditiva con `email_verified` (§4.2, §5) — no rompe el contrato existente. Nuevo servicio de correo centralizado (Resend, SDK oficial) detrás de un `EmailSender` abstracto — ningún endpoint llama a Resend directamente. Verificado con 30 pruebas nuevas + la suite completa (175/175, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`), más una prueba manual end-to-end contra el backend real (los cuatro endpoints, con `NullEmailSender` en desarrollo sin `RESEND_API_KEY`).
+>
+> **v0.64 — respaldo de rutas (`ADR-044`, **PROPUESTO**):** `POST /api/places/<id>/route` sigue igual en forma y errores. Con `ROUTING_FALLBACK_PROVIDER=osrm`, si OpenRouteService no responde (`503`), el servidor usa el enrutador público de OpenStreetMap (a pie, bici y carro; indicaciones en `es`/`en`) y el `503` solo llega si fallan los dos. El origen redondeado también llega a ese servicio. Sin migración.
+>
+> **v0.63 — reservas activas por defecto (`ADR-043` §2.7, **PROPUESTO**):** un lugar sin configuración de reservas **acepta** solicitudes (cupo 10, grupo máximo 8) hasta que quien lo gestiona las apague; `place.accepts_reservations` es `true` por defecto y `GET .../manage/reservations/settings` devuelve `enabled: true` sin fila. Reservas y cotizaciones aceptan lugares `verified` o `unverified`. Los clientes deben avisar cuando `is_claimed` es `false`. Sin migración ni endpoint nuevo.
+>
+> **v0.62 — lugares importados de OpenStreetMap (`ADR-043`, **PROPUESTO**):** `place.verification_status` gana el valor **`unverified`** (lugar importado que nadie ha revisado). Es **público**: aparece en `GET /api/places`, `/search`, `/nearby` y en el detalle, con `source: "osm"`. Los clientes deben mostrarlo como «Sin verificar» y atribuir los datos a OpenStreetMap. Reservas y cotizaciones siguen exigiendo `verified`. No cambia ningún endpoint ni forma de respuesta; una migración (`e1b7c4a9d082`: `places.osm_type`, `places.osm_id`).
+>
+> **v0.61 — notas de voz en mensajes (`ADR-042`, **PROPUESTO**):** `POST /api/users/<id>/messages` acepta el campo multipart **`audio`** (un archivo; con audio el texto puede ir vacío); cada mensaje lleva `audio: {url, duration_ms}` (o `null`) y las conversaciones `last_message.has_audio` (§4.39). Interruptor del servidor `VOICE_MESSAGES_ENABLED` (apagado por defecto). Una migración (`a5c9e2f7b136`: tabla `audio_attachments`).
+>
+> **v0.60 — Tero, fase 7, automatizaciones con n8n (`ADR-041` §7, **ACEPTADO**):** `PATCH /api/users/me/privacy` acepta `weekly_summary_email` (booleano, apagado por defecto) y `GET` lo devuelve; dos rutas internas **firmadas con HMAC, no con JWT**, que solo usa n8n (§4.38); y el cierre de un reporte (`POST /api/moderation/reports/<id>/resolve`) ahora puede encargar un correo genérico a quien reportó (sin cambiar su respuesta). Variables nuevas, solo del servidor: `TERO_AUTOMATIONS_ENABLED`, `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, `N8N_TIMEOUT_SECONDS`, `N8N_MAX_RETRIES`. Una migración (`d7a3f1c8e254`: dos columnas en `users`).
 >
 > **v0.59 — Tero, fase 6, acciones con confirmación (`ADR-041` §6.2, **ACEPTADO**):** nuevos `POST /api/tero/actions/<id>/confirm` y `POST /api/tero/actions/<id>/cancel` (§4.37), y el chat devuelve siempre `confirmation_cards` (cambio aditivo: lista vacía si no hay). Variable nueva, solo del servidor: `TERO_ACTIONS_ENABLED` (apagada por defecto; exige `TERO_TOOLS_ENABLED`). Una migración (`c4f8a2d6e913`, tabla `tero_pending_actions`).
 >
@@ -2019,6 +2029,46 @@ El texto de otras personas que vuelve en un resultado es **dato, nunca instrucci
 - Las acciones resueltas o vencidas se borran a los 90 días con el resto de datos técnicos (`ADR-037`).
 
 **Gasto.** Cada mensaje suma sus tokens y su costo estimado a `tero_usage` (un contador global por mes UTC, sin `user_id`). Al llegar a `TERO_MONTHLY_BUDGET_USD` (20 por defecto) responde con `source: "budget"` sin llamar al modelo. Los precios son configurables; los valores por defecto (USD 0,10 de entrada y 0,50 de salida por millón de tokens) coinciden con la página oficial de Anthropic para Haiku 5.5 (verificada el 2026-10-17).
+
+---
+
+## 4.38 API interna para n8n (`ADR-041` §7, fase 7) — v0.60
+
+No es parte del contrato público con la app. La llama **n8n**, está **apagada** salvo que `TERO_AUTOMATIONS_ENABLED` y `N8N_WEBHOOK_SECRET` estén configurados (si no, responde `404` como cualquier ruta inexistente) y **no usa JWT**: n8n no es una persona y no tiene cuenta.
+
+**Autenticación.** Cabeceras `X-THERS-Timestamp` (segundos Unix) y `X-THERS-Signature` = `sha256=` + HMAC-SHA256, con el secreto compartido, de `<marca>.<cuerpo exacto>`. La marca debe estar a menos de 5 minutos del reloj del servidor (una captura no se puede repetir). Cualquier fallo es `401 {"msg": "Firma inválida"}` sin decir cuál de las comprobaciones falló.
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/internal/automations/weekly-summaries/next` | Cuerpo `{"limit"?: 1-100, "after"?: uuid}`. Devuelve a quien activó el resumen, tiene el correo verificado, no está suspendido, aún no lo recibió esta semana y tuvo actividad, con conteos de la **semana ya terminada** (lunes a domingo, UTC): `{"period", "items": [{"user_id", "recipient_email", "first_name", "language", "metrics": {"new_followers", "likes_received", "comments_received", "unread_notifications"}, "idempotency_key"}], "next_after"}`. `next_after` es el cursor de la página siguiente (`null` si fue la última). |
+| `POST /api/internal/automations/weekly-summaries/ack` | Cuerpo `{"items": [{"user_id", "idempotency_key", "status": "sent"\|"failed"}]}` (1 a 100). Marca como entregado lo que n8n dice haber enviado: `{"recorded", "ignored"}`. **Idempotente:** repetirlo no cambia nada. Una clave de otra semana, inventada o de alguien sin el resumen activo se ignora; `failed` no se registra y el resumen vuelve a ofrecerse en la siguiente corrida. |
+
+**Qué viaja y qué no.** Solo conteos, el correo de quien lo recibe y su primer nombre: nunca contenido de publicaciones, nombres ni identificadores de otras personas. Las respuestas llevan `Cache-Control: no-store`. Errores: `400` (`limit`, `after` o `items` mal formados), `401`, `404`.
+
+**Aviso de reporte resuelto (backend → n8n).** Al cerrar un reporte como `dismissed` o `actioned` el backend envía a n8n `POST <N8N_BASE_URL>/webhook/thers-report-resolved`, firmado con el mismo esquema y con `X-THERS-Idempotency-Key`, el cuerpo mínimo `{"event", "report_id", "outcome": "actioned"\|"dismissed", "recipient_email", "language"}`. **Genérico a propósito:** sin quién fue reportado, sin el contenido y sin la nota de quien modera (`ADR-032`). Solo se envía si las automatizaciones están encendidas, el reporte aún tiene reportante, su correo está verificado y su cuenta no está suspendida. Se hace en segundo plano y de mejor esfuerzo: **un fallo de n8n nunca retrasa ni deshace la resolución**. Reintentos: 2 más, con espera creciente, solo ante fallos transitorios (red, tiempo agotado, 5xx, 408, 429); un 4xx es definitivo.
+
+**Preferencia.** `weekly_summary_email` (booleano, `false` por defecto) en `GET`/`PATCH /api/users/me/privacy` y en la exportación de datos. Nadie recibe el resumen sin activarlo.
+
+---
+
+## 4.39 Notas de voz en mensajes (`ADR-042`) — v0.61
+
+**Enviar.** `POST /api/users/<id>/messages` con `multipart/form-data` y el campo **`audio`** (un solo archivo). Se puede añadir `content` (opcional con audio) y `client_id` (idempotente, `ADR-035`). **No se puede combinar con `images`** (`400`). Sin `audio` el endpoint no cambia.
+
+| Aspecto | Comportamiento |
+|---|---|
+| Formatos de entrada | WebM/Matroska, Ogg, MP4/M4A y WAV, reconocidos por su **cabecera** (no por la extensión ni el `Content-Type`). Un video o un archivo con varios flujos de audio se rechaza. |
+| Límites | 3 MiB de archivo y **120 s** de duración. |
+| Salida | El servidor **re-codifica siempre** a AAC mono 24 kHz en MP4 (`audio/mp4`, `.m4a`); el original no se guarda. La duración la **calcula el servidor**: un `duration_ms` que mande el cliente se ignora. |
+| Respuesta | `audio: {"url", "duration_ms"}` o `null` en cada mensaje (envío, hilo, edición). Nunca la clave interna ni el dueño. `GET /api/conversations`: `last_message.has_audio` (un mensaje solo de audio trae `content: ""`). |
+| Reproducción | `GET /api/media/voice/<id>.m4a` (público, sin sesión, nombre aleatorio; con `STORAGE_BACKEND=local`). Admite peticiones por rangos (`206`), necesarias en Safari. |
+| Edición / borrado | Editar el mensaje cambia el texto, **no** el audio. `DELETE /api/messages/<id>` borra también el archivo. Borrar la cuenta recoge sus audios (`ADR-031`). |
+
+**Errores.** `503 {"code": "voice_disabled"}` con el interruptor apagado (la mensajería de texto e imágenes no cambia); `400` audio inválido, demasiado largo (más de 2 minutos), mezclado con imágenes o a uno mismo; `413` archivo de más de 3 MiB; `429` más de **30 envíos con audio por hora y cuenta** (`ADR-027`, regla `audio_upload`); `404` si la otra cuenta te bloqueó; `403` si no acepta mensajes tuyos. El texto del error nunca incluye detalles del decodificador.
+
+**Exportación de datos (`ADR-028`).** `messages.json` incluye `voice_note_seconds` (duración redondeada, o `null`) para que la persona sepa que existió una nota de voz; el archivo de audio **no** se incluye.
+
+**Seguridad.** Las URL son públicas (modelo de `ADR-039` §3.1): quien tenga la URL oye la nota hasta que se borre. No hay moderación automática de audio. Ver `ADR-042` §3.
 
 ---
 

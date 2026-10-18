@@ -205,6 +205,8 @@ Config.STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "local")
 # Solo en el servidor: la clave nunca va en el cliente. Sin clave la función queda desactivada.
 Config.ROUTING_PROVIDER = os.environ.get("ROUTING_PROVIDER", "openrouteservice")
 Config.ROUTING_API_KEY = (os.environ.get("ROUTING_API_KEY") or "").strip() or None
+# Respaldo si el principal no responde (ADR-044): `osrm` = enrutador público de OpenStreetMap.
+Config.ROUTING_FALLBACK_PROVIDER = (os.environ.get("ROUTING_FALLBACK_PROVIDER") or "").strip().lower() or None
 try:
     Config.ROUTING_DAILY_BUDGET = int(os.environ.get("ROUTING_DAILY_BUDGET") or 1500)
 except ValueError:
@@ -299,7 +301,27 @@ def _positive_float_env(name, default):
     return value
 
 
+# Notas de voz en mensajes (ADR-042). Apagado por defecto: con el interruptor apagado un envío con
+# audio responde 503 `voice_disabled` y el resto de la mensajería no cambia.
+Config.VOICE_MESSAGES_ENABLED = _flag_env("VOICE_MESSAGES_ENABLED")
+
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
+# Automatizaciones con n8n (ADR-041 §7): aviso de reporte resuelto y resumen semanal. Apagadas por
+# defecto. Flask sigue siendo la fuente de verdad: n8n recibe datos mínimos y llama de vuelta a una API
+# interna firmada. El secreto compartido firma los dos sentidos y NUNCA va al móvil ni al repositorio.
+Config.TERO_AUTOMATIONS_ENABLED = _flag_env("TERO_AUTOMATIONS_ENABLED")
+Config.N8N_BASE_URL = (os.environ.get("N8N_BASE_URL") or "").strip().rstrip("/") or None
+Config.N8N_WEBHOOK_SECRET = (os.environ.get("N8N_WEBHOOK_SECRET") or "").strip() or None
+Config.N8N_TIMEOUT_SECONDS = _positive_float_env("N8N_TIMEOUT_SECONDS", 5.0)
+Config.N8N_MAX_RETRIES = int(_positive_float_env("N8N_MAX_RETRIES", 2))
+
+if Config.TERO_AUTOMATIONS_ENABLED and not (Config.N8N_BASE_URL and Config.N8N_WEBHOOK_SECRET):
+    print(
+        "[config] TERO_AUTOMATIONS_ENABLED está activo pero falta N8N_BASE_URL o N8N_WEBHOOK_SECRET; "
+        "las automatizaciones quedarán apagadas. Definir las dos en backend/.env.",
+        file=sys.stderr,
+    )
+
 # Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
 # es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.
 Config.TERO_TOOLS_ENABLED = _flag_env("TERO_TOOLS_ENABLED")

@@ -2,7 +2,6 @@ export { default as Home } from "./pages/Home";
 export { default as Search } from "./pages/Search";
 export { default as Videos } from "./pages/Videos";
 export { default as Capsules } from "./pages/Capsules";
-export { default as Radar } from "./pages/Radar";
 export { default as Messages } from "./pages/Messages";
 export { default as Notifications } from "./pages/Notifications";
 export { default as Profile } from "./pages/Profile";

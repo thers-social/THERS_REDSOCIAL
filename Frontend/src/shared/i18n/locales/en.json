@@ -27,7 +27,6 @@
     "ariaMobile": "Bottom navigation",
     "videos": "Videos",
     "capsules": "Capsules",
-    "radar": "Location",
     "create": "Create",
     "hasUnread": "You have unread items",
     "openMenu": "Open navigation menu",
@@ -346,6 +345,9 @@
     "title": "Places",
     "subtitle": "Discover what's near you.",
     "verified": "Verified",
+    "unverified": "Unverified",
+    "unverifiedNotice": "This place has not been verified yet: its details may be incomplete or out of date.",
+    "osmAttribution": "Data © OpenStreetMap contributors.",
     "panel": {
       "aria": "Places list"
     },
@@ -389,7 +391,7 @@
     },
     "route": {
       "title": "Get directions",
-      "privacy": "When you press the button, your approximate location (within about 100 m) is sent to our server and to OpenRouteService to calculate the route. We do not store it.",
+      "privacy": "When you press the button, your approximate location (within about 100 m) is sent to our server and to OpenRouteService (or, if it does not respond, to OpenStreetMap's public router) to calculate the route. We do not store it.",
       "profile": "How you travel",
       "profiles": { "walk": "On foot", "bike": "By bike", "car": "By car" },
       "steps": "Directions",
@@ -397,7 +399,7 @@
       "noSteps": "This route has no street-by-street directions.",
       "noStreet": "Unnamed road",
       "start": "Get directions",
-      "attribution": "Route: OpenRouteService · Data © OpenStreetMap contributors",
+      "attribution": "Route: OpenRouteService / OpenStreetMap · Data © OpenStreetMap contributors",
       "dur": {
         "seconds": "{{n}} s",
         "minutes": "{{n}} min",
@@ -607,6 +609,7 @@
     },
     "reservations": {
       "title": "Book a table",
+      "unclaimed": "This business has not claimed its place on THERS yet: your request may not be answered.",
       "book": "Book",
       "sent": "Request sent",
       "cancelled": "Reservation cancelled",
@@ -709,6 +712,121 @@
         "rejected": "Quote rejected",
         "expired": "Expired"
       }
+    }
+  },
+  "tero": {
+    "name": "Tero",
+    "tagline": "Your assistant on THERS",
+    "thinking": "Thinking…",
+    "open": "Open Tero, your assistant",
+    "close": "Close Tero",
+    "clear": "Clear the conversation",
+    "retry": "Retry",
+    "send": "Send message",
+    "inputLabel": "Write to Tero",
+    "placeholder": "Ask Tero something…",
+    "welcome": "Hi! I'm Tero. I can help you find people, improve your profile and answer questions about THERS. If I suggest something, you decide whether it happens.",
+    "speech": {
+      "on": "Tero speaks: on. Press to mute",
+      "off": "Tero speaks: off. Press to hear its replies",
+      "note": "Tero reads its replies with your browser's voice; the text never leaves your device.",
+      "voice": { "es": "Spanish voice", "en": "English voice" },
+      "auto": "Automatic (best available)"
+    },
+    "privacyNote": "The conversation is not saved: it is erased when you close the tab.",
+  "voice": {
+    "start": "Dictate to Tero",
+    "stop": "Stop dictating",
+    "listening": "Listening… speak now",
+    "privacy": "Dictation is processed by your browser (Chrome: Google; Safari: Apple). THERS does not receive the audio: only the text you send.",
+    "errors": {
+      "denied": "We do not have permission to use the microphone. Enable it in your browser settings and try again.",
+      "noSpeech": "I did not hear you. Press the microphone and speak again.",
+      "noDevice": "We could not find a microphone on this device.",
+      "network": "Dictation needs a connection. Check your internet and try again.",
+      "language": "Your browser does not recognise this language for dictation.",
+      "busy": "The microphone is in use by another application.",
+      "insecure": "Dictation only works on a secure connection (https).",
+      "unsupported": "This browser cannot dictate.",
+      "generic": "Dictation failed. Try again."
+    }
+  },
+    "suggestions": {
+      "whoToFollow": "Who can I follow?",
+      "improveBio": "Help me improve my bio",
+      "whatCanYouDo": "What can you do?"
+    },
+    "input": {
+      "empty": "Write a question for Tero.",
+      "tooLong": "Maximum {{max}} characters."
+    },
+    "errors": {
+      "offline": "No connection. Check your internet and try again.",
+      "rateLimited": "You're sending a lot of messages. Wait a moment.",
+      "disabled": "Tero is not available right now.",
+      "unavailable": "Tero is not available right now. Try again later.",
+      "badRequest": "Tero couldn't understand the message. Try different text.",
+      "generic": "Tero couldn't answer. You can retry."
+    },
+    "card": {
+      "aria": "Action proposed by Tero",
+      "notDoneYet": "Proposal · nothing has been done yet",
+      "confirm": "Confirm",
+      "confirming": "Confirming…",
+      "cancel": "Cancel",
+      "cancelling": "Cancelling…",
+      "status": {
+        "confirmed": "Done",
+        "cancelled": "Cancelled",
+        "expired": "Expired",
+        "unavailable": "Unavailable",
+        "failed": "Could not be completed"
+      },
+      "notes": {
+        "expired": "It expired. Ask Tero to prepare it again.",
+        "offline": "No connection. Try again.",
+        "rateLimited": "Too many attempts. Wait a moment.",
+        "gone": "This action no longer exists.",
+        "alreadyCancelled": "It was already cancelled.",
+        "alreadyConfirmed": "It was already confirmed.",
+        "failed": "The action could not be completed.",
+        "unavailable": "Tero's actions are not available right now.",
+        "retry": "It could not be completed. Try again.",
+        "done": "Done.",
+        "profileUpdated": "Done, your profile was updated.",
+        "requestSent": "Done, you sent the request.",
+        "nowFollowing": "Done, you now follow them.",
+        "unfollowed": "Done, you no longer follow them.",
+        "cancelled": "Cancelled. Nothing was done."
+      }
+    }
+  },
+  "voice": {
+    "record": "Record a voice note",
+    "recording": "Recording a voice note",
+    "requesting": "Waiting for permission…",
+    "maxHint": "Maximum {{max}} minutes",
+    "stop": "Stop recording",
+    "cancel": "Cancel recording",
+    "preview": "Your voice note, ready to send",
+    "discard": "Discard the voice note",
+    "send": "Send the voice note",
+    "play": "Play the voice note",
+    "pause": "Pause the voice note",
+    "seek": "Voice note position",
+    "note": "Voice note",
+    "preview_list": "🎤 Voice note",
+    "errors": {
+      "denied": "We do not have permission to use the microphone. Enable it in your browser settings and try again.",
+      "noDevice": "We could not find a microphone on this device.",
+      "busy": "The microphone is in use by another application. Close it and try again.",
+      "insecure": "The microphone only works on a secure connection (https).",
+      "unsupported": "This browser cannot record audio.",
+      "tooShort": "The voice note is too short. Hold the recording a little longer.",
+      "tooBig": "The voice note is too large. Record a shorter one.",
+      "disabled": "Voice notes are not available right now.",
+      "generic": "The audio could not be recorded. Try again.",
+      "playback": "Could not play"
     }
   }
 }

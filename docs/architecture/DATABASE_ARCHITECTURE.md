@@ -4,7 +4,7 @@
 |---|---|
 | Documento | `docs/architecture/DATABASE_ARCHITECTURE.md` |
 | Identificador propuesto | `DB-001` (sigue el patrón `HB-001`/`ARC-001`/`DS-001`/`WF-001`/`PV-001`/`FAS-001`) — **pendiente de ratificación formal** |
-| Versión | 0.42 |
+| Versión | 0.44 |
 | Estado | **Borrador / Contrato técnico — pendiente de aprobación del equipo** |
 | Depende de | `HB-001` (organización, gobernanza, git flow, seguridad), `REPOSITORY_STRUCTURE.md` (ubicación del backend y carpeta futura `database/`) |
 | Motivo | El `CLAUDE.md` maestro (§4, §14) identificó que la arquitectura de Base de Datos no estaba formalmente documentada |
@@ -12,10 +12,16 @@
 
 > ⚠️ **Nota de alcance y honestidad de fuentes.** Este documento es un **contrato técnico previo a la implementación**, no una descripción de un esquema ya existente. Al momento de escribirlo (v0.1), el backend **no tenía base de datos, ni ORM, ni driver de PostgreSQL instalado**: la autenticación funcionaba contra credenciales hardcodeadas (ver §4). Todo lo que aquí se define como "decidido" se limita a lo que la documentación oficial ya respalda o a lo que el estado real del código justifica de forma evidente. Todo lo demás está marcado explícitamente como **PENDIENTE DE APROBACIÓN** (§14). No se inventan entidades, columnas, índices ni políticas que el proyecto no necesite hoy.
 >
+> **v0.44 — notas de voz (`ADR-042`):** una migración (`a5c9e2f7b136`) y una tabla nueva, **`audio_attachments`**: `id`, `owner_id` (→ `users`, `CASCADE`), `message_id` (→ `messages`, `CASCADE`, **`UNIQUE`**: una nota por mensaje), `storage_key` (`UNIQUE`, `voice/<uuid4>.m4a`), `duration_ms` y `size_bytes` (`CHECK > 0`) y `created_at`. **Separada de `media_attachments`** a propósito: esa tabla exige `width`/`height` y su `CHECK` de exclusividad, y todo el código que la lee asume imágenes. Índice `ix_audio_attachments_owner_id` (recoger los archivos al borrar una cuenta). Verificada con `flask db upgrade` contra PostgreSQL 16 real sobre `thers_test`.
+>
+> **v0.43 — resumen semanal por correo (`ADR-041` §7, n8n):** una migración (`d7a3f1c8e254`) y dos columnas en `users` (§5.1): `weekly_summary_email` (`BOOLEAN NOT NULL DEFAULT false`: nadie recibe el resumen sin activarlo) y `weekly_summary_sent_at` (`TIMESTAMPTZ NULL`, el último resumen entregado; es lo que impide enviar dos veces el de la misma semana aunque el flujo de n8n se repita). Índice parcial `ix_users_weekly_summary_optin` sobre `id WHERE weekly_summary_email`, porque la consulta semanal solo mira a quien lo activó. `weekly_summary_email` se incluye en la exportación de datos (`ADR-028`). Verificada con `flask db upgrade` contra PostgreSQL 16 real sobre `thers_test`.
+>
 > **v0.42 — Tero, acciones pendientes de confirmación (`ADR-041` §6.2):** una migración (`c4f8a2d6e913`) y una tabla nueva, `tero_pending_actions`: `id` (UUID), `user_id` (FK a `users`, `ON DELETE CASCADE`), `kind`, `params` (`JSONB`, ya validados por el servidor), `summary` (texto de la tarjeta, redactado por el servidor), `status` (`pending`/`confirmed`/`cancelled`/`failed`), `expires_at`, `created_at` y `resolved_at`. Dos `CHECK`: el estado, y que `resolved_at` sea nulo **si y solo si** sigue `pending`. Índice `(user_id, created_at)`. **Sí lleva `user_id`** (a diferencia de `tero_usage`): la acción pertenece a una persona y solo ella puede confirmarla. Se borra con la cuenta (`CASCADE`, `ADR-031`) y por retención a los 90 días (`ADR-037`). La confirmación es un único `UPDATE ... WHERE status = 'pending' AND expires_at > now() RETURNING`, que es lo que garantiza que una acción se ejecute una sola vez aunque lleguen dos confirmaciones a la vez. Verificada con `flask db upgrade` contra PostgreSQL 16 real sobre `thers_test`.
 >
 > **v0.41 — Tero, gasto mensual de IA (`ADR-041` §8.2):** una migración (`b9e3d7a1c548`) y una tabla nueva, `tero_usage`: un contador **global** por mes UTC (`period` `YYYY-MM`, PK) con `input_tokens`, `output_tokens`, `cost_micro_usd` y `updated_at`. **Sin `user_id` a propósito**: solo sirve para cortar el gasto al llegar al tope y no hay nada que exportar ni borrar por persona (`ADR-028`/`ADR-031`). Dos `CHECK`: formato del periodo y valores no negativos. Se suma con un solo `INSERT ... ON CONFLICT DO UPDATE`. Verificada con `flask db upgrade` contra PostgreSQL 16 real sobre `thers_test`.
 >
+> **v0.45 — lugares de OpenStreetMap (`ADR-043`, **PROPUESTO**):** `places` gana `osm_type` y `osm_id` (índice único parcial `uq_places_osm_ref`, `CHECK ck_places_osm_type`) y el `CHECK` de `verification_status` admite `unverified`. Migración `e1b7c4a9d082`; el `downgrade` pasa los `unverified` a `pending`.
+
 > **v0.21 — rate limiting (`ADR-027-rate-limiting.md`):** una migración (`b6e3a9d4f270`) y una tabla nueva, `rate_limit_buckets` (§5.15). Cierra el ítem 8 de `API_CONTRACT.md` §9, que v0.24 de aquel documento había registrado como pendiente tras descubrir que en `POST /api/2fa/verify` la ausencia de límite era explotable.
 >
 > Contador de ventana fija: una fila por (`scope`, `identity_hash`) con `window_started_at` y `attempts`. Tres decisiones de modelo que vale la pena destacar:

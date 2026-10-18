@@ -140,6 +140,10 @@ def create_app():
     from app.interfaces.routes.tero_routes import tero_bp
     app.register_blueprint(tero_bp, url_prefix="/api")
 
+    # API interna que usa n8n (ADR-041 §7): firmada con HMAC, no con JWT. Apagada por defecto.
+    from app.interfaces.routes.automation_routes import automation_bp
+    app.register_blueprint(automation_bp, url_prefix="/api")
+
     # Comandos de línea de comandos (flask set-moderator, flask unsuspend-user).
     from app.interfaces.cli import register_cli
     register_cli(app)

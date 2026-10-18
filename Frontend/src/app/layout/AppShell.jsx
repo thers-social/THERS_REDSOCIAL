@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "@shared/hooks/useTheme";
 import { useLanguage } from "@shared/i18n";
@@ -9,6 +9,12 @@ import ShellFrame from "./thers/ShellFrame";
 import { shellVariantFor } from "./thers/navigation";
 import CreateCapsuleFlow from "@features/feed/components/CreateCapsuleFlow";
 import { mapNotification } from "@features/feed/lib/mapNotification";
+
+import { TERO_ENABLED } from "@features/tero/config";
+
+// Tero (ADR-041): solo se descarga si el interruptor está encendido; con VITE_TERO_ENABLED
+// apagado no pesa nada en el bundle de la app.
+const TeroLauncher = lazy(() => import("@features/tero/components/TeroLauncher"));
 
 function authHeaders() {
   return { Authorization: `Bearer ${getStoredToken()}` };
@@ -21,8 +27,14 @@ export default function AppShell() {
   // ProtectedRoute (app/router/ProtectedRoute.jsx), que envuelve esta rama de
   // rutas y solo renderiza AppShell cuando isAuthenticated es true. Acá solo
   // se consume el usuario ya resuelto por AuthProvider.
-  const { user: currentUser, updateProfile, uploadProfileImage, removeProfileImage, logout } =
-    useAuth();
+  const {
+    user: currentUser,
+    updateProfile,
+    uploadProfileImage,
+    removeProfileImage,
+    logout,
+    refreshUser,
+  } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { t } = useLanguage();
   const toast = useToast();
@@ -131,6 +143,26 @@ export default function AppShell() {
       // Silencioso, mismo motivo que reloadConversations.
     }
   };
+
+  // Tero (ADR-041): tras confirmar una acción que cambió datos reales, se vuelve a pedir
+  // lo que la pantalla muestra, en silencio (sin spinners ni Toast: la tarjeta de Tero ya
+  // le dijo a la persona qué pasó). Seguir/dejar de seguir cambia `follow_status` de los
+  // autores del feed; editar el perfil cambia el usuario de la sesión.
+  const handleTeroAction = useCallback(
+    async (card) => {
+      if (card.kind === "update_profile") {
+        refreshUser();
+        return;
+      }
+      try {
+        const res = await api.get("/posts", { headers: authHeaders() });
+        setCapsules(res.data.posts);
+      } catch {
+        // Silencioso, mismo criterio que reloadConversations.
+      }
+    },
+    [refreshUser]
+  );
 
   const handleToggleFollow = (id) => {
     setFollowingIds((prev) => {
@@ -457,6 +489,12 @@ export default function AppShell() {
           onClose={() => setComposerOpen(false)}
           onSubmit={handleCreateCapsule}
         />
+      )}
+
+      {TERO_ENABLED && (
+        <Suspense fallback={null}>
+          <TeroLauncher onActionConfirmed={handleTeroAction} />
+        </Suspense>
       )}
     </ShellFrame>
   );

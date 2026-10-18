@@ -104,6 +104,10 @@ REPORT_CREATE = RateLimitRule("report_create", 10, _HOUR, clear_on_success=False
 #: publicar con holgura y frena a quien intente saturar el servidor de imágenes.
 IMAGE_UPLOAD = RateLimitRule("image_upload", 40, _HOUR, clear_on_success=False)
 
+#: Mensajes con nota de voz (ADR-042). Decodificar y re-codificar audio cuesta CPU: se cuenta cada
+#: envío con audio, por cuenta, y el acierto no limpia el contador (el abuso es el acierto).
+AUDIO_UPLOAD = RateLimitRule("audio_upload", 30, _HOUR, clear_on_success=False)
+
 #: `POST /api/reports` con motivo `child_safety` (ADR-038). Límite PROPIO y más holgado que
 #: `REPORT_CREATE`: una persona que ya hizo varios reportes comunes no debe quedarse sin poder
 #: denunciar una explotación de menores. Sigue existiendo (no es ilimitado) para que no se use

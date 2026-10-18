@@ -60,7 +60,6 @@ const Home = named(loadFeed, "Home");
 const Search = named(loadFeed, "Search");
 const Videos = named(loadFeed, "Videos");
 const Capsules = named(loadFeed, "Capsules");
-const Radar = named(loadFeed, "Radar");
 const Messages = named(loadFeed, "Messages");
 const Notifications = named(loadFeed, "Notifications");
 const Profile = named(loadFeed, "Profile");
@@ -115,7 +114,8 @@ export default function AppRouter() {
             <Route path="/search" element={<Search />} />
             <Route path="/videos" element={<Videos />} />
             <Route path="/capsules" element={<Capsules />} />
-            <Route path="/radar" element={<Radar />} />
+            {/* "Ubicación" se retiró: THERS Places (/places) ocupa su lugar. Se redirige para no romper enlaces guardados. */}
+            <Route path="/radar" element={<Navigate to="/places" replace />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/profile" element={<Profile />} />
