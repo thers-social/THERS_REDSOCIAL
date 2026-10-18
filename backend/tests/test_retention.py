@@ -188,7 +188,7 @@ class TestWhatIsNeverTouched:
 
             assert second == {
                 "sessions": 0, "refresh_tokens": 0, "password_reset_tokens": 0,
-                "email_verification_tokens": 0,
+                "email_verification_tokens": 0, "tero_pending_actions": 0,
             }
 
 

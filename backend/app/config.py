@@ -275,3 +275,57 @@ Config.PRIVATE_DOCUMENTS_BASE_URL = os.environ.get(
     "PRIVATE_DOCUMENTS_BASE_URL", "http://127.0.0.1:5000/api/private-documents"
 )
 Config.S3_PRIVATE_BUCKET = os.environ.get("S3_PRIVATE_BUCKET")
+
+
+# --- Tero, asistente con IA (ADR-041) ---
+# `TERO_ENABLED` apaga todo el módulo; `TERO_AI_ENABLED` apaga solo la llamada al proveedor
+# (respuesta fija, útil en staging). Ambos APAGADOS por defecto: nadie gasta por accidente.
+# La clave de la API vive SOLO aquí, en el servidor (nunca en el móvil: `EXPO_PUBLIC_*` se
+# embebe en el APK).
+def _flag_env(name):
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
+def _positive_float_env(name, default):
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        raise RuntimeError(f"{name} debe ser un número positivo (recibido: {raw!r}).")
+    if value <= 0:
+        raise RuntimeError(f"{name} debe ser un número positivo (recibido: {value}).")
+    return value
+
+
+Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
+# Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
+# es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.
+Config.TERO_TOOLS_ENABLED = _flag_env("TERO_TOOLS_ENABLED")
+# Acciones con confirmación (ADR-041 fase 6): el modelo puede PREPARAR seguir/dejar de seguir y
+# editar nombre o biografía; la persona confirma aparte. Otro interruptor, apagado por defecto.
+Config.TERO_ACTIONS_ENABLED = _flag_env("TERO_ACTIONS_ENABLED")
+Config.TERO_AI_ENABLED = _flag_env("TERO_AI_ENABLED")
+Config.ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY") or "").strip() or None
+Config.TERO_MODEL = (os.environ.get("TERO_MODEL") or "").strip() or "claude-haiku-5-5"
+Config.TERO_AI_TIMEOUT_SECONDS = _positive_float_env("TERO_AI_TIMEOUT_SECONDS", 20.0)
+
+# Tope de gasto mensual (ADR-041 §8.2): USD 20. Los precios son por millón de tokens y coinciden
+# con la página oficial de Anthropic (verificada el 2026-10-17) para Haiku 5.5 con prompts de hasta
+# 100.000 tokens: USD 0,10 de entrada y 0,50 de salida. Si Anthropic los cambia, se cambian aquí
+# (variables de entorno). Se guardan en micro-USD para sumar sin error de coma flotante.
+Config.TERO_MONTHLY_BUDGET_MICRO = int(round(_positive_float_env("TERO_MONTHLY_BUDGET_USD", 20.0) * 1_000_000))
+Config.TERO_PRICE_INPUT_MICRO_PER_MTOK = int(
+    round(_positive_float_env("TERO_PRICE_INPUT_USD_PER_MTOK", 0.10) * 1_000_000)
+)
+Config.TERO_PRICE_OUTPUT_MICRO_PER_MTOK = int(
+    round(_positive_float_env("TERO_PRICE_OUTPUT_USD_PER_MTOK", 0.50) * 1_000_000)
+)
+
+if Config.TERO_ENABLED and Config.TERO_AI_ENABLED and not Config.ANTHROPIC_API_KEY:
+    print(
+        "[config] TERO_ENABLED y TERO_AI_ENABLED están activos pero ANTHROPIC_API_KEY no está "
+        "definida; POST /api/tero/chat responderá 503. Definirla en backend/.env.",
+        file=sys.stderr,
+    )

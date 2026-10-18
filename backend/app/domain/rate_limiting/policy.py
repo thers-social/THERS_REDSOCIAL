@@ -172,3 +172,11 @@ def routing_daily_rule(budget):
     el predeterminado, por debajo del tope gratuito de OpenRouteService."""
     limit = budget if isinstance(budget, int) and not isinstance(budget, bool) and budget > 0 else DEFAULT_ROUTING_DAILY_BUDGET
     return RateLimitRule("routing_provider", limit, 24 * _HOUR, clear_on_success=False)
+
+# Mensajes a Tero (ADR-041 §8.2): por CUENTA. Cada mensaje cuesta dinero, así que el tope es más
+# bajo que el de cualquier endpoint normal; el acierto ES el uso (`clear_on_success=False`).
+TERO_CHAT = RateLimitRule("tero_chat", 30, _HOUR, clear_on_success=False)
+
+# Confirmar o cancelar una acción de Tero (ADR-041 §6.2): por CUENTA. No cuesta IA, pero ejecuta
+# cambios reales, así que también tiene tope.
+TERO_ACTION = RateLimitRule("tero_action", 30, _HOUR, clear_on_success=False)

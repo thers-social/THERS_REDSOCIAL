@@ -39,7 +39,7 @@ class SQLAlchemyPostRepository(PostRepository):
     def place_cards(self, place_ids):
         return fetch_place_cards(place_ids)
 
-    def list_recent(self, limit, viewer_id, muted_keywords=(), place_id=None):
+    def list_recent(self, limit, viewer_id, muted_keywords=(), place_id=None, post_id=None):
         # Traducción literal a SQL de domain/privacy/visibility.py
         # (can_view_content_of): el post entra en el feed si el autor no es
         # privado, O es el propio espectador, O el espectador tiene un follow
@@ -134,6 +134,12 @@ class SQLAlchemyPostRepository(PostRepository):
         # arriba aplican igual: el lugar no es una forma de saltárselas.
         if place_id is not None:
             conditions.append(Post.place_id == place_id)
+
+        # Un solo post por id (Tero, ADR-041 `post_read`). Reutiliza TODAS las reglas de arriba
+        # (cuentas privadas, bloqueos, contenido sensible, temas y términos silenciados): leer un
+        # post por id no es una forma de saltárselas.
+        if post_id is not None:
+            conditions.append(Post.id == post_id)
 
         # Términos filtrados del espectador (ADR-024). Su propio post nunca se
         # le oculta: filtrar una palabra no debería hacer desaparecer lo que

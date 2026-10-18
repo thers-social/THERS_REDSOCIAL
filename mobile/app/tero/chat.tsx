@@ -3,14 +3,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '@features/auth/context/AuthContext';
 import { usePosts } from '@features/posts/PostsContext';
-import { SETTLE_AFTER_MS, settledMood } from '@features/tero/animation/expressions';
+import {
+  moodForActionOutcome,
+  reactionForActionOutcome,
+  SETTLE_AFTER_MS,
+  settledMood,
+} from '@features/tero/animation/expressions';
+import type { ActionOutcome } from '@features/tero/animation/expressions';
 import { useTeroMotionAllowed } from '@features/tero/animation/useTeroMotion';
+import type { ReactionRequest } from '@features/tero/animation/useTeroMotion';
+import { TeroActionCardView } from '@features/tero/components/TeroActionCard';
 import { TeroAvatar } from '@features/tero/components/TeroAvatar';
 import { TeroDots } from '@features/tero/components/TeroDots';
 import { TeroGate } from '@features/tero/components/TeroGate';
 import { TeroPreviewNotice } from '@features/tero/components/TeroPreviewNotice';
+import { TERO_LIVE } from '@features/tero/config';
 import { teroColors } from '@features/tero/design/teroColors';
+import {
+  cardStateFromError,
+  chatErrorMessage,
+  confirmedNote,
+  historyForRequest,
+  initialCardState,
+} from '@features/tero/lib/teroCards';
 import {
   checkMessage,
   makeMessage,
@@ -19,7 +36,13 @@ import {
   withStatus,
 } from '@features/tero/lib/teroChat';
 import { teroClient } from '@features/tero/lib/teroClient';
-import type { TeroContext, TeroMessage, TeroMood } from '@features/tero/types';
+import type {
+  TeroActionCard,
+  TeroCardState,
+  TeroContext,
+  TeroMessage,
+  TeroMood,
+} from '@features/tero/types';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { Screen } from '@shared/ui/Screen';
@@ -51,6 +74,7 @@ export default function TeroChat() {
 function TeroChatContent() {
   const params = useLocalSearchParams<{ prompt?: string; postId?: string }>();
   const posts = usePosts();
+  const { refreshUser } = useAuth();
   const insets = useSafeAreaInsets();
   const animate = useTeroMotionAllowed();
 
@@ -60,6 +84,18 @@ function TeroChatContent() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [replyMood, setReplyMood] = useState<TeroMood>('idle');
+  // Reacción breve de Tero al desenlace de una tarjeta (celebrar / encogerse).
+  const [reaction, setReaction] = useState<ReactionRequest | null>(null);
+  // Estado de cada tarjeta de confirmación, por id de acción. Vive solo mientras la pantalla está
+  // abierta, igual que la conversación: lo que cuenta es el estado real en el servidor.
+  const [cardStates, setCardStates] = useState<Record<string, TeroCardState>>({});
+
+  // Siempre la lista más reciente, para armar el historial sin depender de un cierre viejo.
+  const messagesRef = useRef<TeroMessage[]>([]);
+  messagesRef.current = messages;
+  // Igual para las tarjetas: el servidor debe saber cómo terminó cada una (confirmada, cancelada...).
+  const cardStatesRef = useRef<Record<string, TeroCardState>>({});
+  cardStatesRef.current = cardStates;
 
   const listRef = useRef<FlatList<TeroMessage>>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -77,6 +113,15 @@ function TeroChatContent() {
     return () => clearTimeout(timer);
   }, [replyMood]);
 
+  // Una tarjeta con botones mide más que un mensaje y la lista aún no conoce su altura cuando
+  // llega: sin este segundo desplazamiento, Confirmar y Cancelar quedan tapados por el campo de
+  // texto. Se repite al cambiar una tarjeta de estado (su texto cambia de alto).
+  useEffect(() => {
+    if (!messages.length) return;
+    const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: animate }), 150);
+    return () => clearTimeout(timer);
+  }, [messages.length, cardStates, animate]);
+
   /** Envía `message` (nuevo o reintento) y espera la respuesta. */
   const deliver = useCallback(
     async (message: TeroMessage, context: TeroContext) => {
@@ -89,17 +134,30 @@ function TeroChatContent() {
       const postContent = context.entityId ? (posts.getPost(context.entityId)?.content ?? null) : null;
 
       try {
-        const reply = await teroClient.send(message.text, context, { postContent, signal: controller.signal });
+        const reply = await teroClient.send(message.text, context, {
+          postContent,
+          history: historyForRequest(messagesRef.current, message.id, cardStatesRef.current),
+          signal: controller.signal,
+        });
+        const cards = reply.cards ?? [];
+        if (cards.length) {
+          const now = Date.now();
+          setCardStates((current) => {
+            const next = { ...current };
+            for (const card of cards) next[card.id] = initialCardState(card, now);
+            return next;
+          });
+        }
         setMessages((current) => [
           ...withStatus(current, message.id, 'sent'),
-          makeMessage('tero', reply.text, new Date(), reply.isMock),
+          { ...makeMessage('tero', reply.text, new Date(), reply.isMock), cards },
         ]);
         setReplyMood(reply.mood);
-      } catch {
+      } catch (caught) {
         if (controller.signal.aborted) return;
         setMessages((current) => withStatus(current, message.id, 'failed'));
         setReplyMood('error');
-        setError('Tero no pudo responder. Puedes reintentar.');
+        setError(chatErrorMessage(caught));
       } finally {
         if (!controller.signal.aborted) setPending(false);
       }
@@ -125,6 +183,48 @@ function TeroChatContent() {
   function retry(message: TeroMessage) {
     if (pending) return;
     void deliver(message, contexts.current.get(message.id) ?? { screen: 'tero' });
+  }
+
+  function setCard(id: string, state: TeroCardState) {
+    setCardStates((current) => ({ ...current, [id]: state }));
+  }
+
+  /** Tero reacciona al desenlace: celebra lo que se hizo, se encoge si falló, calla si no. */
+  function reactToOutcome(outcome: ActionOutcome) {
+    const kind = reactionForActionOutcome(outcome);
+    const nextMood = moodForActionOutcome(outcome);
+    if (nextMood) setReplyMood(nextMood);
+    if (kind) setReaction({ kind, key: Date.now() });
+  }
+
+  /** Solo la persona llega aquí, al pulsar «Confirmar»: es lo único que ejecuta la acción. */
+  async function confirmCard(card: TeroActionCard) {
+    if (cardStates[card.id]?.status !== 'pending') return;
+    setCard(card.id, { status: 'confirming' });
+    try {
+      const result = await teroClient.confirmAction(card.id);
+      setCard(card.id, { status: 'confirmed', note: confirmedNote(result) });
+      reactToOutcome('confirmed');
+      // Lo que cambió ya no coincide con lo que la app tiene en memoria: se vuelve a leer.
+      if (card.kind === 'update_profile') void refreshUser();
+      else void posts.reload();
+    } catch (caught) {
+      const next = cardStateFromError(caught);
+      setCard(card.id, next);
+      // Solo un fallo definitivo cuenta (sin red o límite de intentos deja la tarjeta pendiente).
+      if (next.status !== 'pending') reactToOutcome(next.status as ActionOutcome);
+    }
+  }
+
+  async function cancelCard(card: TeroActionCard) {
+    if (cardStates[card.id]?.status !== 'pending') return;
+    setCard(card.id, { status: 'cancelling' });
+    try {
+      await teroClient.cancelAction(card.id);
+      setCard(card.id, { status: 'cancelled', note: 'Cancelada. No se hizo ningún cambio.' });
+    } catch (caught) {
+      setCard(card.id, cardStateFromError(caught));
+    }
   }
 
   // Pregunta inicial, una sola vez (el doble montaje de desarrollo no la repite).
@@ -159,10 +259,22 @@ function TeroChatContent() {
       ? 'Te escucho…'
       : mood === 'error'
         ? 'Algo salió mal.'
-        : 'Pregúntame sobre THERS.';
+        : mood === 'speaking'
+          ? 'Tero responde…'
+          : mood === 'happy'
+            ? '¡Listo!'
+            : 'Pregúntame sobre THERS.';
 
   return (
     <Screen title="Preguntar a Tero" back scroll={false} withBottomInset={false}>
+      {/* Tero queda fijo arriba mientras la conversación se desplaza: así se le ve pensar, hablar
+          y reaccionar aunque la lista sea larga. */}
+      <View style={styles.statusBar}>
+        <TeroAvatar size={56} mood={mood} reaction={reaction} />
+        <Text style={styles.heroText} accessibilityLiveRegion="polite">
+          {heroText}
+        </Text>
+      </View>
       <FlatList
         ref={listRef}
         data={messages}
@@ -172,13 +284,14 @@ function TeroChatContent() {
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: animate })}
         ListHeaderComponent={
           <View>
-            <View style={styles.hero}>
-              <TeroAvatar size={72} mood={mood} />
-              <Text style={styles.heroText} accessibilityLiveRegion="polite">
-                {heroText}
+            {TERO_LIVE ? (
+              <Text style={styles.liveHint}>
+                Tero puede equivocarse: revisa lo importante. Nada cambia en tu cuenta sin que lo
+                confirmes. La conversación no se guarda.
               </Text>
-            </View>
-            <TeroPreviewNotice message="Las respuestas son de ejemplo, no de una IA. La conversación no se guarda." />
+            ) : (
+              <TeroPreviewNotice message="Las respuestas son de ejemplo, no de una IA. La conversación no se guarda." />
+            )}
           </View>
         }
         ListFooterComponent={
@@ -193,7 +306,18 @@ function TeroChatContent() {
           ) : null
         }
         renderItem={({ item }) => (
-          <MessageBubble message={item} animate={animate} onRetry={() => retry(item)} retryDisabled={pending} />
+          <View>
+            <MessageBubble message={item} animate={animate} onRetry={() => retry(item)} retryDisabled={pending} />
+            {item.cards?.map((card) => (
+              <TeroActionCardView
+                key={card.id}
+                card={card}
+                state={cardStates[card.id] ?? initialCardState(card)}
+                onConfirm={() => void confirmCard(card)}
+                onCancel={() => void cancelCard(card)}
+              />
+            ))}
+          </View>
         )}
       />
 
@@ -300,8 +424,23 @@ function MessageBubble({
 
 const styles = themedStyles(() => ({
   list: { padding: space[4], paddingBottom: space[6] },
-  hero: { alignItems: 'center', marginBottom: space[4] },
-  heroText: { fontSize: fontSize.bodyMd, color: colors.fgSecondary, marginTop: space[2] },
+  statusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space[3],
+    paddingHorizontal: space[4],
+    paddingVertical: space[2],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  heroText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.fgSecondary },
+  liveHint: {
+    fontSize: fontSize.bodySm,
+    color: colors.fgMuted,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: space[4],
+  },
   bubble: {
     maxWidth: '85%',
     borderRadius: radius.card,

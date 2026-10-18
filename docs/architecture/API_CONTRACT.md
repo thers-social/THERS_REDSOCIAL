@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.56 (Propuesta) |
+| Versión | 0.59 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -43,6 +43,12 @@
 > **v0.16 — verificación obligatoria de email al registrarse (`ADR-011-mandatory-email-verification.md`, reemplaza `send-verification-email`/`verify-email` de v0.14):** `POST /api/register` (§4.1) sigue devolviendo `201` con el usuario creado, pero ahora `email_verified` nace en `false` y de inmediato se envía un código de 6 dígitos — la cuenta no puede iniciar sesión todavía. Registrar de nuevo con un email que existe pero nunca se verificó **actualiza esa misma cuenta** (incluida la contraseña) y reenvía un código, en vez de un `409` — el `409` real solo ocurre si el email ya pertenece a una cuenta verificada. `POST /api/login` (§4.1) gana un caso nuevo: credenciales correctas pero cuenta sin verificar responde `403` con `{"msg": "...", "email_verified": false}`, sin emitir ningún JWT. Se agregan `POST /api/verify-registration-code` y `POST /api/resend-registration-code` (§4.8) — mismo patrón que `verify-reset-code`/`forgot-password` (`ADR-010`): 6 dígitos, hash scrypt, máximo 5 intentos, cooldown de 60s, índice único parcial (a lo sumo un código activo por usuario). Un código de registro nunca sirve para verificar una recuperación de contraseña ni viceversa — viven en tablas/repositorios completamente separados, no un discriminador de tipo sobre una tabla compartida. **Se retiran** `POST /api/send-verification-email` y `POST /api/verify-email` (`ADR-009`, flujo de enlace) — con el login ya bloqueado para cuentas sin verificar, una cuenta sin verificar nunca puede obtener el JWT que el primero exigía, dejando ambos permanentemente inalcanzables. El Frontend queda conectado de punta a punta: `Register.jsx` navega a la nueva pantalla `VerifyRegistrationCode.jsx` en vez de a `/login`; `Login.jsx` distingue el `403` de cuenta sin verificar y redirige a la misma pantalla. Verificado con 36 pruebas nuevas (`test_registration.py`, reemplaza a `test_email_verification.py`) + la suite completa (212/212, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`).
 >
 > **v0.14 — recuperación de contraseña y verificación de email vía Resend (`ADR-009-password-reset-and-email-verification.md`):** se agregan `POST /api/forgot-password`, `POST /api/reset-password`, `POST /api/send-verification-email` y `POST /api/verify-email` (§4.8) — séptima y octava entidad del alcance objetivo del producto (`DATABASE_ARCHITECTURE.md` §4.B, candidata "Verificación de correo, Recuperación de contraseña") en pasar a implementadas. Rutas planas bajo `/api`, sin prefijo `/auth/` — mismo criterio que `/api/register`/`/api/login`. `forgot-password` nunca revela si un email está registrado (mismo mensaje `200` siempre); `reset-password`/`verify-email` usan tokens de un solo uso, expirables, con hash SHA-256 persistido (nunca el valor crudo). `GET`/`PATCH /api/users/me` y `register`/`login` se extienden de forma aditiva con `email_verified` (§4.2, §5) — no rompe el contrato existente. Nuevo servicio de correo centralizado (Resend, SDK oficial) detrás de un `EmailSender` abstracto — ningún endpoint llama a Resend directamente. Verificado con 30 pruebas nuevas + la suite completa (175/175, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`), más una prueba manual end-to-end contra el backend real (los cuatro endpoints, con `NullEmailSender` en desarrollo sin `RESEND_API_KEY`).
+>
+> **v0.59 — Tero, fase 6, acciones con confirmación (`ADR-041` §6.2, **ACEPTADO**):** nuevos `POST /api/tero/actions/<id>/confirm` y `POST /api/tero/actions/<id>/cancel` (§4.37), y el chat devuelve siempre `confirmation_cards` (cambio aditivo: lista vacía si no hay). Variable nueva, solo del servidor: `TERO_ACTIONS_ENABLED` (apagada por defecto; exige `TERO_TOOLS_ENABLED`). Una migración (`c4f8a2d6e913`, tabla `tero_pending_actions`).
+>
+> **v0.58 — Tero, fase 5, herramientas de lectura (`ADR-041` §6.1, **ACEPTADO**):** `POST /api/tero/chat` (§4.37) puede consultar datos con cinco herramientas de solo lectura, siempre con los permisos de quien chatea. Variable nueva, solo del servidor: `TERO_TOOLS_ENABLED` (apagada por defecto). La respuesta no cambia de forma. Sin migración.
+>
+> **v0.57 — Tero, fase 4, chat con IA (`ADR-041`, **ACEPTADO**):** nuevo `POST /api/tero/chat` (§4.37). Exige sesión; apagado por defecto (`TERO_ENABLED`). Variables de entorno nuevas, solo del servidor: `TERO_ENABLED`, `TERO_AI_ENABLED`, `ANTHROPIC_API_KEY`, `TERO_MODEL`, `TERO_AI_TIMEOUT_SECONDS`, `TERO_MONTHLY_BUDGET_USD`, `TERO_PRICE_INPUT_USD_PER_MTOK` y `TERO_PRICE_OUTPUT_USD_PER_MTOK`. Una migración (`b9e3d7a1c548`, tabla `tero_usage`).
 >
 > **v0.56 — THERS Places, fase 16 (parte 2), visitas anónimas (`ADR-040` §33, **PROPUESTO**):** nuevo `POST /api/places/<id>/visits` (§4.36), público, que suma 1 a un contador anónimo por lugar, día local y evento (`view`, `phone`, `website`, `directions`) y responde `204` sin cuerpo. `GET /api/places/<id>/manage/analytics` (§4.34) añade `totals.visits`, `views` en la serie y la clave `visits` en `hidden`. Migración `c9d4a1e7b362` (`place_visit_counts`, sin `user_id`).
 >
@@ -1973,6 +1979,46 @@ Para las cuentas que **ya existían** y no aceptaron nada al registrarse: se les
 - **Opcional por defecto.** Si viene `true`, se guardan `terms_accepted_at` y `terms_version` **después** de crear la cuenta. Solo cuenta el booleano `true`.
 - **Con `TERMS_ACCEPTANCE_REQUIRED` activado** (variable de entorno, **apagada por defecto**), `POST /api/register` responde `400` con `terms_required: true` si falta, y `POST /api/auth/google` hace lo mismo **solo cuando la cuenta de Google es nueva**. Iniciar sesión con una cuenta de Google que ya existe no la necesita. Se activa cuando el Frontend y la app móvil ya envíen la casilla (`ADR-032` fases 3 y 4); activarla antes dejaría sin poder registrarse a quien use un cliente que todavía no la envía.
 - **Versión vigente:** variable `TERMS_VERSION` (una fecha de publicación; **placeholder** hasta que el equipo publique los términos definitivos). Cambiarla hace que `terms_accepted` vuelva a `false` en todas las cuentas y a todo el mundo se le vuelva a pedir aceptar.
+
+---
+
+## 4.37 Tero — chat con IA (`ADR-041`, fase 4) — v0.57
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/tero/chat` | Exige sesión (JWT). Cuerpo `{"message": str, "history"?: [{"role": "user\|assistant", "content": str}], "context"?: {"screen"?: str, "entity_type"?: "post\|profile\|place", "entity_id"?: str}}`. Respuesta `200` `{"reply": str, "source": "ai\|disabled\|budget\|refused", "confirmation_cards": [{"id", "kind", "summary", "expires_at"}]}`. |
+| `POST /api/tero/actions/<id>/confirm` | Exige sesión (JWT); el cuerpo **no se lee**. Revalida dueño, estado y vencimiento y EJECUTA la acción que Tero preparó. `200` `{"status": "confirmed", "result": {...}}`; si ya estaba confirmada, `200` `{"status": "confirmed", "already_confirmed": true}` sin volver a ejecutar. |
+| `POST /api/tero/actions/<id>/cancel` | Exige sesión (JWT). Descarta la acción. `200` `{"status": "cancelled"}` (idempotente: `already_cancelled`). |
+
+**`source`** dice de dónde salió el texto: `ai` es una respuesta del modelo; `disabled` (IA apagada, `TERO_AI_ENABLED=false`), `budget` (se alcanzó el tope mensual de gasto) y `refused` (el modelo se negó) son textos fijos del sistema, con estado `200`.
+
+**Errores.** `400` con `{"msg"}` si el cuerpo no es un objeto JSON, `message` está vacío o supera 1000 caracteres, `history` tiene más de 10 mensajes, un `role` inválido o no empieza con `user`, o `context` tiene un campo mal formado. `401` sin sesión. `429` con `Retry-After` al pasar de 30 mensajes por hora por cuenta (`policy.TERO_CHAT`). `503` con `{"msg"}` si el proveedor falla, vence el tiempo o falta la clave; y `503` con `{"msg", "code": "tero_disabled"}` si el módulo está apagado (`TERO_ENABLED=false`, que es el valor por defecto). Ningún error incluye el texto del proveedor, la clave ni la conversación.
+
+**Qué ve el modelo.** El texto de `message` y de `history`. Con `TERO_TOOLS_ENABLED=false` (por defecto), `context` se valida pero **no se envía**. Con las herramientas encendidas se añade, como línea marcada «dato sin verificar», la pantalla y el identificador que mandó el cliente; no concede ningún permiso, porque cada herramienta vuelve a comprobarlos. El historial no se guarda en el servidor: lo manda el cliente en cada petición. Cada respuesta lleva `Cache-Control: no-store`.
+
+**Herramientas de lectura (fase 5, `TERO_TOOLS_ENABLED=true`).** El modelo puede pedir hasta 3 vueltas de herramientas por mensaje (máximo 4 llamadas por vuelta); pasado ese tope responde `503`. Todas son de solo lectura, validan sus argumentos contra un esquema estricto y usan la identidad del JWT: ninguna recibe un `user_id`.
+
+| Herramienta | Qué devuelve | Reglas |
+|---|---|---|
+| `profile_read` | nombre, usuario, biografía, cuenta privada, seguidores y seguidos de quien chatea | Nunca correo, teléfono ni fecha de nacimiento |
+| `notifications_summary` | no leídas, por tipo, y las 5 más recientes (tipo, de quién, lugar) | Sin el texto libre `detail`; excluye cuentas bloqueadas |
+| `users_search` (`query`) | hasta 5 personas: usuario, nombre, si es privada | Excluye a quien pregunta, bloqueos en ambos sentidos, moderadores y cuentas suspendidas; `%` y `_` se buscan como texto |
+| `post_read` (`post_id`) | autor, texto (≤ 500 caracteres), fecha, contadores, lugar | Mismas reglas del feed (cuentas privadas, bloqueos, contenido sensible, temas y términos silenciados). Un post inexistente y uno que no puedes ver dan la misma respuesta `{"found": false}` |
+| `places_search` (`query`, `category`?) | hasta 5 lugares del catálogo público: nombre, categoría, dirección, valoración | Sin coordenadas ni teléfono |
+
+El texto de otras personas que vuelve en un resultado es **dato, nunca instrucción**: el servidor lo devuelve al modelo como `tool_result` y las instrucciones del sistema son fijas. Cada ejecución se registra (herramienta, usuario, estado, milisegundos) **sin argumentos ni contenido**. Los nombres usan guion bajo porque la API del proveedor no admite puntos.
+
+**Acciones con confirmación (fase 6, `TERO_ACTIONS_ENABLED=true`).** Tero nunca ejecuta un cambio: con las herramientas `propose_follow_user`, `propose_unfollow_user` y `propose_update_profile` (solo `name` y `bio`) **prepara** una acción y el chat devuelve una tarjeta en `confirmation_cards`. No se ha hecho nada hasta que la persona llama a `confirm`.
+
+- **El texto de la tarjeta (`summary`) lo redacta el servidor** a partir de parámetros ya validados, no el modelo: lo que se aprueba es exactamente lo que se ejecuta.
+- **Vence a los 10 minutos** y cada persona puede tener como máximo 5 pendientes a la vez.
+- **Dueño:** la identidad es el JWT. Una acción ajena o inexistente da el mismo `404 {"msg": "Acción no encontrada"}`.
+- **Una sola vez:** confirmar es un único `UPDATE` condicionado al estado, así que dos confirmaciones simultáneas ejecutan una sola. Los permisos (bloqueos, cuenta borrada) se **vuelven a comprobar al confirmar**, con los mismos casos de uso que la app.
+- **Errores de `confirm`/`cancel`:** `404` no es tuya o no existe; `409` con `code`: `action_expired`, `action_cancelled`, `action_confirmed` (al cancelar una ya confirmada), `action_failed` (ya no se pudo ejecutar; queda registrada como fallida y no se reintenta); `429` con `Retry-After` (30 por hora por cuenta); `503` con `code` `tero_disabled` o `tero_actions_disabled`. Apagar las acciones **también bloquea confirmar** las que ya estaban pendientes.
+- **Fuera de alcance por decisión del ADR:** contraseña, correo, 2FA, borrado de cuenta, bloqueo y moderación. «Guardar publicación» no existe en la app, así que no se inventa.
+- Las acciones resueltas o vencidas se borran a los 90 días con el resto de datos técnicos (`ADR-037`).
+
+**Gasto.** Cada mensaje suma sus tokens y su costo estimado a `tero_usage` (un contador global por mes UTC, sin `user_id`). Al llegar a `TERO_MONTHLY_BUDGET_USD` (20 por defecto) responde con `source: "budget"` sin llamar al modelo. Los precios son configurables; los valores por defecto (USD 0,10 de entrada y 0,50 de salida por millón de tokens) coinciden con la página oficial de Anthropic para Haiku 5.5 (verificada el 2026-10-17).
 
 ---
 

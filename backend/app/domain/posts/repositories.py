@@ -18,7 +18,7 @@ class PostRepository(ABC):
         """Tarjeta mínima de cada lugar PÚBLICO de `place_ids`, por id (ADR-040 fase 4d)."""
 
     @abstractmethod
-    def list_recent(self, limit, viewer_id, muted_keywords=(), place_id=None):
+    def list_recent(self, limit, viewer_id, muted_keywords=(), place_id=None, post_id=None):
         """Devuelve los `limit` posts más recientes **visibles para
         `viewer_id`**, ordenados por `created_at` descendente, con el autor ya
         resuelto (sin N+1).

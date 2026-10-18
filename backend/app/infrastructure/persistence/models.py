@@ -2081,3 +2081,65 @@ class PlaceVisitCount(db.Model):
     day = db.Column(db.Date, primary_key=True)
     event = db.Column(db.String(16), primary_key=True)
     count = db.Column(db.Integer, nullable=False, server_default="0")
+
+
+# --- Tero, fase 4: gasto mensual de IA (ADR-041 §8.2) ---
+
+
+class TeroUsage(db.Model):
+    __tablename__ = "tero_usage"
+
+    # Un contador GLOBAL por mes UTC (`YYYY-MM`). Sin user_id a propósito: sirve solo para cortar
+    # el gasto al llegar al tope y no hay nada que exportar ni borrar por persona (ADR-028/031).
+    period = db.Column(db.String(7), primary_key=True)
+    input_tokens = db.Column(db.BigInteger, nullable=False, server_default="0")
+    output_tokens = db.Column(db.BigInteger, nullable=False, server_default="0")
+    cost_micro_usd = db.Column(db.BigInteger, nullable=False, server_default="0")
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    __table_args__ = (
+        CheckConstraint("period ~ '^[0-9]{4}-[0-9]{2}$'", name="ck_tero_usage_period"),
+        CheckConstraint(
+            "input_tokens >= 0 AND output_tokens >= 0 AND cost_micro_usd >= 0",
+            name="ck_tero_usage_nonnegative",
+        ),
+    )
+
+
+# --- Tero, fase 6: acciones propuestas por el asistente que esperan confirmación (ADR-041 §6.2) ---
+
+
+class TeroPendingAction(db.Model):
+    __tablename__ = "tero_pending_actions"
+
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    # De la persona que chatea (JWT), nunca de lo que diga el modelo. CASCADE: al borrar la
+    # cuenta se borran sus acciones (ADR-031).
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind = db.Column(db.String(32), nullable=False)
+    # Parámetros YA validados por el servidor (ids resueltos, texto limpio). Es lo único que se
+    # ejecuta al confirmar: nada que escriba el modelo después cambia lo que se aprobó.
+    params = db.Column(JSONB, nullable=False)
+    # Lo que ve la persona en la tarjeta de confirmación, redactado por el SERVIDOR a partir de
+    # `params`, no por el modelo: lo que se aprueba es exactamente lo que se ejecuta.
+    summary = db.Column(db.String(300), nullable=False)
+    status = db.Column(db.String(12), nullable=False, server_default="pending")
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'confirmed', 'cancelled', 'failed')",
+            name="ck_tero_pending_actions_status",
+        ),
+        CheckConstraint(
+            "(status = 'pending') = (resolved_at IS NULL)",
+            name="ck_tero_pending_actions_resolved",
+        ),
+        Index("ix_tero_pending_actions_user_created", "user_id", "created_at"),
+    )

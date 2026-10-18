@@ -63,16 +63,59 @@ export type TeroMessage = {
   createdAt: string;
   /** `true` en las respuestas de ejemplo de la fase 1 (sin IA real). */
   isMock?: boolean;
+  /** Acciones que Tero preparó con esta respuesta y esperan confirmación (solo mensajes de Tero). */
+  cards?: TeroActionCard[];
   /** Solo en los mensajes de la persona: en camino, entregado o fallido. */
   status?: TeroMessageStatus;
 };
 
 export type TeroMessageStatus = 'sending' | 'sent' | 'failed';
 
+/** Acciones que Tero puede PREPARAR (ADR-041 §6.2). Nunca las ejecuta: las confirma la persona. */
+export type TeroActionKind = 'follow_user' | 'unfollow_user' | 'update_profile';
+
+/**
+ * Una acción que Tero preparó y que NO se ha hecho. `summary` lo redacta el servidor a partir de
+ * datos ya validados: lo que se muestra es exactamente lo que se ejecutará al confirmar.
+ */
+export type TeroActionCard = {
+  id: string;
+  kind: TeroActionKind;
+  summary: string;
+  /** ISO 8601. Pasado ese momento el servidor ya no la ejecuta (10 minutos). */
+  expiresAt: string;
+};
+
+/**
+ * Estado de una tarjeta en pantalla. `pending` es el único en que se puede confirmar o cancelar;
+ * `confirming`/`cancelling` bloquean los botones mientras la petición está en camino.
+ */
+export type TeroCardStatus =
+  | 'pending'
+  | 'confirming'
+  | 'cancelling'
+  | 'confirmed'
+  | 'cancelled'
+  | 'expired'
+  | 'failed'
+  | 'unavailable';
+
+export type TeroCardState = {
+  status: TeroCardStatus;
+  /** Texto bajo la tarjeta (resultado o motivo). Solo para mostrar. */
+  note?: string;
+};
+
+/** De dónde salió el texto de una respuesta (`source` del servidor). */
+export type TeroReplySource = 'ai' | 'disabled' | 'budget' | 'refused';
+
 export type TeroReply = {
   text: string;
   mood: TeroMood;
   isMock: boolean;
+  /** Tarjetas de confirmación que acompañan a la respuesta. Vacío en las de ejemplo. */
+  cards?: TeroActionCard[];
+  source?: TeroReplySource;
 };
 
 export type TeroSummaryMetric = {

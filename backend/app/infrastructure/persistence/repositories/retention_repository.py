@@ -10,6 +10,7 @@ from app.infrastructure.persistence.models import (
     PasswordResetToken,
     RefreshToken,
     Session,
+    TeroPendingAction,
 )
 
 
@@ -40,6 +41,11 @@ class SQLAlchemyRetentionRepository(RetentionRepository):
         ).rowcount
         counts["email_verification_tokens"] = db.session.execute(
             delete(EmailVerificationToken).where(EmailVerificationToken.created_at < cutoff)
+        ).rowcount
+
+        # Acciones de Tero (ADR-041): propuestas ya resueltas o vencidas hace más de 90 días.
+        counts["tero_pending_actions"] = db.session.execute(
+            delete(TeroPendingAction).where(TeroPendingAction.created_at < cutoff)
         ).rowcount
 
         # Una sola transacción: o se borra todo lo vencido o nada.

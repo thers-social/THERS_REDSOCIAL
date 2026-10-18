@@ -26,8 +26,12 @@ export const TERO_MOODS: readonly TeroMood[] = [
   'sleeping',
 ];
 
-/** Reacciones breves (una sola vez, menos de medio segundo). */
-export type TeroReaction = 'enter' | 'tap' | 'surprise' | 'joy' | 'message';
+/**
+ * Reacciones breves (una sola vez). `celebrate` y `droop` responden a lo que la persona hizo con
+ * una tarjeta (confirmar una acción / que no se pudo completar); duran un poco más que las demás
+ * (menos de un segundo) porque son el desenlace de algo que la persona esperaba.
+ */
+export type TeroReaction = 'enter' | 'tap' | 'surprise' | 'joy' | 'message' | 'celebrate' | 'droop';
 
 export type MoodMotion = {
   /** Parpadea de vez en cuando (solo con los ojos abiertos y redondos). */
@@ -53,6 +57,103 @@ export const MOOD_MOTION: Record<TeroMood, MoodMotion> = {
   error: { blinks: false, float: 'none', tilt: 0, thinkingDots: false },
   sleeping: { blinks: false, float: 'none', tilt: 0, thinkingDots: false },
 };
+
+/**
+ * «Respiración»: cuánto crece el cuerpo (escala) en lo más alto de cada ciclo de flotación. Se
+ * mueve con la misma ventana que la flotación, así que no añade animaciones infinitas.
+ */
+export const BREATH_SCALE = 0.025;
+
+/** Cuánto dura el cruce entre la cara que se va y la que llega, en ms. */
+export const FACE_CROSSFADE_MS = 200;
+
+// --- Mirada ---------------------------------------------------------------------------------
+
+export type Look = {
+  /** Desplazamiento vertical de los ojos como fracción del tamaño (positivo: hacia abajo). */
+  y: number;
+  /** Si es mayor que 0, los ojos barren de lado a lado esa fracción del tamaño (pensando). */
+  scan: number;
+};
+
+const LOOK_REST: Look = { y: 0, scan: 0 };
+
+/**
+ * Hacia dónde mira Tero. Al escuchar, mira hacia abajo, donde está el campo de texto; al pensar,
+ * recorre despacio de lado a lado (ya mira hacia arriba por el dibujo). No sigue al dedo ni a nada
+ * fuera de la propia conversación (guía de personalidad: sin vigilancia).
+ */
+export function lookFor(mood: TeroMood): Look {
+  switch (mood) {
+    case 'listening':
+      return { y: 0.05, scan: 0 };
+    case 'thinking':
+      return { y: 0, scan: 0.03 };
+    case 'attention':
+      return { y: -0.01, scan: 0 };
+    default:
+      return LOOK_REST;
+  }
+}
+
+/** Cuántas idas y vueltas de barrido hace al pensar antes de quedarse quieto. */
+export const SCAN_CYCLES = 3;
+
+// --- Boca al hablar -------------------------------------------------------------------------
+
+export type MouthStep = { to: number; ms: number };
+
+/** Apertura de la boca en reposo y límites al hablar (escala vertical, 1 = completamente abierta). */
+export const MOUTH_REST = 0.45;
+export const MOUTH_MIN = 0.3;
+export const MOUTH_MAX = 1;
+
+/** Tope de tiempo hablando aunque el estado dure más: nada se anima para siempre. */
+export const SPEAK_MAX_MS = 6000;
+
+/**
+ * Secuencia de aperturas que imita el ritmo del habla: sílabas de 90 a 170 ms, alternando abierta
+ * y casi cerrada, y termina en reposo. `random` en [0, 1) para poder probarla con valores fijos.
+ */
+export function mouthKeyframes(random: () => number = Math.random, count = 8): MouthStep[] {
+  const steps: MouthStep[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const open = i % 2 === 0;
+    const amount = open ? 0.62 + random() * (MOUTH_MAX - 0.62) : MOUTH_MIN + random() * 0.15;
+    steps.push({ to: Number(amount.toFixed(3)), ms: Math.round(90 + random() * 80) });
+  }
+  steps.push({ to: MOUTH_REST, ms: 120 });
+  return steps;
+}
+
+/** Cuántas veces repetir la secuencia para cubrir `SPEAK_MAX_MS` como máximo. */
+export function mouthLoops(steps: MouthStep[], maxMs = SPEAK_MAX_MS): number {
+  const cycle = steps.reduce((total, step) => total + step.ms, 0);
+  return Math.max(1, Math.floor(maxMs / Math.max(1, cycle)));
+}
+
+// --- Desenlace de una acción ----------------------------------------------------------------
+
+/** Cómo termina una tarjeta, para decidir cómo reacciona Tero. */
+export type ActionOutcome = 'confirmed' | 'cancelled' | 'expired' | 'failed' | 'unavailable';
+
+/**
+ * Reacción al desenlace de una tarjeta. Celebra solo lo que de verdad se hizo; si no se pudo
+ * completar, se encoge con calma (nunca sacude: un error no debe alarmar). Cancelar o que venza no
+ * es un éxito ni un fallo, así que no hay reacción.
+ */
+export function reactionForActionOutcome(outcome: ActionOutcome): TeroReaction | null {
+  if (outcome === 'confirmed') return 'celebrate';
+  if (outcome === 'failed') return 'droop';
+  return null;
+}
+
+/** Estado en que queda Tero tras el desenlace, o `null` si no cambia. */
+export function moodForActionOutcome(outcome: ActionOutcome): TeroMood | null {
+  if (outcome === 'confirmed') return 'happy';
+  if (outcome === 'failed') return 'error';
+  return null;
+}
 
 /** Duración de medio ciclo de flotación, en ms. */
 export function floatHalfCycleMs(float: MoodMotion['float']): number {
