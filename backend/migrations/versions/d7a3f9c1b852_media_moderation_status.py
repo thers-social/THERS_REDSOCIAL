@@ -4,14 +4,14 @@ Existing rows become 'approved' (nothing already published disappears); the colu
 switched to 'pending' so a row inserted without an explicit status fails closed.
 
 Revision ID: d7a3f9c1b852
-Revises: c4f8a2d6e913
+Revises: c8dcd63b24d4
 Create Date: 2026-10-18
 """
 import sqlalchemy as sa
 from alembic import op
 
 revision = "d7a3f9c1b852"
-down_revision = "c4f8a2d6e913"
+down_revision = "c8dcd63b24d4"
 branch_labels = None
 depends_on = None
 
