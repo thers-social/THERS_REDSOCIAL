@@ -126,6 +126,10 @@ def create_app():
     from app.interfaces.routes.moderation_routes import moderation_bp
     app.register_blueprint(moderation_bp, url_prefix="/api")
 
+    # Panel de moderación de contenido y apelaciones (ADR-044): apagado con MODERATION_ENABLED.
+    from app.interfaces.routes.content_moderation_routes import content_moderation_bp
+    app.register_blueprint(content_moderation_bp, url_prefix="/api")
+
     # THERS Places (ADR-040): catálogo público de lugares, solo lectura en la fase 1.
     from app.interfaces.routes.place_routes import places_bp
     app.register_blueprint(places_bp, url_prefix="/api")

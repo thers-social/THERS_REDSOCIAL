@@ -197,6 +197,9 @@ class User(db.Model):
     # por línea de comandos (`flask set-moderator`), nunca por la API. Una cuenta
     # suspendida no puede iniciar sesión y ve `suspension_reason`.
     is_moderator = db.Column(db.Boolean, nullable=False, server_default=text("false"))
+    # Rol separado de moderación de contenido (ADR-044 §2.5); NULL = ninguno. Solo por línea de
+    # comandos. `is_moderator` equivale a `reviewer`.
+    moderation_role = db.Column(db.String(16), nullable=True)
     suspended_at = db.Column(db.DateTime(timezone=True), nullable=True)
     suspension_reason = db.Column(db.String(500), nullable=True)
 
@@ -2233,3 +2236,28 @@ class ModerationResult(db.Model):
             "priority IN ('normal', 'high', 'critical')", name="ck_moderation_results_priority"
         ),
     )
+
+
+class ModerationAppeal(db.Model):
+    __tablename__ = "moderation_appeals"
+
+    # Apelación de una persona contra la retención o el rechazo de su contenido (ADR-044 §2.7).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    subject_type = db.Column(db.String(24), nullable=False)
+    subject_id = db.Column(PG_UUID(as_uuid=True), nullable=False)
+    reason = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'open'"))
+    original_decided_by = db.Column(db.String(40), nullable=True)
+    reviewer_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    resolution_note = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)

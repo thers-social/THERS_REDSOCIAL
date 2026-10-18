@@ -55,6 +55,10 @@ def now():
 
 def make_account(client, username, age_days=400):
     """Cuenta verificada; `age_days` retrasa su `created_at` para probar cuentas nuevas y viejas."""
+    # El registro tiene tope por IP (ADR-027); estas pruebas crean varias cuentas a propósito.
+    from tests.conftest import reset_rate_limits
+
+    reset_rate_limits()
     token, user_id = _register_and_login(client, username=username, email=f"{username}@example.com")
     db.session.execute(
         text("UPDATE users SET created_at = now() - make_interval(days => :d) WHERE id = :id"),

@@ -307,6 +307,9 @@ Config.MODERATION_ENABLED = _flag_env("MODERATION_ENABLED")
 # `fake`: clasificador simulado, SOLO para desarrollo y pruebas. Nunca aprueba por sí solo en
 # producción porque no existe ahí. Los adaptadores reales se añaden tras su aprobación.
 Config.MODERATION_CLASSIFIER = (os.environ.get("MODERATION_CLASSIFIER") or "none").strip().lower()
+# Exige 2FA activa a las cuentas moderadoras (ADR-044 decisión 5). Apagado por defecto para no
+# dejar fuera a quien hoy modera; se enciende cuando todas tengan 2FA.
+Config.MODERATION_REQUIRE_2FA = _flag_env("MODERATION_REQUIRE_2FA")
 Config.MODERATION_NEW_ACCOUNT_DAYS = int(_positive_float_env("MODERATION_NEW_ACCOUNT_DAYS", 7))
 Config.MODERATION_HOLD_ALL_NEW_ACCOUNTS = _flag_env("MODERATION_HOLD_ALL_NEW_ACCOUNTS")
 Config.MODERATION_DOUBT_THRESHOLD = _positive_float_env("MODERATION_DOUBT_THRESHOLD", 0.40)

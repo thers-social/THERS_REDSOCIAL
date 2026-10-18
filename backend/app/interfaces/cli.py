@@ -47,6 +47,27 @@ def register_cli(app):
                 "Se recomienda activarla antes de moderar."
             )
 
+    @app.cli.command("set-moderation-role")
+    @click.argument("email")
+    @click.argument("role", type=click.Choice(["reviewer", "child_safety", "admin", "none"]))
+    def set_moderation_role(email, role):
+        """Asigna el rol de moderación de contenido (ADR-044): reviewer, child_safety, admin o none."""
+        from app.extensions import db
+        from app.infrastructure.persistence.models import User
+
+        user = _find(email)
+        row = db.session.get(User, user.id)
+        row.moderation_role = None if role == "none" else role
+        # El panel de reportes (ADR-032) sigue exigiendo `is_moderator`: se mantiene alineado.
+        row.is_moderator = role != "none"
+        db.session.commit()
+        click.echo("Rol de moderación retirado." if role == "none" else f"Rol asignado: {role}.")
+        if role != "none" and not user.two_factor_enabled:
+            click.echo(
+                "AVISO: esta cuenta no tiene la verificación en dos pasos (2FA) activada; "
+                "con MODERATION_REQUIRE_2FA encendido no podrá moderar."
+            )
+
     @app.cli.command("moderation-worker")
     @click.option("--once", is_flag=True, help="Procesa los trabajos listos y termina.")
     @click.option("--interval", default=5.0, show_default=True, help="Segundos entre ciclos.")

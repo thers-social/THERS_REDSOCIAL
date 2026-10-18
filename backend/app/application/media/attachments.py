@@ -61,6 +61,8 @@ def to_public_images(images, viewer_id=None):
             "height": image.height,
         }
         if not approved:
+            # Solo llega a quien la subió (ver `visible_images`): el id permite apelar.
+            item["id"] = str(image.id)
             item["moderation_status"] = image.moderation_status
         result.append(item)
     return result

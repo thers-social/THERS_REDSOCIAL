@@ -180,3 +180,7 @@ TERO_CHAT = RateLimitRule("tero_chat", 30, _HOUR, clear_on_success=False)
 # Confirmar o cancelar una acción de Tero (ADR-041 §6.2): por CUENTA. No cuesta IA, pero ejecuta
 # cambios reales, así que también tiene tope.
 TERO_ACTION = RateLimitRule("tero_action", 30, _HOUR, clear_on_success=False)
+
+# Apelar una decisión de moderación (ADR-044 §2.7): por CUENTA. Cada apelación cuesta tiempo de
+# revisión; además hay un tope de apelaciones abiertas por persona.
+MODERATION_APPEAL = RateLimitRule("moderation_appeal", 10, _HOUR, clear_on_success=False)

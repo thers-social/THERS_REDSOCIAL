@@ -4,13 +4,19 @@
 |---|---|
 | Documento | `docs/architecture/DATABASE_ARCHITECTURE.md` |
 | Identificador propuesto | `DB-001` (sigue el patrón `HB-001`/`ARC-001`/`DS-001`/`WF-001`/`PV-001`/`FAS-001`) — **pendiente de ratificación formal** |
-| Versión | 0.44 |
+| Versión | 0.45 |
 | Estado | **Borrador / Contrato técnico — pendiente de aprobación del equipo** |
 | Depende de | `HB-001` (organización, gobernanza, git flow, seguridad), `REPOSITORY_STRUCTURE.md` (ubicación del backend y carpeta futura `database/`) |
 | Motivo | El `CLAUDE.md` maestro (§4, §14) identificó que la arquitectura de Base de Datos no estaba formalmente documentada |
 | Idioma | Español (documentación oficial), identificadores/código en inglés |
 
 > ⚠️ **Nota de alcance y honestidad de fuentes.** Este documento es un **contrato técnico previo a la implementación**, no una descripción de un esquema ya existente. Al momento de escribirlo (v0.1), el backend **no tenía base de datos, ni ORM, ni driver de PostgreSQL instalado**: la autenticación funcionaba contra credenciales hardcodeadas (ver §4). Todo lo que aquí se define como "decidido" se limita a lo que la documentación oficial ya respalda o a lo que el estado real del código justifica de forma evidente. Todo lo demás está marcado explícitamente como **PENDIENTE DE APROBACIÓN** (§14). No se inventan entidades, columnas, índices ni políticas que el proyecto no necesite hoy.
+>
+> **v0.45 — roles separados de moderación y apelaciones (`ADR-044` §2.5 y §2.7, **PROPUESTO**):** una migración aditiva (`f3c9a5e1d742`, cuelga de `e2b8c4d6a931`).
+>
+> · `users.moderation_role` (`reviewer`/`child_safety`/`admin`, `CHECK`, nullable). `is_moderator` se conserva y equivale a `reviewer`. El rol se asigna **solo** con `flask set-moderation-role`, nunca por la API.
+>
+> · `moderation_appeals`: `user_id` (FK `CASCADE`), `subject_type`/`subject_id` (genérico, sin FK), `reason`, `status` (`open`/`upheld`/`overturned`), `original_decided_by` (`auto` o el id de quien decidió), `reviewer_id` (FK `SET NULL`), `resolution_note`, fechas. **La base impide** (a) que `reviewer_id` sea quien tomó la decisión original, (b) que sea la propia persona apelante y (c) una resolución sin fecha. Índice único parcial: una sola apelación `open` por persona y contenido.
 >
 > **v0.44 — moderación de contenido, base (`ADR-044`, **PROPUESTO — sin ratificar**, rama `feature/moderation-core`; la fusión espera la decisión del Comité Técnico):** dos migraciones aditivas (`d7a3f9c1b852`, `e2b8c4d6a931`).
 >
