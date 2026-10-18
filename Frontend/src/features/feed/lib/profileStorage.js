@@ -91,9 +91,10 @@ export function moveProfile(fromUsername, toUsername, profile) {
 }
 
 // El campo lo escribe la persona a mano: puede venir sin esquema ("thers.app/x").
-// Se asume https para el href, pero se muestra tal cual lo escribió.
+// Se asume https para el href, pero se muestra tal cual lo escribió. El servidor devuelve `null`
+// cuando no hay sitio web (el perfil público de otra persona lo hace casi siempre).
 export function websiteHref(value) {
-  const trimmed = value.trim();
+  const trimmed = (value ?? "").trim();
   if (!trimmed) return null;
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
