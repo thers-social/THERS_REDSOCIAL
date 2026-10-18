@@ -175,6 +175,39 @@ contraseña `android` son públicas por diseño de Android — no son un secreto
 El SHA-1 de debug es **por máquina**: cada integrante del equipo debe registrar el suyo, y además
 hará falta el de la keystore de release cuando llegue la etapa de publicación.
 
+### 6.1 Implementación en la app (2026-10-18)
+
+«Continuar con Google» ya está en el login y el registro móviles. Usa
+`@react-native-google-signin/google-signin` (16.x, con su *config plugin* en `app.json`), que obtiene
+el ID Token con el Web client ID como `webClientId` y lo manda a `POST /api/auth/google`. **No hubo
+cambios en el backend ni en `API_CONTRACT.md`.** Código: `src/features/auth/lib/googleSignIn.ts`,
+`loginWithGoogle()` en `AuthContext.tsx`, `GoogleSignInButton.tsx`, y `app/complete-profile.tsx` para las
+cuentas nuevas (teléfono, país, fecha de nacimiento y usuario, igual que `CompleteProfile` en la web).
+
+Para que funcione hacen falta **tres cosas fuera del código**:
+
+1. **`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`** en `mobile/.env`, con el mismo valor que `GOOGLE_CLIENT_ID` del
+   backend (identificador público, no un secreto). Sin la variable el botón no se dibuja.
+2. **Un cliente OAuth de tipo Android** en Google Cloud Console, **en el mismo proyecto** que ese Web
+   client ID (no en el de Firebase si son distintos), con el paquete `com.thers.app` y el SHA-1 de la
+   keystore con la que se firma la compilación. Sin él Google responde `DEVELOPER_ERROR` y la app muestra
+   «Google no está configurado para esta versión de la app».
+3. **Recompilar** la app: es un módulo nativo nuevo; con Metro solo no basta.
+
+SHA-1 de la keystore de debug que genera la plantilla de Expo (`android/app/debug.keystore`, la misma en
+todas las máquinas; es pública por diseño): `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`.
+La de release hay que registrarla aparte cuando exista.
+
+Tampoco hace falta `google-services.json` para Google: el de Firebase (push, `ADR-053`) es otra cosa y su
+`oauth_client` puede estar vacío.
+
+**Verificado en un teléfono real (moto z3, 2026-10-18):** con el cliente Android creado, «Continuar con
+Google» abre el selector de Google, el servidor responde `200` a `POST /api/auth/google` y la app entra al
+Inicio con la cuenta de THERS que ya tenía ese correo (vinculada por correo verificado, `ADR-012`). Esto
+confirma la hipótesis de arriba: el `aud` del token es el Web client ID y el backend no necesita cambios.
+**No se probó todavía** el alta de una cuenta nueva con Google ni la pantalla `complete-profile` en el
+teléfono: el único correo de Google del teléfono ya tenía cuenta de THERS.
+
 ## 7. Comandos del día a día (cuando `mobile/` exista)
 
 `mobile/` existe desde 2026-10-01. Desde una terminal nueva (JDK 17 y `ANDROID_HOME` ya definidos) y,

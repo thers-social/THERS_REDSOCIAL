@@ -13,7 +13,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GoogleSignInButton } from '@features/auth/components/GoogleSignInButton';
 import { useAuth } from '@features/auth/context/AuthContext';
+import { AUTH_BUTTON_MIN_HEIGHT, AUTH_BUTTON_RADIUS } from '@features/auth/lib/authButtonStyle';
 import { isValidEmail } from '@features/auth/lib/validators';
 import { ApiError } from '@shared/lib/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
@@ -154,6 +156,9 @@ export default function Login() {
           )}
         </Pressable>
 
+        {/* Justo debajo de «Entrar». Solo se dibuja si esta compilación tiene el Client ID de Google (ADR-012). */}
+        <GoogleSignInButton onError={setError} disabled={isSubmitting} />
+
         <Pressable
           style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}
           onPress={() => router.push('/forgot-password')}
@@ -169,15 +174,6 @@ export default function Login() {
         >
           <Text style={styles.linkText}>¿No tienes cuenta? Crear cuenta</Text>
         </Pressable>
-
-        {/*
-          "Continuar con Google" existe en el backend pero sigue sin pantalla
-          móvil: necesita credenciales nativas de OAuth (Google Cloud Console) que
-          todavía no existen. No se pone un botón que no hace nada.
-        */}
-        <Text style={styles.note}>
-          «Continuar con Google» se hace por ahora desde la web de THERS.
-        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -233,11 +229,15 @@ const styles = themedStyles(() => ({
   errorText: { color: colors.dangerFg, fontSize: fontSize.bodySm },
   button: {
     backgroundColor: colors.brand,
-    borderRadius: radius.input,
+    // Misma forma que «Continuar con Google» (authButtonStyle.ts), pero con el borde del mismo morado
+    // del botón: sin contorno claro.
+    borderRadius: AUTH_BUTTON_RADIUS,
+    borderWidth: 1,
+    borderColor: colors.brand,
     paddingVertical: space[4],
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 52,
+    minHeight: AUTH_BUTTON_MIN_HEIGHT,
   },
   buttonPressed: { backgroundColor: colors.brandHover },
   buttonDisabled: { opacity: 0.6 },
@@ -249,11 +249,4 @@ const styles = themedStyles(() => ({
   linkRow: { alignItems: 'center', marginTop: space[4], padding: space[3] },
   linkPressed: { opacity: 0.6 },
   linkText: { color: colors.brandText, fontSize: fontSize.bodyMd, fontWeight: '600' },
-  note: {
-    fontSize: fontSize.bodySm,
-    color: colors.fgMuted,
-    textAlign: 'center',
-    marginTop: space[6],
-    lineHeight: 18,
-  },
 }));

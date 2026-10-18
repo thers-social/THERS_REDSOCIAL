@@ -66,7 +66,8 @@
           "cameraPermission": false
         }
       ],
-      "expo-video"
+      "expo-video",
+      "@react-native-google-signin/google-signin"
     ]
   }
 }
