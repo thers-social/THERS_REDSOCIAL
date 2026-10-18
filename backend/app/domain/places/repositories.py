@@ -19,6 +19,9 @@ class PlaceRepository:
         """Id de una categoría activa, o `None`."""
         raise NotImplementedError
 
+    def top_places(self, category_slug, limit, user_id=None):
+        raise NotImplementedError
+
     def list_places(self, category_slug, limit, offset, user_id=None):
         """Lugares públicos, orden estable por nombre e id. Con `user_id`, calcula `is_saved`."""
         raise NotImplementedError

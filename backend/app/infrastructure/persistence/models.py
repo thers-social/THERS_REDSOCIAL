@@ -2689,3 +2689,28 @@ class PendingExternalDeletion(db.Model):
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     done_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+# --- Notificaciones push (ADR-053) ---
+
+
+class PushDevice(db.Model):
+    __tablename__ = "push_devices"
+
+    # Un dispositivo (token de Firebase) registrado por una persona con sesión. El token es único: si
+    # alguien inicia sesión en un teléfono que antes usaba otra cuenta, el token pasa a la nueva (así
+    # la cuenta anterior deja de recibir avisos ahí). CASCADE: al borrar la cuenta se borran (ADR-031).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    token = db.Column(db.String(4096), nullable=False, unique=True)
+    platform = db.Column(db.String(16), nullable=False, server_default=text("'android'"))
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    last_seen_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    __table_args__ = (
+        CheckConstraint("platform IN ('android', 'ios')", name="ck_push_devices_platform"),
+        Index("ix_push_devices_user", "user_id"),
+    )

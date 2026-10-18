@@ -128,6 +128,20 @@ class SQLAlchemyPlaceRepository(PlaceRepository):
         ).mappings()
         return [dict(row) for row in rows]
 
+    def top_places(self, category_slug, limit, user_id=None):
+        """Los mejor valorados (promedio de reseñas visibles, luego cantidad de reseñas); a igualdad,
+        los que ya tienen imagen y, al final, por nombre. Sin ubicación de nadie (ADR-053)."""
+        rows = db.session.execute(
+            text(
+                f"SELECT {_columns(user_id)} {_FROM} "
+                f"WHERE {_PUBLIC} AND (CAST(:category AS text) IS NULL OR c.slug = :category) "
+                "ORDER BY rating_average DESC NULLS LAST, reviews_count DESC, "
+                "(p.image_key IS NULL), p.name, p.id LIMIT :limit"
+            ),
+            {"category": category_slug, "limit": limit, **_uid(user_id)},
+        ).mappings()
+        return [dict(row) for row in rows]
+
     def nearby(self, lat, lng, radius_meters, category_slug, limit, user_id=None):
         # ST_DWithin filtra con el índice GiST; `<->` ordena por cercanía. La distancia
         # exacta se calcula solo para las filas ya filtradas. Nunca se itera en Python.

@@ -304,6 +304,13 @@ def _positive_float_env(name, default):
 # Notas de voz en mensajes (ADR-042). Apagado por defecto: con el interruptor apagado un envío con
 # audio responde 503 `voice_disabled` y el resto de la mensajería no cambia.
 Config.VOICE_MESSAGES_ENABLED = _flag_env("VOICE_MESSAGES_ENABLED")
+# Notificaciones push por Firebase (ADR-053). Apagado por defecto: sin él no se envía nada, pero los
+# dispositivos se siguen registrando. La cuenta de servicio de Firebase (JSON) es un SECRETO del
+# servidor: se da como ruta a un archivo (FCM_SERVICE_ACCOUNT_FILE) o como el JSON entero en una variable
+# (FCM_SERVICE_ACCOUNT_JSON); nunca va al repositorio ni al móvil.
+Config.PUSH_ENABLED = _flag_env("PUSH_ENABLED")
+Config.FCM_SERVICE_ACCOUNT_FILE = (os.environ.get("FCM_SERVICE_ACCOUNT_FILE") or "").strip() or None
+Config.FCM_SERVICE_ACCOUNT_JSON = (os.environ.get("FCM_SERVICE_ACCOUNT_JSON") or "").strip() or None
 # Videos cortos en publicaciones y mensajes (ADR-046). Apagado por defecto: re-codificar video cuesta CPU.
 Config.VIDEO_UPLOADS_ENABLED = _flag_env("VIDEO_UPLOADS_ENABLED")
 # Moderación de contenido (ADR-044). Apagada por defecto: con ella apagada todo se publica como

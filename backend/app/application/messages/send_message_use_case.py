@@ -9,6 +9,8 @@
 
 from app.application.messages.message_media import attach_media
 from app.application.messages.message_presenter import to_public_messages
+from app.application.push import events as push_events
+from app.application.push.preview import message_preview_of
 from app.domain.auth.exceptions import UserNotFoundError
 from app.domain.follows.follow_status import ACCEPTED
 from app.domain.messages.exceptions import (
@@ -89,4 +91,8 @@ def send_message(
             prepared_audio=prepared_audio, prepared_video=prepared_video,
         )
 
-    return to_public_messages([message], message_repository, viewer_id=sender_id)[0], created
+    public = to_public_messages([message], message_repository, viewer_id=sender_id)[0]
+    if created:
+        # Push al destinatario (ADR-053). Un reintento idempotente no vuelve a avisar.
+        push_events.direct_message_sent(sender_id, recipient_id, message_preview_of(public))
+    return public, created

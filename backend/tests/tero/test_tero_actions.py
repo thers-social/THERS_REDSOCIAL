@@ -350,8 +350,77 @@ def test_no_tool_exists_for_the_dangerous_actions():
     for forbidden in ("delete_account", "change_password", "change_email", "disable_2fa", "block_user"):
         assert not any(forbidden in name for name in names)
     propose = {name for name, tool in tero_tools.REGISTRY.items() if tool.spec.risk == "propose"}
-    assert propose == {"propose_follow_user", "propose_unfollow_user", "propose_update_profile"}
+    assert propose == {
+        "propose_follow_user", "propose_unfollow_user", "propose_update_profile", "propose_reserve_place",
+    }
     assert all(name.startswith("propose_") for name in propose)
+
+
+# --- Reservar un lugar (ADR-053) ----------------------------------------------------------
+
+
+def _reserve_args(place_id, days=3, hour=19, party=2):
+    from datetime import datetime, timedelta, timezone
+
+    local = timezone(timedelta(hours=-6))
+    start = (datetime.now(local) + timedelta(days=days)).replace(hour=hour, minute=0, second=0, microsecond=0)
+    return {"place_id": place_id, "starts_at": start.isoformat(), "party_size": party}
+
+
+def test_proposing_a_reservation_creates_a_card_and_no_reservation(app, client, world):
+    from tests.places.helpers import insert_place
+
+    with app.app_context():
+        place_id = insert_place("Café Aurora")
+    token, _ = world["ana"]
+    response, _ = _propose(app, client, token, "propose_reserve_place", _reserve_args(place_id))
+
+    [card] = _cards(response)
+    assert card["kind"] == "reserve_place"
+    assert card["summary"].startswith("Solicitar reserva en Café Aurora el ") and "para 2 personas" in card["summary"]
+    assert _count(app, "SELECT count(*) FROM place_reservations") == 0
+
+
+def test_confirming_the_reservation_card_creates_one_pending_reservation(app, client, world):
+    from tests.places.helpers import insert_place
+
+    with app.app_context():
+        place_id = insert_place("Café Aurora")
+    token, ana_id = world["ana"]
+    response, _ = _propose(app, client, token, "propose_reserve_place", _reserve_args(place_id))
+    action_id = _cards(response)[0]["id"]
+
+    confirmed = _confirm(client, token, action_id)
+
+    assert confirmed.status_code == 200
+    assert _count(
+        app, "SELECT status FROM place_reservations WHERE user_id = :u", u=ana_id
+    ) == "pending"
+    # Confirmar dos veces no crea otra.
+    _confirm(client, token, action_id)
+    assert _count(app, "SELECT count(*) FROM place_reservations") == 1
+
+
+def test_a_reservation_proposal_with_a_bad_time_or_unknown_place_is_refused(app, client, world):
+    from datetime import datetime, timedelta, timezone
+
+    from tests.places.helpers import insert_place
+
+    with app.app_context():
+        place_id = insert_place("Café Aurora")
+    token, _ = world["ana"]
+    soon = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+    response, provider = _propose(
+        app, client, token, "propose_reserve_place", {**_reserve_args(place_id), "starts_at": soon}
+    )
+    assert _cards(response) == []
+    assert provider.calls[1]["messages"][-1]["content"][0]["is_error"] is True
+
+    import uuid
+
+    response, _ = _propose(app, client, token, "propose_reserve_place", _reserve_args(str(uuid.uuid4())))
+    assert _cards(response) == []
+    assert _count(app, "SELECT count(*) FROM place_reservations") == 0
 
 
 def test_there_is_a_cap_on_pending_proposals(app, client, world):
@@ -379,10 +448,11 @@ def test_with_actions_off_the_propose_tools_are_not_offered_or_runnable(app, cli
     assert _cards(response) == []
 
 
-def test_with_actions_on_all_eight_tools_are_offered(app, client, world):
+def test_with_actions_on_all_twelve_tools_are_offered(app, client, world):
+    # 8 de lectura (3 nuevas de ADR-053) + 4 propuestas (la de reservar es nueva).
     provider = _install(app, ScriptedProvider(final()))
     _chat(client, world["ana"][0])
-    assert len(provider.calls[0]["tools"]) == 8
+    assert len(provider.calls[0]["tools"]) == 12
 
 
 def test_switching_actions_off_also_blocks_confirming_what_was_already_pending(app, client, world):

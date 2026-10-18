@@ -50,6 +50,12 @@ from app.infrastructure.persistence.repositories.rate_limit_repository import (
 from app.infrastructure.persistence.repositories.restriction_repository import (
     SQLAlchemyRestrictionRepository,
 )
+from app.infrastructure.persistence.repositories.reservation_repository import (
+    SQLAlchemyReservationRepository,
+)
+from app.infrastructure.persistence.repositories.suggestion_repository import (
+    SQLAlchemySuggestionRepository,
+)
 from app.infrastructure.persistence.repositories.tero_usage_repository import (
     SQLAlchemyTeroUsageRepository,
 )
@@ -82,6 +88,8 @@ _tool_dependencies = ToolDependencies(
     place_repository=SQLAlchemyPlaceRepository(),
     user_search_repository=SQLAlchemyUserSearchRepository(),
     action_repository=SQLAlchemyTeroActionRepository(),
+    suggestion_repository=SQLAlchemySuggestionRepository(),
+    reservation_repository=SQLAlchemyReservationRepository(),
 )
 
 

@@ -100,12 +100,13 @@ def _post(client, token, content):
 # --- Contrato de las herramientas ---------------------------------------------------------
 
 
-def test_the_five_read_tools_are_offered_and_none_takes_an_identity(app, client, world):
+def test_the_read_tools_are_offered_and_none_takes_an_identity(app, client, world):
     provider = _install(app, ScriptedProvider(final()))
     _chat(client, world["ana"][0])
     definitions = provider.calls[0]["tools"]
     assert sorted(item["name"] for item in definitions) == [
-        "notifications_summary", "places_search", "post_read", "profile_read", "users_search",
+        "notifications_summary", "people_suggestions", "place_read", "places_recommend",
+        "places_search", "post_read", "profile_read", "users_search",
     ]
     for item in definitions:
         schema = item["input_schema"]
@@ -315,6 +316,57 @@ def test_places_search_returns_public_places_without_coordinates(app, client, wo
     assert "Café Aurora" in names
     assert "Café Oculto" not in names
     assert not {"latitude", "longitude", "distance_meters", "phone"} & set(result["results"][0])
+
+
+# --- people_suggestions / places_recommend / place_read (ADR-053) --------------------------
+
+
+def test_people_suggestions_lists_people_not_followed_and_never_the_caller(app, client, world):
+    ana_token, _ = world["ana"]
+    beto_id = world["beto"][1]
+    client.post(f"/api/users/{beto_id}/follow", headers=_auth(ana_token))
+    provider = _run(app, client, ana_token, "people_suggestions")
+    _, result = _tool_result(provider)
+    usernames = [item["username"] for item in result["results"]]
+    assert usernames == ["carla"]  # ya sigue a beto y no se sugiere a sí misma
+    assert set(result["results"][0]) == {"username", "name", "bio", "is_private"}
+
+
+def test_people_suggestions_skips_blocked_accounts(app, client, world):
+    ana_token, _ = world["ana"]
+    carla_id = world["carla"][1]
+    client.post("/api/users/me/blocks", json={"user_id": carla_id}, headers=_auth(ana_token))
+    provider = _run(app, client, ana_token, "people_suggestions")
+    _, result = _tool_result(provider)
+    assert [item["username"] for item in result["results"]] == ["beto"]
+
+
+def test_places_recommend_orders_by_rating_and_hides_non_public_places(app, client, world):
+    with app.app_context():
+        insert_place("Café Sin Reseñas")
+        insert_place("Café Oculto", status="rejected")
+    provider = _run(app, client, world["ana"][0], "places_recommend", {"category": "cafes"})
+    _, result = _tool_result(provider)
+    names = [item["name"] for item in result["results"]]
+    assert "Café Sin Reseñas" in names and "Café Oculto" not in names
+    assert not {"latitude", "longitude", "phone", "distance_meters"} & set(result["results"][0])
+
+
+def test_places_recommend_rejects_an_unknown_category(app, client, world):
+    provider = _run(app, client, world["ana"][0], "places_recommend", {"category": "no-existe"})
+    block, _ = _tool_result(provider)
+    assert block["is_error"] is True
+
+
+def test_place_read_returns_details_and_treats_unknown_ids_as_missing(app, client, world):
+    with app.app_context():
+        place_id = insert_place("Café Aurora")
+    provider = _run(app, client, world["ana"][0], "place_read", {"place_id": place_id})
+    _, result = _tool_result(provider)
+    assert result["found"] is True and result["name"] == "Café Aurora"
+    assert not {"latitude", "longitude", "phone"} & set(result)
+    provider = _run(app, client, world["ana"][0], "place_read", {"place_id": str(uuid.uuid4())})
+    assert _tool_result(provider)[1] == {"found": False}
 
 
 # --- El bucle ------------------------------------------------------------------------------

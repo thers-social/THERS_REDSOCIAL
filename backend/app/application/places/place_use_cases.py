@@ -46,6 +46,13 @@ def list_places(category_raw, limit_raw, offset_raw, repository, user_id=None):
     return _present_all(repository.list_places(category, limit, offset, user_id))
 
 
+def top_places(category_raw, limit_raw, repository, user_id=None):
+    """Los lugares mejor valorados, opcionalmente de una categoría (ADR-053)."""
+    category = _validated_category(category_raw, repository)
+    limit = validators.parse_limit(limit_raw)
+    return _present_all(repository.top_places(category, limit, user_id))
+
+
 def nearby_places(lat_raw, lng_raw, radius_raw, category_raw, limit_raw, repository, user_id=None):
     lat, lng = validators.parse_coordinates(lat_raw, lng_raw)
     radius = validators.parse_radius(radius_raw)

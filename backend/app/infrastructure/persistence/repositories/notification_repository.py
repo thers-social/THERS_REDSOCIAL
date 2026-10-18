@@ -7,6 +7,7 @@
 
 from sqlalchemy import func, or_, select, update
 
+from app.application.push import events as push_events
 from app.domain.notifications.repositories import NotificationRepository
 from app.extensions import db
 from app.infrastructure.persistence.models import Notification
@@ -22,6 +23,8 @@ class SQLAlchemyNotificationRepository(NotificationRepository):
         )
         db.session.add(notification)
         db.session.commit()
+        # Push (ADR-053): un extra que nunca rompe la acción; sin emisor configurado no hace nada.
+        push_events.notification_created(recipient_id, actor_id, notification_type, post_id)
         return notification
 
     def list_for_user(self, user_id, limit, excluded_actor_ids=()):

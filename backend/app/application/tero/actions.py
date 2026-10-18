@@ -13,6 +13,15 @@ from app.application.follows.follow_user_use_case import follow_user
 from app.application.follows.unfollow_user_use_case import unfollow_user
 from app.domain.auth.exceptions import UserNotFoundError
 from app.domain.follows.exceptions import CannotFollowSelfError
+from app.application.reservations import reservation_use_cases
+from app.domain.places.exceptions import PlaceNotFoundError
+from app.domain.reservations.exceptions import (
+    InvalidReservationDataError,
+    PlaceClosedAtThatTimeError,
+    ReservationConflictError,
+    ReservationsClosedError,
+    SlotFullError,
+)
 from app.domain.restrictions.exceptions import AccountBlockedError
 from app.domain.tero import actions
 
@@ -58,6 +67,13 @@ def _execute(row, user_id, deps):
     if kind == actions.KIND_UPDATE_PROFILE:
         update_profile(user_id, params["changes"], deps.user_repository, deps.follow_repository)
         return {"updated": sorted(params["changes"])}
+    if kind == actions.KIND_RESERVE_PLACE:
+        reservation = reservation_use_cases.create(
+            user_id, UUID(params["place_id"]),
+            {"starts_at": params["starts_at"], "party_size": params["party_size"]},
+            deps.reservation_repository,
+        )
+        return {"reservation_status": reservation["status"]}
     # Un `kind` que ya no existe en el código (p. ej. tras un despliegue): no se ejecuta.
     raise actions.ActionExecutionError(_EXECUTION_FAILED)
 
@@ -87,7 +103,11 @@ def confirm(user_id, action_id, deps, now=None):
 
     try:
         result = _execute(row, user_id, deps)
-    except (UserNotFoundError, AccountBlockedError, CannotFollowSelfError, actions.ActionExecutionError):
+    except (
+        UserNotFoundError, AccountBlockedError, CannotFollowSelfError, actions.ActionExecutionError,
+        PlaceNotFoundError, InvalidReservationDataError, PlaceClosedAtThatTimeError,
+        ReservationConflictError, ReservationsClosedError, SlotFullError,
+    ):
         repository.mark_failed(row["id"], now)
         logger.info("Tero action failed kind=%s user=%s id=%s", row["kind"], user_id, row["id"])
         raise actions.ActionExecutionError(_EXECUTION_FAILED) from None

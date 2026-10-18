@@ -147,6 +147,15 @@ def create_app():
     from app.interfaces.routes.plan_routes import plans_bp
     app.register_blueprint(plans_bp, url_prefix="/api")
 
+    # Notificaciones push (ADR-053): registro de dispositivos y emisor por Firebase. El emisor solo se
+    # crea con PUSH_ENABLED y credenciales; sin ellos los casos de uso llaman a un registro vacío.
+    from app.interfaces.routes.push_routes import push_bp
+    app.register_blueprint(push_bp, url_prefix="/api")
+    from app.infrastructure.push.factory import build_push_notifier
+    from app.application.push import events as push_events
+
+    push_events.set_notifier(build_push_notifier(app))
+
     # Tero, asistente con IA (ADR-041, fase 4): chat. Apagado por defecto (TERO_ENABLED).
     from app.interfaces.routes.tero_routes import tero_bp
     app.register_blueprint(tero_bp, url_prefix="/api")

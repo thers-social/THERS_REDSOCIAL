@@ -3,6 +3,8 @@
 
 from app.application.messages.message_media import attach_media
 from app.application.messages.message_presenter import to_public_messages
+from app.application.push import events as push_events
+from app.application.push.preview import message_preview_of
 from app.domain.groups.exceptions import GroupNotFoundError
 from app.domain.messages.exceptions import SharedPlaceNotFoundError, SharedPostNotFoundError
 
@@ -44,7 +46,10 @@ def send_group_message(
         # Quien escribe ya "leyó" hasta aquí: no se cuenta sus propios mensajes como no leídos.
         group_repository.mark_read(group_id, sender_id)
 
-    return to_public_messages([message], message_repository, sender_id)[0], created
+    public = to_public_messages([message], message_repository, sender_id)[0]
+    if created:
+        push_events.group_message_sent(sender_id, group_id, message_preview_of(public))
+    return public, created
 
 
 def list_group_thread(
