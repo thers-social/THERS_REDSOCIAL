@@ -47,6 +47,8 @@ export function getErrorMessage(error, t) {
   }
 
   if (status === 401) {
+    // Una sesión que terminó (refresh vencido o revocado) no es una contraseña incorrecta.
+    if (error.sessionExpired) return t("errors.sessionExpired");
     return t("errors.invalidCredentials");
   }
 

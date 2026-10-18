@@ -1,17 +1,22 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { api } from "@shared/lib/api";
+import { installSessionRefresh, revokeSession } from "@shared/lib/sessionRefresh";
+import { USER_KEY, TOKEN_KEY, clearTokens, getAccessToken, saveTokens } from "@shared/lib/sessionTokens";
 
 const AuthContext = createContext(undefined);
 
-const TOKEN_KEY = "token";
-const USER_KEY = "user";
+// Renovación automática (ADR-017): se instala UNA vez, al cargar el módulo, para que ya esté activa
+// cuando `loadCurrentUser` hace la primera petición. El proveedor registra aquí qué hacer si la
+// sesión termina de verdad (refresh vencido, revocado o reutilizado).
+let onSessionExpired = null;
+installSessionRefresh(api, { onExpired: () => onSessionExpired?.() });
 
 // Punto único de lectura del token para cualquier feature que necesite
 // llamar a un endpoint autenticado fuera de este contexto (ej. features/feed
 // para GET/POST /api/posts) -- evita que otras features dupliquen la clave
 // de localStorage ("token") o el detalle de dónde vive.
 export function getStoredToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  return getAccessToken();
 }
 
 // El backend ya devuelve `username` real (ADR-002, API_CONTRACT.md §4). Este
@@ -49,16 +54,29 @@ export function AuthProvider({ children }) {
       localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
       setUser(currentUser);
       return currentUser;
-    } catch {
-      logout();
-      return null;
+    } catch (error) {
+      // Solo una sesión que el servidor rechaza (401 ya sin renovación posible) o una cuenta que
+      // ya no existe (404) cierra la sesión. Un fallo de red o un 5xx no debe sacar a nadie.
+      const status = error?.response?.status;
+      if (status === 401 || status === 404) {
+        logout();
+        return null;
+      }
+      const saved = localStorage.getItem(USER_KEY);
+      const cached = saved ? JSON.parse(saved) : null;
+      setUser(cached);
+      return cached;
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    onSessionExpired = () => setUser(null);
     loadCurrentUser();
+    return () => {
+      onSessionExpired = null;
+    };
   }, []);
 
   // Guarda la sesión a partir de una respuesta `{token, user}`. Lo comparten
@@ -66,7 +84,7 @@ export function AuthProvider({ children }) {
   // tenerlo en un solo lugar evita que uno de ellos olvide persistir algo.
   const storeSession = (data) => {
     const loggedInUser = withUsername(data.user);
-    localStorage.setItem(TOKEN_KEY, data.token);
+    saveTokens(data.token, data.refresh_token);
     localStorage.setItem(USER_KEY, JSON.stringify(loggedInUser));
     setUser(loggedInUser);
     return loggedInUser;
@@ -136,8 +154,9 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    // Revoca la sesión en el servidor (mejor esfuerzo) y limpia lo local sin esperar la respuesta.
+    revokeSession(api);
+    clearTokens();
     setUser(null);
   };
 
