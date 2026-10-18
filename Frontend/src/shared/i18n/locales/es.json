@@ -256,6 +256,7 @@
   "errors": {
     "network": "No se pudo conectar con el servidor. Intentá de nuevo más tarde.",
     "invalidCredentials": "Email o contraseña incorrectos.",
+    "sessionExpired": "Tu sesión terminó. Inicia sesión de nuevo.",
     "emailInUse": "Ya existe una cuenta con ese email.",
     "checkData": "Revisá los datos ingresados.",
     "unexpected": "Ocurrió un error inesperado. Intentá de nuevo más tarde.",
