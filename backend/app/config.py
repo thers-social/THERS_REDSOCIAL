@@ -321,6 +321,24 @@ Config.MODERATION_MAX_ATTEMPTS = int(_positive_float_env("MODERATION_MAX_ATTEMPT
 Config.MODERATION_BACKOFF_SECONDS = int(_positive_float_env("MODERATION_BACKOFF_SECONDS", 30))
 Config.MODERATION_LEASE_SECONDS = int(_positive_float_env("MODERATION_LEASE_SECONDS", 300))
 
+# Propósito de IA `moderation_text` (ADR-045): clasificar texto. Credencial, modelo y tope PROPIOS,
+# separados de Tero; apagado por defecto. Sin AI_MODERATION_TEXT_API_KEY no llama a nadie.
+Config.AI_MODERATION_TEXT_ENABLED = _flag_env("AI_MODERATION_TEXT_ENABLED")
+Config.AI_MODERATION_TEXT_API_KEY = (os.environ.get("AI_MODERATION_TEXT_API_KEY") or "").strip() or None
+Config.AI_MODERATION_TEXT_MODEL = (os.environ.get("AI_MODERATION_TEXT_MODEL") or "").strip() or "claude-haiku-5-5"
+Config.AI_MODERATION_TEXT_TIMEOUT_SECONDS = _positive_float_env("AI_MODERATION_TEXT_TIMEOUT_SECONDS", 20.0)
+Config.AI_MODERATION_TEXT_MONTHLY_BUDGET_MICRO = int(
+    round(_positive_float_env("AI_MODERATION_TEXT_MONTHLY_BUDGET_USD", 5.0) * 1_000_000)
+)
+Config.AI_MODERATION_TEXT_PRICE_INPUT_MICRO_PER_MTOK = int(
+    round(_positive_float_env("AI_MODERATION_TEXT_PRICE_INPUT_USD_PER_MTOK", 0.10) * 1_000_000)
+)
+Config.AI_MODERATION_TEXT_PRICE_OUTPUT_MICRO_PER_MTOK = int(
+    round(_positive_float_env("AI_MODERATION_TEXT_PRICE_OUTPUT_USD_PER_MTOK", 0.50) * 1_000_000)
+)
+# `fake` = clasificador de texto simulado, SOLO desarrollo y pruebas.
+Config.MODERATION_TEXT_CLASSIFIER = (os.environ.get("MODERATION_TEXT_CLASSIFIER") or "none").strip().lower()
+
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
 # Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
 # es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.

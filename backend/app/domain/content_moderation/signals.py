@@ -58,5 +58,7 @@ class ImageClassifier:
 class TextClassifier:
     """Puerto de clasificación de texto (ADR-045). Recibe el texto como DATO."""
 
-    def classify(self, text):
+    def classify(self, text, child_safety_suspected=False):
+        """`child_safety_suspected=True`: el texto NO debe enviarse a ningún modelo de propósito
+        general (ADR-044 §3); el adaptador devuelve «no clasificado» sin llamar a nadie."""
         raise NotImplementedError

@@ -52,6 +52,8 @@ class FakeTextClassifier(TextClassifier):
         self.scores = scores if scores is not None else {}
         self.calls = 0
 
-    def classify(self, text):
+    def classify(self, text, child_safety_suspected=False):
+        if child_safety_suspected:
+            return Signal.unclassified(self.name, self.model_version)
         self.calls += 1
         return Signal(self.scores, self.name, self.model_version)

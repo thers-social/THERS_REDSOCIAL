@@ -149,7 +149,11 @@ def create_app():
     # Moderación de contenido (ADR-044): clasificador de imágenes. Solo existe el simulado y solo si
     # se pide explícitamente; sin él, el worker deja todo retenido (falla cerrado).
     from app.infrastructure.content_moderation.factory import image_classifier
-    app.extensions["thers_content_moderation"] = {"image_classifier": image_classifier(app)}
+    from app.infrastructure.content_moderation.factory import text_classifier
+    app.extensions["thers_content_moderation"] = {
+        "image_classifier": image_classifier(app),
+        "text_classifier": text_classifier(app),
+    }
 
     # Comandos de línea de comandos (flask set-moderator, flask unsuspend-user).
     from app.interfaces.cli import register_cli

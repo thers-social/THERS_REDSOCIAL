@@ -2261,3 +2261,23 @@ class ModerationAppeal(db.Model):
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+
+class AiUsage(db.Model):
+    __tablename__ = "ai_usage"
+
+    # Gasto mensual de IA POR PROPÓSITO (ADR-045 §2.3). Al lado de `tero_usage`, que no se toca.
+    period = db.Column(db.String(7), primary_key=True)
+    purpose = db.Column(db.String(40), primary_key=True)
+    input_tokens = db.Column(db.BigInteger, nullable=False, server_default="0")
+    output_tokens = db.Column(db.BigInteger, nullable=False, server_default="0")
+    cost_micro_usd = db.Column(db.BigInteger, nullable=False, server_default="0")
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    __table_args__ = (
+        CheckConstraint("period ~ '^[0-9]{4}-[0-9]{2}$'", name="ck_ai_usage_period"),
+        CheckConstraint(
+            "input_tokens >= 0 AND output_tokens >= 0 AND cost_micro_usd >= 0",
+            name="ck_ai_usage_nonnegative",
+        ),
+    )
