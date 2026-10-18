@@ -9,11 +9,14 @@
  */
 
 import type { ChatMessage } from './api';
+import type { VoiceRecording } from './voice';
 
 /** Un mensaje del chat: confirmado por el servidor o todavía local. */
 export type LocalMessage = ChatMessage & {
   /** `sending`: en vuelo. `failed`: no se pudo enviar (se puede reintentar). */
   local?: 'sending' | 'failed';
+  /** Solo en un mensaje local de voz: la grabación, para poder reintentar el envío (ADR-042). */
+  localAudio?: VoiceRecording;
 };
 
 export function isPending(message: LocalMessage): boolean {
@@ -91,6 +94,25 @@ export function makePending(
     edited: false,
     client_id: clientId,
     local: 'sending',
+  };
+}
+
+/**
+ * Mensaje local de una nota de voz (ADR-042). Mientras no hay URL del servidor, la nota se
+ * reproduce desde el archivo local; `localAudio` conserva la grabación para el reintento.
+ */
+export function makePendingVoice(
+  clientId: string,
+  senderId: string,
+  recipientId: string,
+  recording: VoiceRecording,
+  content: string,
+  now: Date = new Date(),
+): LocalMessage {
+  return {
+    ...makePending(clientId, senderId, recipientId, content, now),
+    audio: { url: recording.uri, duration_ms: recording.durationMs },
+    localAudio: recording,
   };
 }
 

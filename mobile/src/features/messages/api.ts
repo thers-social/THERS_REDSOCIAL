@@ -9,7 +9,11 @@
  */
 
 import type { SharedPlace } from '@features/places/types';
+import { File } from 'expo-file-system';
+
 import { request } from '@shared/lib/api';
+
+import type { VoiceRecording } from './voice';
 
 export type ChatMessage = {
   id: string;
@@ -27,6 +31,11 @@ export type ChatMessage = {
   client_id: string | null;
   /** Lugar compartido (ADR-040 fase 4c); `null` o ausente en un mensaje normal. */
   place?: SharedPlace | null;
+  /**
+   * Nota de voz (ADR-042); `null` o ausente en un mensaje normal. `duration_ms` la calcula el
+   * servidor. En un mensaje local aún sin confirmar, `url` es el archivo del teléfono.
+   */
+  audio?: { url: string; duration_ms: number } | null;
 };
 
 export type ThreadPage = {
@@ -43,7 +52,14 @@ export type ConversationSummary = {
     avatar_url: string | null;
     last_seen_at: string | null;
   };
-  last_message: { content: string; has_place?: boolean; sender_id: string; created_at: string };
+  last_message: {
+    content: string;
+    has_place?: boolean;
+    /** Nota de voz (ADR-042): un mensaje solo de audio trae `content: ""`. */
+    has_audio?: boolean;
+    sender_id: string;
+    created_at: string;
+  };
   unread_count: number;
 };
 
@@ -95,6 +111,37 @@ export async function sendMessage(
     method: 'POST',
     authenticated: true,
     body: { content, client_id: clientId },
+  });
+  return message;
+}
+
+/** Subir 1 MiB por datos móviles puede tardar: más que el tiempo por defecto de `request()`. */
+const VOICE_UPLOAD_TIMEOUT_MS = 60000;
+
+/**
+ * Envía una nota de voz (`ADR-042`): multipart con el campo `audio`. El servidor decodifica, normaliza
+ * y calcula la duración; aquí no se manda ninguna. `clientId` hace el envío idempotente igual que en
+ * un mensaje de texto: reintentar con el mismo devuelve el mensaje ya creado.
+ */
+export async function sendVoiceMessage(
+  otherUserId: string,
+  recording: VoiceRecording,
+  clientId: string,
+  content = '',
+): Promise<ChatMessage> {
+  const form = new FormData();
+  form.append('content', content);
+  form.append('client_id', clientId);
+  // OJO: el `fetch` de Expo SDK 57 NO acepta el formato clásico de React Native `{uri, name, type}`
+  // (falla con «Unsupported FormDataPart implementation» y la app lo ve como falta de red). El
+  // archivo se sube como un `File` de expo-file-system, que es un Blob de verdad.
+  form.append('audio', new File(recording.uri) as unknown as Blob, recording.name);
+
+  const { message } = await request<{ message: ChatMessage }>(`/users/${otherUserId}/messages`, {
+    method: 'POST',
+    authenticated: true,
+    body: form,
+    timeoutMs: VOICE_UPLOAD_TIMEOUT_MS,
   });
   return message;
 }

@@ -26,11 +26,13 @@ import {
   fetchThread,
   newClientId,
   sendMessage,
+  sendVoiceMessage,
 } from './api';
 import type { ChatMessage } from './api';
 import {
   latestConfirmedAt,
   makePending,
+  makePendingVoice,
   mergeMessages,
   nextPollDelayMs,
   oldestConfirmedAt,
@@ -38,6 +40,9 @@ import {
   setLocalState,
 } from './chatState';
 import type { LocalMessage } from './chatState';
+import { voiceSendErrorMessage } from './voice';
+import type { VoiceRecording } from './voice';
+import { deleteVoiceFile } from './voiceFiles';
 
 type LoadState = 'loading' | 'ready' | 'error' | 'unavailable';
 
@@ -60,6 +65,8 @@ export type ChatApi = {
   reload: () => Promise<void>;
   loadOlder: () => Promise<void>;
   send: (text: string) => void;
+  /** Envía una nota de voz grabada (ADR-042). */
+  sendVoice: (recording: VoiceRecording) => void;
   retry: (clientId: string) => void;
   discard: (clientId: string) => void;
   edit: (messageId: string, text: string) => Promise<void>;
@@ -233,19 +240,25 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
 
   // --- envío ----------------------------------------------------------------------
   const transmit = useCallback(
-    async (clientId: string, content: string) => {
+    async (clientId: string, content: string, recording?: VoiceRecording) => {
       try {
-        const sent = await sendMessage(otherUserId, content, clientId);
+        const sent = recording
+          ? await sendVoiceMessage(otherUserId, recording, clientId, content)
+          : await sendMessage(otherUserId, content, clientId);
         if (!mounted.current) return;
         apply(mergeMessages(messagesRef.current, [sent]));
         idlePolls.current = 0;
+        // Ya está en el servidor: la copia local de la voz deja de hacer falta.
+        if (recording) deleteVoiceFile(recording.uri);
       } catch (e) {
         if (!mounted.current) return;
         if (e instanceof ApiError && !e.isNetworkError && e.status >= 400 && e.status < 500) {
           // Rechazado por una regla (bloqueo, "no acepta mensajes", cuenta que ya no
           // existe): reintentar no lo arregla, así que se quita y se explica.
           apply(removeLocal(messagesRef.current, clientId));
-          setError(e.message);
+          if (recording) deleteVoiceFile(recording.uri);
+          // Una nota de voz tiene sus propios rechazos (apagada, demasiado grande): se explican.
+          setError((recording && voiceSendErrorMessage(e)) || e.message);
           if (e.status === 404) setState('unavailable');
           return;
         }
@@ -269,19 +282,35 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
     [myId, otherUserId, apply, transmit],
   );
 
+  const sendVoice = useCallback(
+    (recording: VoiceRecording) => {
+      const clientId = newClientId();
+      apply(mergeMessages(messagesRef.current, [])); // normaliza antes de añadir
+      apply([...messagesRef.current, makePendingVoice(clientId, myId, otherUserId, recording, '')]);
+      setError(null);
+      void transmit(clientId, '', recording);
+    },
+    [myId, otherUserId, apply, transmit],
+  );
+
   const retry = useCallback(
     (clientId: string) => {
       const target = messagesRef.current.find((m) => m.local && m.client_id === clientId);
       if (!target) return;
       apply(setLocalState(messagesRef.current, clientId, 'sending'));
-      // Mismo `client_id`: si el envío anterior sí llegó, el servidor lo devuelve.
-      void transmit(clientId, target.content);
+      // Mismo `client_id`: si el envío anterior sí llegó, el servidor lo devuelve. Una nota de voz
+      // se reenvía con la grabación que se conservó.
+      void transmit(clientId, target.content, target.localAudio);
     },
     [apply, transmit],
   );
 
   const discard = useCallback(
-    (clientId: string) => apply(removeLocal(messagesRef.current, clientId)),
+    (clientId: string) => {
+      const target = messagesRef.current.find((m) => m.local && m.client_id === clientId);
+      if (target?.localAudio) deleteVoiceFile(target.localAudio.uri);
+      apply(removeLocal(messagesRef.current, clientId));
+    },
     [apply],
   );
 
@@ -311,6 +340,7 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
     reload,
     loadOlder,
     send,
+    sendVoice,
     retry,
     discard,
     edit,

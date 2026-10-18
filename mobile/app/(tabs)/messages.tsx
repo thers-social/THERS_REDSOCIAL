@@ -5,6 +5,7 @@ import { AppState, FlatList, Pressable, RefreshControl, Text, TextInput, View } 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { fetchConversations } from '@features/messages/api';
 import type { ConversationSummary } from '@features/messages/api';
+import { VOICE_PREVIEW } from '@features/messages/voice';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
@@ -238,7 +239,9 @@ export default function Messages() {
                 numberOfLines={1}
               >
                 {item.last_message.sender_id === user.id ? 'Tú: ' : ''}
-                {item.last_message.content || (item.last_message.has_place ? '📍 Lugar' : '')}
+                {item.last_message.content ||
+                  (item.last_message.has_audio ? VOICE_PREVIEW : '') ||
+                  (item.last_message.has_place ? '📍 Lugar' : '')}
               </Text>
             </View>
             <View style={styles.rowEnd}>

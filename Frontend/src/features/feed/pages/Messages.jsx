@@ -5,8 +5,13 @@ import Avatar from "@shared/components/Avatar";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
 import ImageAttachmentPicker from "@shared/components/ImageAttachmentPicker";
 import ImageGrid from "@shared/components/ImageGrid";
+import VoiceNotePlayer from "@shared/components/VoiceNotePlayer";
+import VoiceRecorderBar, { VoiceRecordButton } from "@shared/components/VoiceRecorderBar";
 import SharedPlaceCard from "@shared/components/SharedPlaceCard";
 import useImageAttachments from "@shared/hooks/useImageAttachments";
+import useVoiceRecorder from "@shared/hooks/useVoiceRecorder";
+import { VOICE_ENABLED } from "@shared/lib/voiceConfig";
+import { extensionFor, sendErrorKind } from "@shared/lib/voice";
 import { ACCEPTED_IMAGE_TYPES } from "@shared/lib/imageAttachments";
 import { api, getErrorMessage } from "@shared/lib/api";
 import { getStoredToken } from "@features/auth";
@@ -61,6 +66,8 @@ export default function Messages() {
   const [sending, setSending] = useState(false);
   const imageInputRef = useRef(null);
   const image = useImageAttachments({ max: MAX_MESSAGE_IMAGES, maxSide: MAX_MESSAGE_IMAGE_SIDE });
+  // Nota de voz (ADR-042): grabar, revisar y enviar. Solo existe con VITE_VOICE_ENABLED.
+  const voice = useVoiceRecorder();
   const [search, setSearch] = useState("");
   // Mensaje pendiente de confirmar para borrar (ADR-014). `null` = diálogo
   // cerrado. Se guarda el id, no un booleano, para saber cuál borrar al confirmar.
@@ -181,6 +188,8 @@ export default function Messages() {
   // debe viajar a otra persona por haber quedado en la barra (ADR-039).
   const selectConversation = (id) => {
     image.clear();
+    // Lo mismo con una nota de voz grabada: no debe viajar a otra persona (ADR-042).
+    voice.clear();
     setActiveId(id);
   };
 
@@ -219,6 +228,36 @@ export default function Messages() {
       onReloadConversations();
     } catch (error) {
       toast.error(getErrorMessage(error, t));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Envía la nota de voz grabada (ADR-042): multipart con el campo `audio`. El texto del
+  // campo, si lo hay, viaja con ella. El servidor decodifica, normaliza y calcula la duración;
+  // aquí no se manda ninguna. Nada se envía solo: esto solo corre al pulsar «Enviar».
+  const handleSendVoice = async () => {
+    const recording = voice.recording;
+    if (!recording || !active || sending) return;
+
+    setSending(true);
+    try {
+      const body = new FormData();
+      body.append("content", draft.trim());
+      body.append(
+        "audio",
+        new File([recording.blob], `nota.${extensionFor(recording.mime)}`, { type: recording.mime })
+      );
+      const res = await api.post(`/users/${activeId}/messages`, body, { headers: authHeaders() });
+      setThread((prev) => [...prev, res.data.message]);
+      setDraft("");
+      voice.clear();
+      setDraftConversation(null);
+      onReloadConversations();
+    } catch (error) {
+      // La grabación queda en pantalla para poder reintentar.
+      const kind = sendErrorKind(error);
+      toast.error(kind ? t(`voice.errors.${kind}`) : getErrorMessage(error, t));
     } finally {
       setSending(false);
     }
@@ -330,6 +369,7 @@ export default function Messages() {
                   <p className="text-muted text-xs truncate">
                     {conversation.last_message.content ||
                       (conversation.last_message.has_image ? "📷 Foto" : "") ||
+                      (conversation.last_message.has_audio ? t("voice.preview_list") : "") ||
                       (conversation.last_message.has_place ? t("places.share.preview") : "")}
                   </p>
                 </div>
@@ -464,12 +504,20 @@ export default function Messages() {
                               alt="Imagen del mensaje"
                               compact
                             />
+                            {/* Nota de voz (ADR-042). */}
+                            {message.audio && (
+                              <VoiceNotePlayer
+                                url={message.audio.url}
+                                durationMs={message.audio.duration_ms}
+                                mine={message.sender_id === currentUser.id}
+                              />
+                            )}
                             {/* Lugar compartido (ADR-040 fase 4c). */}
                             {message.place && (
                               <SharedPlaceCard place={message.place} mine={message.sender_id === currentUser.id} />
                             )}
                             {message.content && (
-                              <span className={message.images?.length || message.place ? "mt-2 block" : ""}>
+                              <span className={message.images?.length || message.place || message.audio ? "mt-2 block" : ""}>
                                 {message.content}
                               </span>
                             )}
@@ -509,6 +557,16 @@ export default function Messages() {
                     onRemove={image.remove}
                   />
                 )}
+                {VOICE_ENABLED && voice.error && (
+                  <p role="alert" className="px-2 text-xs text-ember-600">
+                    {t(`voice.errors.${voice.error}`)}
+                  </p>
+                )}
+                {VOICE_ENABLED && voice.status !== "idle" ? (
+                  <div className="flex items-center gap-2">
+                    <VoiceRecorderBar voice={voice} sending={sending} onSend={handleSendVoice} />
+                  </div>
+                ) : (
                 <div className="flex items-center gap-2">
                 <Avatar name={currentUser.name} photo={currentUser.avatar_url} size="w-8 h-8" />
                 <input
@@ -532,6 +590,9 @@ export default function Messages() {
                 >
                   <IoImageOutline size={20} />
                 </button>
+                {VOICE_ENABLED && !draft.trim() && image.items.length === 0 && (
+                  <VoiceRecordButton voice={voice} disabled={sending || image.processing} />
+                )}
                 <input
                   type="text"
                   value={draft}
@@ -553,6 +614,7 @@ export default function Messages() {
                   <IoSend size={16} />
                 </button>
                 </div>
+                )}
               </form>
             </>
           ) : (

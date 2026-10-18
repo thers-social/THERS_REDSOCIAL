@@ -35,7 +35,24 @@
           "locationWhenInUsePermission": "THERS usa tu ubicación aproximada solo cuando pulsás «Usar mi ubicación», para mostrarte lugares cercanos. No se guarda."
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "THERS usa el micrófono solo cuando pulsás el botón de grabar una nota de voz o de dictarle a Tero. El audio de las notas de voz se envía a la persona que elegís."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "THERS usa el micrófono solo cuando pulsás el botón de dictarle a Tero. Lo que decís se convierte en texto en tu teléfono y vos decidís si se envía.",
+          "speechRecognitionPermission": "THERS usa el reconocimiento de voz del teléfono solo cuando pulsás el botón de dictarle a Tero. El texto aparece en el campo para que lo revisés antes de enviarlo.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ],
+      "expo-asset"
     ]
   }
 }

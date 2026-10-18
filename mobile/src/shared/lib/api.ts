@@ -116,7 +116,7 @@ type RequestOptions = {
  */
 async function fetchWithTimeout(
   path: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
+  init: { method: string; headers: Record<string, string>; body?: string | FormData },
   timeoutMs: number,
   externalSignal?: AbortSignal,
 ): Promise<Response> {
@@ -268,8 +268,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   } = options;
 
   const baseHeaders: Record<string, string> = { Accept: binary ? 'application/pdf, application/json' : 'application/json' };
-  if (body !== undefined) baseHeaders['Content-Type'] = 'application/json';
-  const serializedBody = body === undefined ? undefined : JSON.stringify(body);
+  // `FormData` (notas de voz, ADR-042) viaja tal cual y SIN `Content-Type`: lo fija React Native
+  // con el `boundary` correcto. Con JSON se serializa como siempre.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isForm) baseHeaders['Content-Type'] = 'application/json';
+  const serializedBody =
+    body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body);
 
   const send = (accessToken: string | null) =>
     fetchWithTimeout(

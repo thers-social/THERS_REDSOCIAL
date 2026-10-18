@@ -1,5 +1,6 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,6 +8,10 @@ import { useAuth } from '@features/auth/context/AuthContext';
 import { MAX_MESSAGE_LENGTH } from '@features/messages/api';
 import type { LocalMessage } from '@features/messages/chatState';
 import { useChat } from '@features/messages/useChat';
+import { VoiceBubble } from '@features/messages/VoiceBubble';
+import { VoiceComposer } from '@features/messages/VoiceComposer';
+import { VOICE_ENABLED } from '@features/messages/voiceConfig';
+import { voiceAccessibilityLabel } from '@features/messages/voice';
 import { SharedPlaceCard } from '@features/places/SharedPlaceCard';
 import { blockUser } from '@features/safety/api';
 import { ReportModal } from '@features/safety/ReportModal';
@@ -88,7 +93,10 @@ export default function Chat() {
         ]
       : menuFor.sender_id === user.id
         ? [
-            { label: 'Editar mensaje', onPress: () => setEditing(menuFor) },
+            // Una nota de voz sin texto no tiene nada que editar (ADR-042).
+            ...(menuFor.audio && !menuFor.content
+              ? []
+              : [{ label: 'Editar mensaje', onPress: () => setEditing(menuFor) }]),
             {
               label: 'Eliminar mensaje',
               destructive: true,
@@ -139,6 +147,33 @@ export default function Chat() {
         ),
     },
   ];
+
+  // El compositor de texto de siempre; con notas de voz recibe el botón de micrófono (ADR-042).
+  const textComposer = (mic: ReactNode) => (
+    <View style={[styles.composer, { paddingBottom: insets.bottom + space[2] }]}>
+      <TextInput
+        style={styles.input}
+        value={draft}
+        onChangeText={setDraft}
+        placeholder="Escribe un mensaje"
+        placeholderTextColor={colors.fgDisabled}
+        multiline
+        maxLength={MAX_MESSAGE_LENGTH}
+        accessibilityLabel="Mensaje"
+        editable={canWrite}
+      />
+      {mic}
+      <Pressable
+        onPress={submit}
+        disabled={!draft.trim() || !canWrite}
+        style={[styles.send, (!draft.trim() || !canWrite) && styles.sendDisabled]}
+        accessibilityRole="button"
+        accessibilityLabel="Enviar mensaje"
+      >
+        <Text style={styles.sendText}>Enviar</Text>
+      </Pressable>
+    </View>
+  );
 
   // La lista se muestra invertida (más reciente abajo, sin saltos al cargar historial).
   const data = [...chat.messages].reverse();
@@ -232,28 +267,21 @@ export default function Chat() {
             </View>
           ) : null}
 
-          <View style={[styles.composer, { paddingBottom: insets.bottom + space[2] }]}>
-            <TextInput
-              style={styles.input}
-              value={draft}
-              onChangeText={setDraft}
-              placeholder="Escribe un mensaje"
-              placeholderTextColor={colors.fgDisabled}
-              multiline
-              maxLength={MAX_MESSAGE_LENGTH}
-              accessibilityLabel="Mensaje"
-              editable={canWrite}
-            />
-            <Pressable
-              onPress={submit}
-              disabled={!draft.trim() || !canWrite}
-              style={[styles.send, (!draft.trim() || !canWrite) && styles.sendDisabled]}
-              accessibilityRole="button"
-              accessibilityLabel="Enviar mensaje"
+          {VOICE_ENABLED ? (
+            <VoiceComposer
+              containerStyle={[styles.composer, { paddingBottom: insets.bottom + space[2] }]}
+              enabled={canWrite}
+              showMic={!draft.trim()}
+              onSend={(recording) => {
+                chat.sendVoice(recording);
+                requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+              }}
             >
-              <Text style={styles.sendText}>Enviar</Text>
-            </Pressable>
-          </View>
+              {(mic) => textComposer(mic)}
+            </VoiceComposer>
+          ) : (
+            textComposer(null)
+          )}
         </>
       )}
 
@@ -333,11 +361,23 @@ function Bubble({
           sending && styles.bubbleSending,
         ]}
         accessibilityRole="button"
-        accessibilityLabel={`${mine ? 'Tú' : avatarName}: ${message.content}`}
+        accessibilityLabel={
+          message.audio && !message.content
+            ? voiceAccessibilityLabel({ mine, name: avatarName, durationMs: message.audio.duration_ms })
+            : `${mine ? 'Tú' : avatarName}: ${message.content}`
+        }
         accessibilityHint={failed ? 'No se envió. Toca para reintentar.' : 'Mantén pulsado para ver opciones'}
       >
+        {message.audio ? (
+          <VoiceBubble
+            url={message.audio.url}
+            durationMs={message.audio.duration_ms}
+            mine={mine}
+            name={avatarName}
+          />
+        ) : null}
         {message.place ? <SharedPlaceCard place={message.place} mine={mine} /> : null}
-        {message.content || !message.place ? (
+        {message.content || (!message.place && !message.audio) ? (
           <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{message.content}</Text>
         ) : null}
         <Text style={[styles.meta, mine && styles.metaMine]}>

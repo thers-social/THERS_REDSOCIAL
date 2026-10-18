@@ -5,7 +5,7 @@
 
 
 from app.application.auth.user_presenter import to_author_summary
-from app.application.media.attachments import to_public_images
+from app.application.media.attachments import to_public_audio, to_public_images
 from app.application.places.place_card import to_place_card
 
 
@@ -30,6 +30,8 @@ def to_public_message(message, place_cards=None):
         "content": message.content,
         # Imagen adjunta (ADR-039): `[]` si no tiene.
         "images": to_public_images(message.images),
+        # Nota de voz (ADR-042): `null` si no tiene.
+        "audio": to_public_audio(message.audio),
         # Se expone como booleano, nunca como el timestamp `read_at` crudo
         # -- mismo criterio que `notifications.read` (ADR-008).
         "read": message.read_at is not None,
@@ -71,6 +73,8 @@ def to_public_conversation(conversation):
             # Un mensaje de solo imagen tiene `content` vacío: la lista de
             # conversaciones necesita saberlo para mostrar "Foto" (ADR-039).
             "has_image": bool(last_message.images),
+            # Lo mismo para la nota de voz: la lista muestra "Nota de voz" (ADR-042).
+            "has_audio": last_message.audio is not None,
             # Un mensaje que comparte un lugar puede no llevar texto (ADR-040 fase 4c).
             "has_place": last_message.place_id is not None,
             "sender_id": str(last_message.sender_id),

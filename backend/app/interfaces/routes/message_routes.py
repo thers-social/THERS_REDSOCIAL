@@ -19,8 +19,19 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.application.rate_limiting import rate_limit_guard
 from app.domain.media.attachments import MAX_MESSAGE_IMAGES
+from app.domain.media.audio import (
+    MAX_VOICE_SECONDS,
+    MAX_VOICE_UPLOAD_BYTES,
+    AudioTooLargeError,
+    AudioTooLongError,
+    InvalidAudioError,
+)
 from app.domain.rate_limiting import policy
 from app.domain.rate_limiting.exceptions import RateLimitExceededError
+from app.infrastructure.media.audio_processor import process_voice
+from app.infrastructure.persistence.repositories.audio_attachment_repository import (
+    SQLAlchemyAudioAttachmentRepository,
+)
 from app.infrastructure.persistence.repositories.media_attachment_repository import (
     SQLAlchemyMediaAttachmentRepository,
 )
@@ -130,6 +141,8 @@ _follow_repository = SQLAlchemyFollowRepository()
 _restriction_repository = SQLAlchemyRestrictionRepository()
 # ADR-039: imagen adjunta y su límite de subidas.
 _media_repository = SQLAlchemyMediaAttachmentRepository()
+# ADR-042: nota de voz.
+_audio_repository = SQLAlchemyAudioAttachmentRepository()
 _rate_limit_repository = SQLAlchemyRateLimitRepository()
 
 
@@ -143,9 +156,23 @@ def create(user_id):
 
     # JSON (como siempre) o multipart con la imagen en el campo `images` (ADR-039).
     data, files = read_request_data()
-    if not data and not files:
+    # Nota de voz (ADR-042): campo `audio` de la misma petición multipart (un solo archivo).
+    audio_upload = request.files.get("audio") if request.mimetype == "multipart/form-data" else None
+    if audio_upload is not None and not audio_upload.filename:
+        audio_upload = None
+
+    if not data and not files and audio_upload is None:
         return jsonify({"msg": "No se enviaron datos"}), 400
     data = data or {}
+
+    if audio_upload is not None:
+        # Apagado por defecto: con el interruptor apagado ni siquiera se mira el archivo.
+        if not current_app.config.get("VOICE_MESSAGES_ENABLED"):
+            return jsonify(
+                {"msg": "Las notas de voz no están disponibles ahora", "code": "voice_disabled"}
+            ), 503
+        if files:
+            return jsonify({"msg": "No puedes enviar imágenes y una nota de voz en el mismo mensaje"}), 400
 
     if len(files) > MAX_MESSAGE_IMAGES:
         return too_many_images_response(MAX_MESSAGE_IMAGES)
@@ -165,7 +192,9 @@ def create(user_id):
         if place_id is None:
             return jsonify({"msg": "place_id debe ser un identificador válido"}), 400
     content_ok = (
-        is_valid_content_with_images(content) if (files or place_id) else is_valid_content(content)
+        is_valid_content_with_images(content)
+        if (files or place_id or audio_upload is not None)
+        else is_valid_content(content)
     )
     if not content_ok:
         return jsonify(
@@ -197,6 +226,29 @@ def create(user_id):
         if error_response:
             return error_response
 
+    prepared_voice = None
+    if audio_upload is not None:
+        # Decodificar y re-codificar audio cuesta CPU: se cuenta cada envío con audio.
+        try:
+            rate_limit_guard.enforce(
+                policy.AUDIO_UPLOAD, f"user:{sender_id}", _rate_limit_repository
+            )
+        except RateLimitExceededError as error:
+            return rate_limited_response(error)
+
+        try:
+            # +1 para detectar el exceso sin leer un archivo gigante entero.
+            raw_audio = audio_upload.read(MAX_VOICE_UPLOAD_BYTES + 1)
+            prepared_voice = process_voice(raw_audio)
+        except AudioTooLargeError:
+            return jsonify({"msg": "La nota de voz puede pesar como máximo 3 MB"}), 413
+        except AudioTooLongError:
+            return jsonify(
+                {"msg": f"La nota de voz puede durar como máximo {MAX_VOICE_SECONDS // 60} minutos"}
+            ), 400
+        except InvalidAudioError:
+            return jsonify({"msg": "El archivo debe ser un audio válido (WebM, Ogg, MP4/M4A o WAV)"}), 400
+
     try:
         message, created = send_message(
             sender_id, str(user_id), content, _user_repository,
@@ -206,6 +258,8 @@ def create(user_id):
             media_repository=_media_repository,
             media_storage=current_app.extensions["media_storage"],
             place_id=place_id,
+            prepared_audio=prepared_voice,
+            audio_repository=_audio_repository,
         )
     except SharedPlaceNotFoundError:
         return jsonify({"msg": "Lugar no encontrado"}), 404
@@ -301,6 +355,7 @@ def delete(message_id):
         result = delete_message(
             str(message_id), sender_id, _message_repository,
             _media_repository, current_app.extensions["media_storage"],
+            audio_repository=_audio_repository,
         )
     except MessageNotFoundError:
         # Mismo mensaje/código tanto si el id no existe como si existe pero

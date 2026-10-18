@@ -32,6 +32,23 @@ def store_attachments(prepared, kind, storage):
     return stored
 
 
+def store_voice(prepared, storage):
+    """Guarda una nota de voz ya procesada (ADR-042) con un nombre aleatorio impredecible y
+    devuelve `{"key", "duration_ms", "size_bytes"}`. `prepared`: `(bytes, content_type, duration_ms)`."""
+    data, content_type, duration_ms = prepared
+    key = f"voice/{uuid.uuid4().hex}.m4a"
+    storage.save(key, data, content_type)
+    return {"key": key, "duration_ms": duration_ms, "size_bytes": len(data)}
+
+
+def to_public_audio(audio):
+    """Forma pública de la nota de voz de un mensaje, o `None`. Solo la URL y la duración que
+    calculó el servidor: nunca la clave interna ni quién la subió."""
+    if audio is None:
+        return None
+    return {"url": media_url(audio.storage_key), "duration_ms": audio.duration_ms}
+
+
 def discard_files(keys, storage):
     """Borra archivos del almacenamiento sin fallar: es limpieza, y un archivo
     huérfano (nombre aleatorio, sin datos personales) es preferible a perder la

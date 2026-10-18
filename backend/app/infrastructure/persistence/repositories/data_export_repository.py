@@ -49,6 +49,7 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
                 "hide_offensive_comments": user.hide_offensive_comments,
                 "show_activity_status": user.show_activity_status,
                 "hide_sensitive_content": user.hide_sensitive_content,
+                "weekly_summary_email": user.weekly_summary_email,
             },
             "security": {
                 "login_alerts_enabled": user.login_alerts_enabled,
@@ -143,6 +144,10 @@ class SQLAlchemyDataExportRepository(DataExportRepository):
                     "edited": m.edited_at is not None,
                     # ADR-040 fase 4c: lugar compartido (id del catálogo), si lo hubo.
                     "shared_place_id": str(m.place_id) if m.place_id else None,
+                    # ADR-042: duración (s) de la nota de voz, si la hubo. El archivo no se incluye.
+                    "voice_note_seconds": (
+                        round(m.audio.duration_ms / 1000) if m.audio is not None else None
+                    ),
                 }
             )
 

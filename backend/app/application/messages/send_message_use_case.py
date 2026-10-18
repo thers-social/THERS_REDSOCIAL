@@ -7,7 +7,7 @@
 # Desde ADR-024-content-filters-and-privacy-preferences.md respeta además la
 # preferencia `who_can_message` del destinatario.
 
-from app.application.media.attachments import discard_files, store_attachments
+from app.application.media.attachments import discard_files, store_attachments, store_voice
 from app.application.messages.message_presenter import to_public_messages
 from app.domain.auth.exceptions import UserNotFoundError
 from app.domain.follows.follow_status import ACCEPTED
@@ -24,7 +24,7 @@ from app.domain.restrictions.kinds import BLOCK
 def send_message(
     sender_id, recipient_id, content, user_repository, message_repository, follow_repository,
     restriction_repository, client_id=None, prepared_images=None, media_repository=None,
-    media_storage=None, place_id=None,
+    media_storage=None, place_id=None, prepared_audio=None, audio_repository=None,
 ):
     """Devuelve `(mensaje_público, created)`. Con `client_id`, reenviar el mismo
     mensaje (por ejemplo tras perder la conexión justo al recibir la respuesta)
@@ -84,6 +84,19 @@ def send_message(
             # Sin la imagen el mensaje no es lo que la persona quiso mandar:
             # se retira entero para que pueda reintentar.
             discard_files([item["key"] for item in stored], media_storage)
+            message_repository.delete(message.id, sender_id)
+            raise
+
+    # Nota de voz (ADR-042): mismo criterio que la imagen. Solo si el mensaje es NUEVO (un
+    # reintento idempotente no la duplica ni la cambia) y después de las comprobaciones de arriba.
+    if created and prepared_audio:
+        stored_voice = None
+        try:
+            stored_voice = store_voice(prepared_audio, media_storage)
+            audio_repository.add_for_message(message.id, sender_id, stored_voice)
+        except Exception:
+            if stored_voice is not None:
+                discard_files([stored_voice["key"]], media_storage)
             message_repository.delete(message.id, sender_id)
             raise
 

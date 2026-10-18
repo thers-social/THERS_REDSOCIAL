@@ -11,7 +11,12 @@ from app.domain.account_deletion.repositories import (
     AccountDeletionCodeRepository,
 )
 from app.extensions import db
-from app.infrastructure.persistence.models import AccountDeletionCode, MediaAttachment, User
+from app.infrastructure.persistence.models import (
+    AccountDeletionCode,
+    AudioAttachment,
+    MediaAttachment,
+    User,
+)
 
 # Mismo razonamiento que password_reset_repository: dos "pedir código"
 # simultáneos pueden chocar con el índice único parcial; se reintenta.
@@ -98,6 +103,14 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
         media_keys += list(
             db.session.execute(
                 select(MediaAttachment.storage_key).where(MediaAttachment.owner_id == user_id)
+            ).scalars()
+        )
+
+        # Notas de voz de sus mensajes (ADR-042): igual que las imágenes, la fila cae en cascada
+        # pero el archivo no.
+        media_keys += list(
+            db.session.execute(
+                select(AudioAttachment.storage_key).where(AudioAttachment.owner_id == user_id)
             ).scalars()
         )
 

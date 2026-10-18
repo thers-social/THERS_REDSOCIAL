@@ -8,11 +8,15 @@ from app.domain.messages.exceptions import MessageNotFoundError
 
 
 def delete_message(
-    message_id, sender_id, message_repository, media_repository=None, media_storage=None
+    message_id, sender_id, message_repository, media_repository=None, media_storage=None,
+    audio_repository=None,
 ):
     # Claves leídas antes de borrar (el borrado en cascada elimina las filas),
     # filtradas por dueño: ver delete_post_use_case.py (ADR-039).
     keys = media_repository.keys_for_message(message_id, sender_id) if media_repository else []
+    # La nota de voz (ADR-042) también tiene archivo: se recoge igual, antes del borrado.
+    if audio_repository:
+        keys += audio_repository.keys_for_message(message_id, sender_id)
 
     deleted = message_repository.delete(message_id, sender_id)
     if deleted:
