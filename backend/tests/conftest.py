@@ -58,6 +58,10 @@ os.environ["TERO_MONTHLY_BUDGET_USD"] = ""
 os.environ["TERO_PRICE_INPUT_USD_PER_MTOK"] = ""
 os.environ["TERO_PRICE_OUTPUT_USD_PER_MTOK"] = ""
 
+# Historias (ADR-042): el flag NACE apagado y no depende del `.env` de quien corre las pruebas.
+# Las de `test_stories.py` lo encienden sobre su `app`; el resto del paquete lo ve apagado.
+os.environ["STORIES_ENABLED"] = ""
+
 # Imágenes de perfil (ADR-015): siempre disco local en un directorio
 # temporal, nunca el backend/uploads real ni un bucket S3 del entorno.
 import tempfile

@@ -5,6 +5,9 @@ import io
 import os
 from datetime import datetime, timedelta, timezone
 
+import uuid
+
+import pytest
 from PIL import Image
 from sqlalchemy import text
 
@@ -12,6 +15,12 @@ from app.extensions import db
 from tests.test_messages import _auth_headers, _register_and_login
 
 MEDIA_PREFIX = "http://testserver/api/media/"
+
+
+@pytest.fixture(autouse=True)
+def _stories_on(app):
+    """El flag nace apagado (conftest.py); estas pruebas lo encienden. `TestFeatureFlag` lo apaga."""
+    app.config["STORIES_ENABLED"] = True
 
 
 def _png(width=40, height=30):
@@ -427,3 +436,66 @@ class TestDataExport:
         theirs = _export(token_b)
         assert json.loads(theirs.read("stories.json")) == []
         assert [v["story_id"] for v in json.loads(theirs.read("story_views.json"))] == [story_id]
+
+
+class TestFeatureFlag:
+    """STORIES_ENABLED (apagado por defecto): apagado, el módulo no existe para nadie."""
+
+    @staticmethod
+    def _routes():
+        sid = str(uuid.uuid4())
+        return [
+            ("post", "/api/stories"),
+            ("get", "/api/stories"),
+            ("get", f"/api/users/{sid}/stories"),
+            ("post", f"/api/stories/{sid}/view"),
+            ("get", f"/api/stories/{sid}/views"),
+            ("delete", f"/api/stories/{sid}"),
+        ]
+
+    def test_default_is_off(self):
+        from app.config import Config
+
+        assert Config.STORIES_ENABLED is False
+
+    def test_every_route_answers_404_when_off_with_or_without_session(self, app, client):
+        token_a, _, _, _ = _users(client)
+        app.config["STORIES_ENABLED"] = False
+        for method, url in self._routes():
+            anonymous = getattr(client, method)(url)
+            logged_in = getattr(client, method)(url, headers=_auth_headers(token_a))
+            for response in (anonymous, logged_in):
+                assert response.status_code == 404, (method, url)
+                assert response.get_json() == {"msg": "Recurso no encontrado"}, (method, url)
+
+    def test_nothing_is_stored_or_created_when_off(self, app, client):
+        token_a, _, _, _ = _users(client)
+        app.config["STORIES_ENABLED"] = False
+        before = _stored_files()
+
+        response = _publish(client, token_a, "no debe existir")
+
+        assert response.status_code == 404
+        assert _stored_files() == before
+        with app.app_context():
+            assert db.session.execute(text("SELECT count(*) FROM stories")).scalar() == 0
+
+    def test_existing_stories_are_not_exposed_when_off_and_come_back_when_on(self, app, client):
+        token_a, id_a, token_b, _ = _users(client)
+        _follow(client, token_b, id_a)
+        story = _publish(client, token_a, "visible solo con el flag").get_json()["story"]
+        assert [a["stories_count"] for a in _strip(client, token_b)] == [1]
+
+        app.config["STORIES_ENABLED"] = False
+        strip = client.get("/api/stories", headers=_auth_headers(token_b))
+        assert strip.status_code == 404
+        assert "visible solo con el flag" not in strip.get_data(as_text=True)
+        assert story["image"]["url"] not in strip.get_data(as_text=True)
+
+        app.config["STORIES_ENABLED"] = True
+        assert [a["stories_count"] for a in _strip(client, token_b)] == [1]
+
+    def test_the_flag_does_not_touch_other_modules(self, app, client):
+        token_a, _, _, _ = _users(client)
+        app.config["STORIES_ENABLED"] = False
+        assert client.get("/api/users/me", headers=_auth_headers(token_a)).status_code == 200

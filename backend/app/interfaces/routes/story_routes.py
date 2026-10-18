@@ -33,6 +33,16 @@ _rate_limit_repository = SQLAlchemyRateLimitRepository()
 _MULTIPART_LIMIT_BYTES = 7 * 1024 * 1024
 
 
+@stories_bp.before_request
+def _module_disabled():
+    # Interruptor STORIES_ENABLED (apagado por defecto). Corre ANTES de la autenticación y de
+    # cualquier lectura, así que apagado no se publica, no se lista y no se expone nada, y quien
+    # no tiene sesión recibe lo mismo que una URL inexistente (idéntico a `error_handlers.py`).
+    if not current_app.config.get("STORIES_ENABLED", False):
+        return jsonify({"msg": "Recurso no encontrado"}), 404
+    return None
+
+
 def _not_found():
     return jsonify({"msg": "Historia no encontrada"}), 404
 
