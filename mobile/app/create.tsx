@@ -21,9 +21,9 @@ export default function Create() {
     <Screen title="Crear" back>
       {user.profile_completed ? (
         <Composer
-          onPublish={async (content, sensitive) => {
+          onPublish={async (content, sensitive, media) => {
             try {
-              await posts.create(content, sensitive);
+              await posts.create(content, sensitive, media);
             } catch (e) {
               throw new Error(messageOf(e));
             }

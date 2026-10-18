@@ -73,7 +73,11 @@ def _assert_visible(target, reporter_id, follow_repository, restriction_reposito
     if target.target_type == kinds.TARGET_MESSAGE:
         # Un mensaje lo reporta solo quien lo recibió. El remitente ya sabe lo
         # que escribió, y un tercero no tiene por qué ver una conversación ajena.
-        if str(target.recipient_id) != str(reporter_id):
+        if target.group_member_ids is not None:
+            # En un grupo (ADR-048) lo puede reportar cualquier miembro menos su autor.
+            if str(reporter_id) not in target.group_member_ids or str(reporter_id) == str(target.owner_id):
+                raise ReportTargetNotFoundError()
+        elif str(target.recipient_id) != str(reporter_id):
             raise ReportTargetNotFoundError()
 
     # Un bloqueo en cualquier sentido oculta a esa cuenta (ADR-029): su

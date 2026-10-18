@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
-import { IoSearchOutline, IoArrowBack, IoImageOutline, IoSend, IoChatbubblesOutline, IoTrashOutline, IoPencilOutline } from "react-icons/io5";
+import { IoSearchOutline, IoArrowBack, IoImageOutline, IoVideocamOutline, IoSend, IoChatbubblesOutline, IoTrashOutline, IoPencilOutline, IoPeopleOutline, IoInformationCircleOutline } from "react-icons/io5";
 import Avatar from "@shared/components/Avatar";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
 import ImageAttachmentPicker from "@shared/components/ImageAttachmentPicker";
 import ImageGrid from "@shared/components/ImageGrid";
+import VideoAttachmentPicker from "@shared/components/VideoAttachmentPicker";
+import VoiceNotePlayer from "@shared/components/VoiceNotePlayer";
+import VoiceRecorderBar, { VoiceRecordButton } from "@shared/components/VoiceRecorderBar";
 import SharedPlaceCard from "@shared/components/SharedPlaceCard";
+import SharedPostCard from "@shared/components/SharedPostCard";
 import useImageAttachments from "@shared/hooks/useImageAttachments";
+import VideoPlayer from "@shared/components/VideoPlayer";
+import useVideoAttachment from "@shared/hooks/useVideoAttachment";
+import { ACCEPTED_VIDEO_TYPES, VIDEO_ENABLED, videoSendErrorKind } from "@shared/lib/videoAttachments";
+import useVoiceRecorder from "@shared/hooks/useVoiceRecorder";
+import { VOICE_ENABLED } from "@shared/lib/voiceConfig";
+import { extensionFor, sendErrorKind } from "@shared/lib/voice";
 import { ACCEPTED_IMAGE_TYPES } from "@shared/lib/imageAttachments";
 import { api, getErrorMessage } from "@shared/lib/api";
 import { getStoredToken } from "@features/auth";
 import { useToast } from "@shared/components/Toast";
 import { useLanguage } from "@shared/i18n";
 import { formatRelativeTime } from "../lib/formatRelativeTime";
+import CreateGroupDialog from "../components/CreateGroupDialog";
+import GroupInfoDialog from "../components/GroupInfoDialog";
 
 // Mensajes directos reales (POST/GET/PATCH/DELETE .../messages,
 // GET /api/conversations -- ADR-013-messages-minimal-model.md,
@@ -48,19 +60,40 @@ const TYPING_PING_MIN_INTERVAL_MS = 2000;
 const MAX_MESSAGE_IMAGES = 1;
 const MAX_MESSAGE_IMAGE_SIDE = 1280;
 
+// Qué lleva el último mensaje, para la vista previa de la lista (directos y grupos).
+function lastMessagePreview(last, t) {
+  return (
+    last.content ||
+    (last.has_image ? "📷 Foto" : "") ||
+    (last.has_audio ? t("voice.preview_list") : "") ||
+    (last.has_video ? "🎬 Video" : "") ||
+    (last.has_place ? t("places.share.preview") : "") ||
+    (last.has_post ? t("postActions.card.preview") : "")
+  );
+}
+
 export default function Messages() {
-  const { currentUser, conversations, onReloadConversations } = useOutletContext();
+  const { currentUser, conversations, groups = [], onReloadConversations } = useOutletContext();
   const toast = useToast();
   const { t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [activeId, setActiveId] = useState(null);
+  // Chat grupal abierto (ADR-048). Excluyente con `activeId`: o se mira un directo o un grupo.
+  const [activeGroupId, setActiveGroupId] = useState(null);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [thread, setThread] = useState([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const imageInputRef = useRef(null);
+  const videoInputRef = useRef(null);
+  // Video corto (ADR-046): uno por mensaje, excluyente con imágenes y nota de voz.
+  const video = useVideoAttachment();
   const image = useImageAttachments({ max: MAX_MESSAGE_IMAGES, maxSide: MAX_MESSAGE_IMAGE_SIDE });
+  // Nota de voz (ADR-042): grabar, revisar y enviar. Solo existe con VITE_VOICE_ENABLED.
+  const voice = useVoiceRecorder();
   const [search, setSearch] = useState("");
   // Mensaje pendiente de confirmar para borrar (ADR-014). `null` = diálogo
   // cerrado. Se guarda el id, no un booleano, para saber cuál borrar al confirmar.
@@ -93,6 +126,7 @@ export default function Messages() {
     if (!to) return;
 
     setActiveId(to);
+    setActiveGroupId(null);
     const alreadyReal = conversations.some((c) => c.user.id === to);
     if (!alreadyReal) {
       setDraftConversation({
@@ -117,14 +151,42 @@ export default function Messages() {
       : conversations;
   const filtered = list.filter((c) => c.user.name.toLowerCase().includes(search.toLowerCase()));
 
+  const activeGroup = groups.find((g) => g.id === activeGroupId) || null;
+  const chatOpen = active || activeGroup;
+  const messagesPath = activeGroupId ? `/groups/${activeGroupId}/messages` : `/users/${activeId}/messages`;
+  // Directos y grupos en una sola lista, por actividad reciente.
+  const rows = [
+    ...filtered.map((c) => ({
+      kind: "dm",
+      key: c.user.id,
+      name: c.user.name,
+      photo: c.user.avatar_url,
+      preview: lastMessagePreview(c.last_message, t),
+      at: c.last_message.created_at,
+      unread: c.unread_count,
+    })),
+    ...groups
+      .filter((g) => g.name.toLowerCase().includes(search.toLowerCase()))
+      .map((g) => ({
+        kind: "group",
+        key: g.id,
+        name: g.name,
+        preview: g.last_message
+          ? `${g.last_message.sender_id === currentUser.id ? t("groups.you") : g.last_message.sender_name}: ${lastMessagePreview(g.last_message, t)}`
+          : t("groups.empty"),
+        at: g.last_message ? g.last_message.created_at : g.created_at,
+        unread: g.unread_count,
+      })),
+  ].sort((a, b) => new Date(b.at) - new Date(a.at));
+
   useEffect(() => {
-    if (!activeId) return undefined;
+    if (!activeId && !activeGroupId) return undefined;
     let cancelled = false;
     let firstLoad = true;
 
     async function loadThread() {
       try {
-        const res = await api.get(`/users/${activeId}/messages`, { headers: authHeaders() });
+        const res = await api.get(messagesPath, { headers: authHeaders() });
         if (cancelled) return;
         setThread(res.data.messages);
         if (firstLoad) {
@@ -142,6 +204,8 @@ export default function Messages() {
     }
 
     async function pollTypingStatus() {
+      // "Escribiendo" solo existe en los directos.
+      if (activeGroupId) return;
       try {
         const res = await api.get(`/users/${activeId}/typing`, { headers: authHeaders() });
         if (!cancelled) setOtherIsTyping(res.data.typing);
@@ -168,7 +232,7 @@ export default function Messages() {
       clearInterval(typingInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId]);
+  }, [activeId, activeGroupId]);
 
   // Hace scroll al mensaje más reciente cada vez que el hilo cambia (al
   // abrirlo, al recibir uno nuevo por polling, o al mandar uno propio) --
@@ -181,7 +245,20 @@ export default function Messages() {
   // debe viajar a otra persona por haber quedado en la barra (ADR-039).
   const selectConversation = (id) => {
     image.clear();
+    // Lo mismo con una nota de voz grabada: no debe viajar a otra persona (ADR-042).
+    voice.clear();
+    setActiveGroupId(null);
+    setShowGroupInfo(false);
     setActiveId(id);
+  };
+
+  const selectGroup = (id) => {
+    image.clear();
+    video.clear();
+    voice.clear();
+    setActiveId(null);
+    setShowGroupInfo(false);
+    setActiveGroupId(id);
   };
 
   const handleDraftChange = (e) => {
@@ -200,25 +277,64 @@ export default function Messages() {
   const handleSend = async (e) => {
     e.preventDefault();
     const content = draft.trim();
-    // Con imagen el texto es opcional (ADR-039).
-    if ((!content && image.files.length === 0) || !active || sending || image.processing) return;
+    // Con imagen o video el texto es opcional (ADR-039, ADR-046).
+    if ((!content && image.files.length === 0 && !video.file) || !chatOpen || sending || image.processing || video.processing) return;
 
     setSending(true);
     try {
       let body = { content };
-      if (image.files.length > 0) {
+      if (image.files.length > 0 || video.file) {
         body = new FormData();
         body.append("content", content);
         image.files.forEach((file) => body.append("images", file));
+        if (video.file) body.append("video", video.file);
       }
-      const res = await api.post(`/users/${activeId}/messages`, body, { headers: authHeaders() });
+      const res = await api.post(messagesPath, body, { headers: authHeaders() });
       setThread((prev) => [...prev, res.data.message]);
       setDraft("");
       image.clear();
+      video.clear();
       setDraftConversation(null);
       onReloadConversations();
     } catch (error) {
-      toast.error(getErrorMessage(error, t));
+      const kind = videoSendErrorKind(error);
+      toast.error(
+        kind === "disabled"
+          ? "Los videos no están disponibles ahora."
+          : kind === "too_large"
+            ? "El video pesa demasiado: 25 MB como máximo."
+            : getErrorMessage(error, t)
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Envía la nota de voz grabada (ADR-042): multipart con el campo `audio`. El texto del
+  // campo, si lo hay, viaja con ella. El servidor decodifica, normaliza y calcula la duración;
+  // aquí no se manda ninguna. Nada se envía solo: esto solo corre al pulsar «Enviar».
+  const handleSendVoice = async () => {
+    const recording = voice.recording;
+    if (!recording || !chatOpen || sending) return;
+
+    setSending(true);
+    try {
+      const body = new FormData();
+      body.append("content", draft.trim());
+      body.append(
+        "audio",
+        new File([recording.blob], `nota.${extensionFor(recording.mime)}`, { type: recording.mime })
+      );
+      const res = await api.post(messagesPath, body, { headers: authHeaders() });
+      setThread((prev) => [...prev, res.data.message]);
+      setDraft("");
+      voice.clear();
+      setDraftConversation(null);
+      onReloadConversations();
+    } catch (error) {
+      // La grabación queda en pantalla para poder reintentar.
+      const kind = sendErrorKind(error);
+      toast.error(kind ? t(`voice.errors.${kind}`) : getErrorMessage(error, t));
     } finally {
       setSending(false);
     }
@@ -282,9 +398,19 @@ export default function Messages() {
   return (
     <div className="max-w-5xl mx-auto h-[calc(100vh-9rem)]">
       <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-[28px] shadow-soft h-full flex overflow-hidden">
-        <div className={`w-full md:w-80 shrink-0 border-r border-line dark:border-line-dark flex-col ${active ? "hidden md:flex" : "flex"}`}>
+        <div className={`w-full md:w-80 shrink-0 border-r border-line dark:border-line-dark flex-col ${chatOpen ? "hidden md:flex" : "flex"}`}>
           <div className="p-4 border-b border-line dark:border-line-dark">
-            <h1 className="text-lg font-extrabold text-ink dark:text-ink-dark mb-3">Mensajes</h1>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h1 className="text-lg font-extrabold text-ink dark:text-ink-dark">Mensajes</h1>
+              <button
+                type="button"
+                onClick={() => setShowCreateGroup(true)}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-pulse-600 hover:bg-pulse-50 dark:hover:bg-pulse-900/20"
+              >
+                <IoPeopleOutline size={16} />
+                {t("groups.new")}
+              </button>
+            </div>
             <div className="relative">
               <IoSearchOutline className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
               <input
@@ -299,52 +425,53 @@ export default function Messages() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {filtered.length === 0 && (
+            {rows.length === 0 && (
               <div className="flex flex-col items-center gap-2 px-4 py-10 text-center text-muted">
                 <IoChatbubblesOutline size={28} />
                 <p className="text-sm">
-                  {conversations.length === 0
+                  {conversations.length === 0 && groups.length === 0
                     ? "Todavía no tenés conversaciones. Tocá el ícono de mensaje junto a una publicación para empezar una."
                     : "Ninguna conversación coincide con la búsqueda."}
                 </p>
               </div>
             )}
-            {filtered.map((conversation) => (
-              <button
-                key={conversation.user.id}
-                onClick={() => selectConversation(conversation.user.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-canvas dark:hover:bg-canvas-dark transition ${
-                  activeId === conversation.user.id ? "bg-pulse-50 dark:bg-pulse-900/20" : ""
-                }`}
-              >
-                <Avatar name={conversation.user.name} photo={conversation.user.avatar_url} size="w-11 h-11" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-ink dark:text-ink-dark text-sm font-semibold truncate">
-                      {conversation.user.name}
-                    </p>
-                    <span className="text-muted text-[11px] shrink-0">
-                      {formatRelativeTime(conversation.last_message.created_at)}
+            {rows.map((row) => {
+              const isActive = row.kind === "group" ? activeGroupId === row.key : activeId === row.key;
+              return (
+                <button
+                  key={`${row.kind}-${row.key}`}
+                  onClick={() => (row.kind === "group" ? selectGroup(row.key) : selectConversation(row.key))}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-canvas dark:hover:bg-canvas-dark transition ${
+                    isActive ? "bg-pulse-50 dark:bg-pulse-900/20" : ""
+                  }`}
+                >
+                  {row.kind === "group" ? (
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-pulse-100 text-pulse-700 dark:bg-pulse-900/30 dark:text-pulse-300" aria-label={t("groups.label")}>
+                      <IoPeopleOutline size={22} />
                     </span>
+                  ) : (
+                    <Avatar name={row.name} photo={row.photo} size="w-11 h-11" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-ink dark:text-ink-dark text-sm font-semibold truncate">{row.name}</p>
+                      <span className="text-muted text-[11px] shrink-0">{formatRelativeTime(row.at)}</span>
+                    </div>
+                    <p className="text-muted text-xs truncate">{row.preview}</p>
                   </div>
-                  <p className="text-muted text-xs truncate">
-                    {conversation.last_message.content ||
-                      (conversation.last_message.has_image ? "📷 Foto" : "") ||
-                      (conversation.last_message.has_place ? t("places.share.preview") : "")}
-                  </p>
-                </div>
-                {conversation.unread_count > 0 && (
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-pulse-600 text-white text-[10px] font-bold flex items-center justify-center">
-                    {conversation.unread_count}
-                  </span>
-                )}
-              </button>
-            ))}
+                  {row.unread > 0 && (
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-pulse-600 text-white text-[10px] font-bold flex items-center justify-center">
+                      {row.unread}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className={`flex-1 flex-col min-w-0 ${active ? "flex" : "hidden md:flex"}`}>
-          {active ? (
+        <div className={`flex-1 flex-col min-w-0 ${chatOpen ? "flex" : "hidden md:flex"}`}>
+          {chatOpen ? (
             <>
               <div className="flex items-center gap-3 px-4 py-3 border-b border-line dark:border-line-dark">
                 <button
@@ -354,6 +481,26 @@ export default function Messages() {
                 >
                   <IoArrowBack size={20} />
                 </button>
+                {activeGroup ? (
+                  <>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pulse-100 text-pulse-700 dark:bg-pulse-900/30 dark:text-pulse-300">
+                      <IoPeopleOutline size={18} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-ink dark:text-ink-dark text-sm font-semibold truncate">{activeGroup.name}</p>
+                      <p className="text-muted text-xs">{t("groups.members", { count: activeGroup.member_count })}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowGroupInfo(true)}
+                      aria-label={t("groups.openInfo")}
+                      className="shrink-0 rounded-full p-2 text-muted transition hover:text-pulse-600"
+                    >
+                      <IoInformationCircleOutline size={20} />
+                    </button>
+                  </>
+                ) : (
+                  <>
                 <Avatar name={active.user.name} photo={active.user.avatar_url} size="w-9 h-9" />
                 <div className="min-w-0">
                   <p className="text-ink dark:text-ink-dark text-sm font-semibold truncate">
@@ -371,6 +518,9 @@ export default function Messages() {
                     )
                   )}
                 </div>
+
+                  </>
+                )}
               </div>
 
               <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
@@ -458,18 +608,38 @@ export default function Messages() {
                                 : "bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark rounded-bl-md"
                             }`}
                           >
+                            {/* En un grupo hace falta saber quién habla (ADR-048). */}
+                            {activeGroup && message.sender_id !== currentUser.id && (
+                              <span className="mb-0.5 block text-[11px] font-semibold text-pulse-600">
+                                {message.sender?.name}
+                              </span>
+                            )}
                             {/* Imagen adjunta (ADR-039). */}
                             <ImageGrid
                               images={message.images}
                               alt="Imagen del mensaje"
                               compact
                             />
+                            {/* Video corto (ADR-046). */}
+                            <VideoPlayer video={message.video} label="Video del mensaje" compact />
+                            {/* Nota de voz (ADR-042). */}
+                            {message.audio && (
+                              <VoiceNotePlayer
+                                url={message.audio.url}
+                                durationMs={message.audio.duration_ms}
+                                mine={message.sender_id === currentUser.id}
+                              />
+                            )}
                             {/* Lugar compartido (ADR-040 fase 4c). */}
                             {message.place && (
                               <SharedPlaceCard place={message.place} mine={message.sender_id === currentUser.id} />
                             )}
+                            {/* Publicación compartida (ADR-047). */}
+                            {message.post && (
+                              <SharedPostCard post={message.post} mine={message.sender_id === currentUser.id} />
+                            )}
                             {message.content && (
-                              <span className={message.images?.length || message.place ? "mt-2 block" : ""}>
+                              <span className={message.images?.length || message.place || message.post || message.audio || message.video ? "mt-2 block" : ""}>
                                 {message.content}
                               </span>
                             )}
@@ -492,10 +662,18 @@ export default function Messages() {
                     </div>
                   ))
                 )}
+                {activeGroup && !threadLoading && thread.length === 0 && (
+                  <p className="text-center text-muted text-sm">{t("groups.empty")}</p>
+                )}
                 <div ref={threadEndRef} />
               </div>
 
               <form onSubmit={handleSend} className="flex flex-col gap-2 px-4 py-3 border-t border-line dark:border-line-dark">
+                {(video.item || video.error) && (
+                  <div className="flex items-center gap-2">
+                    <VideoAttachmentPicker video={video} compact hideButton disabled={sending} />
+                  </div>
+                )}
                 {(image.items.length > 0 || image.error) && (
                   <ImageAttachmentPicker
                     compact
@@ -509,6 +687,16 @@ export default function Messages() {
                     onRemove={image.remove}
                   />
                 )}
+                {VOICE_ENABLED && voice.error && (
+                  <p role="alert" className="px-2 text-xs text-ember-600">
+                    {t(`voice.errors.${voice.error}`)}
+                  </p>
+                )}
+                {VOICE_ENABLED && voice.status !== "idle" ? (
+                  <div className="flex items-center gap-2">
+                    <VoiceRecorderBar voice={voice} sending={sending} onSend={handleSendVoice} />
+                  </div>
+                ) : (
                 <div className="flex items-center gap-2">
                 <Avatar name={currentUser.name} photo={currentUser.avatar_url} size="w-8 h-8" />
                 <input
@@ -526,12 +714,40 @@ export default function Messages() {
                 <button
                   type="button"
                   onClick={() => imageInputRef.current?.click()}
-                  disabled={sending || image.processing || image.items.length >= MAX_MESSAGE_IMAGES}
+                  disabled={sending || image.processing || image.items.length >= MAX_MESSAGE_IMAGES || video.file !== null}
                   aria-label="Adjuntar una foto"
                   className="shrink-0 rounded-full p-2 text-muted transition hover:text-pulse-600 disabled:opacity-40"
                 >
                   <IoImageOutline size={20} />
                 </button>
+                {VIDEO_ENABLED && (
+                  <>
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept={ACCEPTED_VIDEO_TYPES.join(",")}
+                      onChange={(e) => {
+                        video.add(e.target.files);
+                        e.target.value = "";
+                      }}
+                      className="sr-only"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => videoInputRef.current?.click()}
+                      disabled={sending || video.processing || video.file !== null || image.items.length > 0}
+                      aria-label="Adjuntar un video"
+                      className="shrink-0 rounded-full p-2 text-muted transition hover:text-pulse-600 disabled:opacity-40"
+                    >
+                      <IoVideocamOutline size={20} />
+                    </button>
+                  </>
+                )}
+                {VOICE_ENABLED && !draft.trim() && image.items.length === 0 && !video.file && (
+                  <VoiceRecordButton voice={voice} disabled={sending || image.processing} />
+                )}
                 <input
                   type="text"
                   value={draft}
@@ -542,10 +758,10 @@ export default function Messages() {
                 />
                 <button
                   type="submit"
-                  disabled={(!draft.trim() && image.files.length === 0) || sending || image.processing}
+                  disabled={(!draft.trim() && image.files.length === 0 && !video.file) || sending || image.processing || video.processing}
                   aria-label="Enviar mensaje"
                   className={`p-2.5 rounded-full transition ${
-                    (draft.trim() || image.files.length > 0) && !sending && !image.processing
+                    (draft.trim() || image.files.length > 0 || video.file) && !sending && !image.processing && !video.processing
                       ? "bg-pulse-600 text-white hover:bg-pulse-700"
                       : "bg-line dark:bg-line-dark text-muted"
                   }`}
@@ -553,6 +769,7 @@ export default function Messages() {
                   <IoSend size={16} />
                 </button>
                 </div>
+                )}
               </form>
             </>
           ) : (
@@ -563,6 +780,33 @@ export default function Messages() {
           )}
         </div>
       </div>
+
+      {showCreateGroup && (
+        <CreateGroupDialog
+          people={conversations.map((c) => c.user)}
+          onClose={() => setShowCreateGroup(false)}
+          onCreated={(group) => {
+            setShowCreateGroup(false);
+            onReloadConversations();
+            selectGroup(group.id);
+            toast.success(t("groups.created"));
+          }}
+        />
+      )}
+      {showGroupInfo && activeGroupId && (
+        <GroupInfoDialog
+          groupId={activeGroupId}
+          currentUserId={currentUser.id}
+          people={conversations.map((c) => c.user)}
+          onClose={() => setShowGroupInfo(false)}
+          onChanged={onReloadConversations}
+          onLeft={() => {
+            setShowGroupInfo(false);
+            setActiveGroupId(null);
+            onReloadConversations();
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={pendingDeleteId !== null}

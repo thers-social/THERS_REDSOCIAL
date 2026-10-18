@@ -9,11 +9,18 @@
  */
 
 import type { ChatMessage } from './api';
+import type { VoiceRecording } from './voice';
+
+import type { PickedMedia } from '@shared/media/mediaRules';
 
 /** Un mensaje del chat: confirmado por el servidor o todavía local. */
 export type LocalMessage = ChatMessage & {
   /** `sending`: en vuelo. `failed`: no se pudo enviar (se puede reintentar). */
   local?: 'sending' | 'failed';
+  /** Solo en un mensaje local de voz: la grabación, para poder reintentar el envío (ADR-042). */
+  localAudio?: VoiceRecording;
+  /** Solo en un mensaje local con foto o video: el archivo elegido, para poder reintentar el envío. */
+  localMedia?: PickedMedia;
 };
 
 export function isPending(message: LocalMessage): boolean {
@@ -77,7 +84,7 @@ export function oldestConfirmedAt(messages: LocalMessage[]): string | undefined 
 export function makePending(
   clientId: string,
   senderId: string,
-  recipientId: string,
+  recipientId: string | null,
   content: string,
   now: Date = new Date(),
 ): LocalMessage {
@@ -92,6 +99,43 @@ export function makePending(
     client_id: clientId,
     local: 'sending',
   };
+}
+
+/**
+ * Mensaje local de una nota de voz (ADR-042). Mientras no hay URL del servidor, la nota se
+ * reproduce desde el archivo local; `localAudio` conserva la grabación para el reintento.
+ */
+export function makePendingVoice(
+  clientId: string,
+  senderId: string,
+  recipientId: string | null,
+  recording: VoiceRecording,
+  content: string,
+  now: Date = new Date(),
+): LocalMessage {
+  return {
+    ...makePending(clientId, senderId, recipientId, content, now),
+    audio: { url: recording.uri, duration_ms: recording.durationMs },
+    localAudio: recording,
+  };
+}
+
+/**
+ * Mensaje local con una foto o un video (ADR-046). La foto se muestra ya desde el archivo del teléfono;
+ * el video, como un recuadro «Enviando» (no hay miniatura hasta que el servidor lo procese).
+ */
+export function makePendingMedia(
+  clientId: string,
+  senderId: string,
+  recipientId: string | null,
+  media: PickedMedia,
+  content: string,
+  now: Date = new Date(),
+): LocalMessage {
+  const base = makePending(clientId, senderId, recipientId, content, now);
+  return media.kind === 'image'
+    ? { ...base, images: [{ url: media.uri, width: media.width, height: media.height }], localMedia: media }
+    : { ...base, localMedia: media };
 }
 
 /** Marca un mensaje local como fallido (o de nuevo en vuelo). */

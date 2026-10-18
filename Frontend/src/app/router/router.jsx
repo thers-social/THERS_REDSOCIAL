@@ -57,13 +57,15 @@ const HelpArticlePage = named(loadHelp, "HelpArticlePage");
 const HelpSearchPage = named(loadHelp, "HelpSearchPage");
 
 const Home = named(loadFeed, "Home");
+const Saved = named(loadFeed, "Saved");
 const Search = named(loadFeed, "Search");
 const Videos = named(loadFeed, "Videos");
 const Capsules = named(loadFeed, "Capsules");
-const Radar = named(loadFeed, "Radar");
 const Messages = named(loadFeed, "Messages");
 const Notifications = named(loadFeed, "Notifications");
 const Profile = named(loadFeed, "Profile");
+const UserProfile = named(loadFeed, "UserProfile");
+const Explore = named(loadFeed, "Explore");
 const SettingsLayout = named(loadFeed, "SettingsLayout");
 const SettingsSectionPage = named(loadFeed, "SettingsSectionPage");
 
@@ -115,10 +117,15 @@ export default function AppRouter() {
             <Route path="/search" element={<Search />} />
             <Route path="/videos" element={<Videos />} />
             <Route path="/capsules" element={<Capsules />} />
-            <Route path="/radar" element={<Radar />} />
+            {/* "Ubicación" se retiró: THERS Places (/places) ocupa su lugar. Se redirige para no romper enlaces guardados. */}
+            <Route path="/radar" element={<Navigate to="/places" replace />} />
+            <Route path="/saved" element={<Saved />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/profile" element={<Profile />} />
+            {/* Perfil de otra persona (ADR-049) y Explorar (ADR-050). */}
+            <Route path="/user/:userId" element={<UserProfile />} />
+            <Route path="/explore" element={<Explore />} />
             {/* Moderación (ADR-032 fase 3). Sin enlace en la navegación a propósito: la página
                 se oculta sola a quien no es moderador y el servidor rechaza sus peticiones. */}
             <Route path="/moderation" element={<Moderation />} />

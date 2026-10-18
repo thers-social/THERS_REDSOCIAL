@@ -21,7 +21,10 @@ from app.application.tero.tools import ToolDependencies
 from app.domain.rate_limiting import policy
 from app.domain.rate_limiting.exceptions import RateLimitExceededError
 from app.domain.tero import actions as action_rules
+from app.domain.media.storage import ImageTooLargeError, InvalidImageError
+from app.domain.tero import chat as chat_rules
 from app.domain.tero.chat import InvalidTeroRequestError, TeroUnavailableError
+from app.infrastructure.media.image_processor import process_for_ai
 from app.infrastructure.ai.factory import tero_provider
 from app.infrastructure.persistence.repositories.comment_repository import (
     SQLAlchemyCommentRepository,
@@ -46,6 +49,12 @@ from app.infrastructure.persistence.repositories.rate_limit_repository import (
 )
 from app.infrastructure.persistence.repositories.restriction_repository import (
     SQLAlchemyRestrictionRepository,
+)
+from app.infrastructure.persistence.repositories.reservation_repository import (
+    SQLAlchemyReservationRepository,
+)
+from app.infrastructure.persistence.repositories.suggestion_repository import (
+    SQLAlchemySuggestionRepository,
 )
 from app.infrastructure.persistence.repositories.tero_usage_repository import (
     SQLAlchemyTeroUsageRepository,
@@ -79,6 +88,8 @@ _tool_dependencies = ToolDependencies(
     place_repository=SQLAlchemyPlaceRepository(),
     user_search_repository=SQLAlchemyUserSearchRepository(),
     action_repository=SQLAlchemyTeroActionRepository(),
+    suggestion_repository=SQLAlchemySuggestionRepository(),
+    reservation_repository=SQLAlchemyReservationRepository(),
 )
 
 
@@ -112,10 +123,33 @@ def chat():
     if not isinstance(data, dict):
         return jsonify({"msg": "No se enviaron datos"}), 400
 
+    # Imagen (ADR-046): apagada por defecto (cuesta y sale a un tercero). Con el interruptor apagado ni
+    # siquiera se mira el archivo.
+    prepared_image = None
+    if data.get("image") is not None:
+        if not current_app.config.get("TERO_IMAGES_ENABLED"):
+            return jsonify(
+                {"msg": "Tero todavía no puede ver imágenes.", "code": "tero_images_disabled"}
+            ), 503
+        try:
+            rate_limit_guard.enforce(
+                policy.IMAGE_UPLOAD, f"user:{get_jwt_identity()}", _rate_limit_repository
+            )
+        except RateLimitExceededError as error:
+            return rate_limited_response(error)
+        try:
+            raw = chat_rules.parse_chat_request(data).image
+            prepared_image = process_for_ai(raw)
+        except InvalidTeroRequestError as error:
+            return jsonify({"msg": error.message}), 400
+        except (InvalidImageError, ImageTooLargeError):
+            return jsonify({"msg": "La imagen debe ser JPEG, PNG o WebP válida"}), 400
+
     try:
         result = chat_service.send_message(
             data, _settings(), tero_provider(current_app), _usage_repository,
             user_id=get_jwt_identity(), tool_deps=_tool_dependencies,
+            prepared_image=prepared_image,
         )
     except InvalidTeroRequestError as error:
         return jsonify({"msg": error.message}), 400

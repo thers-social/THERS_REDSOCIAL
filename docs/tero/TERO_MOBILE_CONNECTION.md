@@ -18,7 +18,7 @@ servidor descrito en `ADR-041` y en `API_CONTRACT.md` §4.37, sin cambiar la int
 | `TERO_TOOLS_ENABLED` | servidor | Tero puede consultar perfil, avisos, personas, publicaciones y lugares |
 | `TERO_ACTIONS_ENABLED` | servidor | Tero puede **preparar** acciones (aparecen las tarjetas) |
 
-Todos nacen apagados. Con el servidor apagado y `EXPO_PUBLIC_TERO_LIVE=true`, el chat muestra «Tero
+Desde 2026-10-17 `EXPO_PUBLIC_TERO_ENABLED` y `EXPO_PUBLIC_TERO_LIVE` nacen **encendidos** (se apagan con `false`); los interruptores del servidor siguen apagados por defecto. Con el servidor apagado y `EXPO_PUBLIC_TERO_LIVE=true`, el chat muestra «Tero
 no está disponible»: no se rompe nada.
 
 ## Cómo funcionan las tarjetas

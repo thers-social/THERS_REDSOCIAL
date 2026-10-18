@@ -422,7 +422,7 @@ def test_summary_counts_places_and_open_reports(client, app, world):
     summary = client.get(f"{BASE}/summary", headers=_mod(users)).get_json()["summary"]
 
     assert summary["places_by_status"] == {
-        "pending": 1, "verified": 2, "needs_review": 0, "rejected": 0, "inactive": 0,
+        "pending": 1, "verified": 2, "needs_review": 0, "rejected": 0, "inactive": 0, "unverified": 0,
     }
     assert summary["places_inactive"] == 1
     assert summary["open_reports"] == 1

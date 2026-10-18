@@ -133,6 +133,8 @@ def availability(place_id, day_raw, repository):
     return {
         "date": day.isoformat(),
         "accepts_reservations": True,
+        # true = el lugar no cargó su horario y se ofrece el horario por defecto (ADR-051).
+        "default_hours": not week,
         "max_party_size": settings["max_party_size"],
         "slots": [
             {"starts_at": s.isoformat(), "seats_left": max(settings["capacity"] - taken.get(s, 0), 0)}

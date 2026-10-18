@@ -20,14 +20,14 @@ import { Screen } from '@shared/ui/Screen';
 type Shortcut = { label: string; description: string; icon: IconName; href?: Href; soon?: string };
 
 /**
- * «Novedades» reutiliza Avisos (datos reales). Places y Personas aún no existen
- * en la app móvil: avisan «Próximamente» en vez de mostrar datos inventados.
+ * «Novedades» reutiliza Avisos (datos reales). Places y Personas llevan a sus pantallas con datos reales
+ * (lugares mejor valorados y cuentas sugeridas).
  */
 const SHORTCUTS: Shortcut[] = [
   { label: 'Resumen', description: 'Tu semana', icon: 'activity', href: '/tero/summary' },
   { label: 'Novedades', description: 'Tus avisos', icon: 'bell', href: '/notifications' },
-  { label: 'Places', description: 'Lugares cerca', icon: 'globe', soon: 'Places con Tero' },
-  { label: 'Personas', description: 'A quién seguir', icon: 'group', soon: 'Las sugerencias de Tero' },
+  { label: 'Places', description: 'Lugares recomendados', icon: 'globe', href: '/tero/places' },
+  { label: 'Personas', description: 'A quién seguir', icon: 'group', href: '/tero/people' },
 ];
 
 /** Inicio de Tero: saludo, una pregunta rápida y accesos. */

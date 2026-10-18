@@ -1,0 +1,230 @@
+{
+  "name": "THERS - Resumen semanal",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000001",
+      "name": "Cada lunes 8:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b2000000-0000-4000-8000-000000000002",
+      "name": "Disparo manual (pruebas)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Pide a THERS el siguiente lote. El BACKEND decide quién lo recibe y con qué números; aquí solo se\n// recoge. Llamada firmada con el secreto compartido (HMAC-SHA256 de \"<marca>.<cuerpo>\").\nconst crypto = require('crypto');\nconst secret = $env.N8N_WEBHOOK_SECRET || '';\nconst base = ($env.THERS_API_URL || '').replace(/\\/$/, '');\nif (!secret || !base) throw new Error('Faltan N8N_WEBHOOK_SECRET o THERS_API_URL');\n\n// Cursor y contador de páginas vienen del acuse anterior; el disparador inicial no los trae.\nconst previous = $input.first() ? $input.first().json : {};\nconst cursor = previous.next_after || null;\nconst page = cursor ? (previous.page || 1) + 1 : 1;\nif (page > 20) return [];   // tope de seguridad: nunca más de 20 lotes por corrida\n\nconst data = await (async () => {\n  const ts = Math.floor(Date.now() / 1000);\n  const body = JSON.stringify(cursor ? { limit: 50, after: cursor } : { limit: 50 });\n  const signature = 'sha256=' + crypto.createHmac('sha256', secret).update(ts + '.' + body).digest('hex');\n  const response = await this.helpers.httpRequest({\n    method: 'POST',\n    url: base + '/internal/automations/weekly-summaries/next',\n    headers: {\n      'Content-Type': 'application/json',\n      'X-THERS-Timestamp': String(ts),\n      'X-THERS-Signature': signature,\n    },\n    body,       // texto EXACTO: la firma cubre estos bytes\n    json: false,\n  });\n  return typeof response === 'string' ? JSON.parse(response) : response;\n})();\n\nreturn data.items.map((item) => ({\n  json: { ...item, period: data.period, next_after: data.next_after, page },\n}));"
+      },
+      "id": "b2000000-0000-4000-8000-000000000003",
+      "name": "Pedir lote a THERS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Redacta el resumen de cada persona a partir de los números que dio THERS (solo conteos).\nconst items = $input.all();\nreturn items.map((item) => {\n  const s = item.json;\n  const m = s.metrics;\n  const lines = [];\n  if (m.new_followers) lines.push('- Nuevos seguidores: ' + m.new_followers);\n  if (m.likes_received) lines.push('- Me gusta recibidos: ' + m.likes_received);\n  if (m.comments_received) lines.push('- Comentarios recibidos: ' + m.comments_received);\n  if (m.unread_notifications) lines.push('- Avisos sin leer: ' + m.unread_notifications);\n  const name = s.first_name ? ' ' + s.first_name : '';\n  const text = 'Hola' + name + ',\\n\\nAsí te fue en THERS del ' + s.period.from + ' al ' + s.period.to + ':\\n\\n'\n    + lines.join('\\n')\n    + '\\n\\nPuedes dejar de recibir este resumen cuando quieras desde Ajustes, en la app.\\n\\n— THERS';\n  return { json: { ...s, mail: { to: s.recipient_email, subject: 'Tu semana en THERS', text } } };\n});"
+      },
+      "id": "b2000000-0000-4000-8000-000000000004",
+      "name": "Redactar resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RESEND_API_URL || 'https://api.resend.com/emails' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.RESEND_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ from: $env.EMAIL_FROM || 'onboarding@resend.dev', to: [$json.mail.to], subject: $json.mail.subject, text: $json.mail.text }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000005",
+      "name": "Enviar con Resend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Le dice a THERS qué correos salieron. THERS marca cada resumen como entregado una sola vez, así\n// que repetir este flujo no manda dos resúmenes de la misma semana. Un envío fallido se informa como\n// \"failed\": no se marca y volverá a ofrecerse en la próxima corrida.\nconst crypto = require('crypto');\nconst secret = $env.N8N_WEBHOOK_SECRET || '';\nconst base = ($env.THERS_API_URL || '').replace(/\\/$/, '');\n\nconst originals = $('Redactar resumen').all();\nconst results = $input.all();\nconst ackItems = originals.map((original, index) => {\n  const result = results[index] ? results[index].json : {};\n  // Resend responde { id: \"...\" } cuando acepta el correo; cualquier otra cosa es un fallo.\n  const sent = Boolean(result && result.id && !result.error);\n  return {\n    user_id: original.json.user_id,\n    idempotency_key: original.json.idempotency_key,\n    status: sent ? 'sent' : 'failed',\n  };\n});\n\nconst answer = await (async () => {\n  const ts = Math.floor(Date.now() / 1000);\n  const body = JSON.stringify({ items: ackItems });\n  const signature = 'sha256=' + crypto.createHmac('sha256', secret).update(ts + '.' + body).digest('hex');\n  const response = await this.helpers.httpRequest({\n    method: 'POST',\n    url: base + '/internal/automations/weekly-summaries/ack',\n    headers: {\n      'Content-Type': 'application/json',\n      'X-THERS-Timestamp': String(ts),\n      'X-THERS-Signature': signature,\n    },\n    body,       // texto EXACTO: la firma cubre estos bytes\n    json: false,\n  });\n  return typeof response === 'string' ? JSON.parse(response) : response;\n})();\n\nconst first = originals[0] ? originals[0].json : {};\nreturn [{ json: { ...answer, next_after: first.next_after || null, page: first.page || 1 } }];"
+      },
+      "id": "b2000000-0000-4000-8000-000000000006",
+      "name": "Acusar a THERS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        80
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c3",
+              "leftValue": "={{ $json.next_after }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000007",
+      "name": "Hay mas paginas",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        80
+      ]
+    }
+  ],
+  "connections": {
+    "Cada lunes 8:00": {
+      "main": [
+        [
+          {
+            "node": "Pedir lote a THERS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparo manual (pruebas)": {
+      "main": [
+        [
+          {
+            "node": "Pedir lote a THERS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedir lote a THERS": {
+      "main": [
+        [
+          {
+            "node": "Redactar resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redactar resumen": {
+      "main": [
+        [
+          {
+            "node": "Enviar con Resend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar con Resend": {
+      "main": [
+        [
+          {
+            "node": "Acusar a THERS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acusar a THERS": {
+      "main": [
+        [
+          {
+            "node": "Hay mas paginas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay mas paginas": {
+      "main": [
+        [
+          {
+            "node": "Pedir lote a THERS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/El_Salvador"
+  }
+}

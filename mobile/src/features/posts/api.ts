@@ -5,6 +5,8 @@
  */
 
 import { request } from '@shared/lib/api';
+import { appendMedia, MEDIA_UPLOAD_TIMEOUT_MS } from '@shared/media/mediaForm';
+import type { PickedMedia } from '@shared/media/mediaRules';
 
 import type { FollowStatus, Post, PostComment } from './types';
 
@@ -13,15 +15,34 @@ export async function fetchPosts(signal?: AbortSignal): Promise<Post[]> {
   return posts;
 }
 
+/**
+ * Publica. Sin archivos manda JSON, como siempre; con fotos (campo `images`, hasta 4) o con un video
+ * (campo `video`, `ADR-046`) manda `multipart/form-data`. El texto puede ir vacío si hay archivos.
+ */
 export async function createPost(
   content: string,
   isSensitive: boolean,
   placeId?: string,
+  media: PickedMedia[] = [],
 ): Promise<Post> {
+  if (media.length === 0) {
+    const { post } = await request<{ post: Post }>('/posts', {
+      method: 'POST',
+      authenticated: true,
+      body: { content, is_sensitive: isSensitive, ...(placeId ? { place_id: placeId } : {}) },
+    });
+    return post;
+  }
+  const form = new FormData();
+  form.append('content', content);
+  form.append('is_sensitive', String(isSensitive));
+  if (placeId) form.append('place_id', placeId);
+  for (const item of media) appendMedia(form, item.kind === 'video' ? 'video' : 'images', item);
   const { post } = await request<{ post: Post }>('/posts', {
     method: 'POST',
     authenticated: true,
-    body: { content, is_sensitive: isSensitive, ...(placeId ? { place_id: placeId } : {}) },
+    body: form,
+    timeoutMs: MEDIA_UPLOAD_TIMEOUT_MS,
   });
   return post;
 }
@@ -37,6 +58,21 @@ export async function updatePost(postId: string, content: string): Promise<Post>
 
 export async function deletePost(postId: string): Promise<void> {
   await request(`/posts/${postId}`, { method: 'DELETE', authenticated: true });
+}
+
+/** Guardar (`ADR-047`): privado e idempotente; el servidor devuelve el estado final. */
+export async function setPostSaved(postId: string, saved: boolean): Promise<boolean> {
+  const result = await request<{ saved: boolean }>(`/posts/${postId}/save`, {
+    method: saved ? 'POST' : 'DELETE',
+    authenticated: true,
+  });
+  return result.saved;
+}
+
+/** Las publicaciones guardadas, la última guardada primero. */
+export async function fetchSavedPosts(signal?: AbortSignal): Promise<Post[]> {
+  const { posts } = await request<{ posts: Post[] }>('/posts/saved', { authenticated: true, signal });
+  return posts;
 }
 
 export type LikeResult = { likes_count: number; liked_by_me: boolean };
@@ -89,10 +125,16 @@ export function unfollowUser(userId: string): Promise<FollowResult> {
   return request<FollowResult>(`/users/${userId}/follow`, { method: 'DELETE', authenticated: true });
 }
 
-export type SuggestedUser = { id: string; name: string; username: string; is_private: boolean };
+export type SuggestedUser = {
+  id: string;
+  name: string;
+  username: string;
+  is_private: boolean;
+  avatar_url?: string | null;
+};
 
-export async function fetchSuggestions(signal?: AbortSignal): Promise<SuggestedUser[]> {
-  const { suggestions } = await request<{ suggestions: SuggestedUser[] }>('/users/suggestions', {
+export async function fetchSuggestions(signal?: AbortSignal, limit?: number): Promise<SuggestedUser[]> {
+  const { suggestions } = await request<{ suggestions: SuggestedUser[] }>(`/users/suggestions${limit ? `?limit=${limit}` : ''}`, {
     authenticated: true,
     signal,
   });

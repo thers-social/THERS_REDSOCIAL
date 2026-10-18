@@ -6,13 +6,16 @@
 #   GET    /api/places/<id>/manage/analytics?days=7|30|90    estadísticas (ADR-040 §31)
 #   PATCH  /api/places/<id>/manage                           editar descripción, dirección,
 #                                                            teléfono y sitio web
+#   PUT    /api/places/<id>/manage/image                     imagen que identifica al lugar (multipart,
+#                                                            campo `image`; ADR-046)
+#   DELETE /api/places/<id>/manage/image                     quitarla
 #   PUT    /api/places/<id>/reviews/<review_id>/reply        responder (o corregir la respuesta)
 #   DELETE /api/places/<id>/reviews/<review_id>/reply        quitar la respuesta
 #
 # La identidad sale del JWT. Un cuerpo que no sea un objeto JSON da 400; los campos no
 # permitidos se ignoran (lista blanca en `business_use_cases.MANAGER_EDITABLE`).
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.application.business import business_use_cases
@@ -34,6 +37,7 @@ from app.infrastructure.persistence.repositories.place_repository import (
 from app.infrastructure.persistence.repositories.rate_limit_repository import (
     SQLAlchemyRateLimitRepository,
 )
+from app.interfaces.image_upload import process_files
 from app.interfaces.rate_limited_response import rate_limited_response
 
 business_bp = Blueprint("business", __name__)
@@ -122,6 +126,53 @@ def update_place(place_id):
     try:
         place = business_use_cases.update_place(
             place_id, user_id, data, _repository, _place_repository
+        )
+    except _DOMAIN_ERRORS as error:
+        return _failure(error)
+    return jsonify({"place": place}), 200
+
+
+@business_bp.route("/places/<uuid:place_id>/manage/image", methods=["PUT"])
+@jwt_required()
+def put_image(place_id):
+    """Imagen que identifica al lugar (ADR-046): la sube quien lo gestiona. Un solo archivo, campo `image`."""
+    user_id = get_jwt_identity()
+    upload = request.files.get("image") if request.mimetype == "multipart/form-data" else None
+    if upload is None or not upload.filename:
+        return jsonify({"msg": "Envía la imagen en el campo `image`"}), 400
+    limited = _limited(user_id)
+    if limited is not None:
+        return limited
+    # Quien no gestiona el lugar recibe el mismo 404 ANTES de gastar CPU decodificando su archivo.
+    if not business_use_cases.can_manage(place_id, user_id, _repository, _place_repository):
+        return jsonify({"msg": "Lugar no encontrado"}), 404
+    try:
+        rate_limit_guard.enforce(policy.IMAGE_UPLOAD, f"user:{user_id}", _rate_limit_repository)
+    except RateLimitExceededError as error:
+        return rate_limited_response(error)
+    prepared, error_response = process_files([upload], "place")
+    if error_response:
+        return error_response
+    try:
+        place = business_use_cases.set_image(
+            place_id, user_id, prepared[0], _repository, _place_repository,
+            current_app.extensions["media_storage"],
+        )
+    except _DOMAIN_ERRORS as error:
+        return _failure(error)
+    return jsonify({"place": place}), 200
+
+
+@business_bp.route("/places/<uuid:place_id>/manage/image", methods=["DELETE"])
+@jwt_required()
+def delete_image(place_id):
+    user_id = get_jwt_identity()
+    limited = _limited(user_id)
+    if limited is not None:
+        return limited
+    try:
+        place = business_use_cases.remove_image(
+            place_id, user_id, _repository, _place_repository, current_app.extensions["media_storage"]
         )
     except _DOMAIN_ERRORS as error:
         return _failure(error)

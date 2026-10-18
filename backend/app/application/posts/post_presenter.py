@@ -1,4 +1,4 @@
-from app.application.media.attachments import to_public_images
+from app.application.media.attachments import to_public_images, to_public_video
 from app.application.places.place_card import to_place_card
 from app.application.mentions.mention_presenter import to_public_mentions
 from app.domain.follows.follow_status import ACCEPTED
@@ -17,7 +17,7 @@ from app.application.auth.user_presenter import to_author_summary
 
 def to_public_post(
     post, likes_count=0, liked_by_me=False, comments_count=0, follow_status=None,
-    mentions=None, place_cards=None, viewer_id=None,
+    mentions=None, place_cards=None, saved_by_me=False, viewer_id=None,
 ):
     # Defaults en 0/False: un post recién creado (create_post_use_case.py)
     # no tiene resumen de likes/comentarios que calcular todavía (ADR-005/
@@ -43,6 +43,8 @@ def to_public_post(
         "content": post.content,
         # Imágenes adjuntas (ADR-039): `[]` si no tiene. Solo URL y dimensiones.
         "images": to_public_images(post.images, viewer_id),
+        # Video corto (ADR-046): `null` si no tiene.
+        "video": to_public_video(post.video),
         # Lo que el AUTOR declaró al publicar (ADR-030-content-preferences.md);
         # no es una clasificación del servidor.
         "is_sensitive": post.is_sensitive,
@@ -57,6 +59,8 @@ def to_public_post(
         "edited": post.edited_at is not None,
         "likes_count": likes_count,
         "liked_by_me": liked_by_me,
+        # Guardada por quien pregunta (ADR-047). Privado: nunca cuántas personas la guardaron.
+        "saved_by_me": saved_by_me,
         "comments_count": comments_count,
         # ADR-040 fase 4d: lugar asociado (null si la publicación no lleva uno).
         "place": to_place_card(post.place_id, place_cards),

@@ -7,6 +7,8 @@
  */
 
 import { request } from '@shared/lib/api';
+import { appendMedia, MEDIA_UPLOAD_TIMEOUT_MS } from '@shared/media/mediaForm';
+import type { PickedMedia } from '@shared/media/mediaRules';
 
 import { roundPoint, roundPointFine } from './coordinates';
 import type { ReportReason } from './placeReasons';
@@ -52,6 +54,15 @@ export async function fetchCategories(signal?: AbortSignal): Promise<PlaceCatego
     signal,
   });
   return categories;
+}
+
+/** Los mejor valorados (`GET /api/places/top`, ADR-053), opcionalmente de una categoría. Sin ubicación. */
+export async function fetchTopPlaces(category?: string, signal?: AbortSignal): Promise<PlaceSummary[]> {
+  const { places } = await request<{ places: PlaceSummary[] }>(
+    withQuery('/places/top', { category, limit: 8 }),
+    { authenticated: true, signal },
+  );
+  return places;
 }
 
 export async function fetchNearby(
@@ -299,6 +310,30 @@ export function fetchManage(
   signal?: AbortSignal,
 ): Promise<{ place: PlaceDetail; stats: ManageStats }> {
   return request(`/places/${placeId}/manage`, { authenticated: true, signal });
+}
+
+/**
+ * Imagen que identifica al lugar (`ADR-046`): la sube quien lo gestiona. `PUT` multipart con el archivo en
+ * el campo `image`; el servidor la decodifica por su contenido, la reduce y la guarda sin metadatos.
+ */
+export async function uploadPlaceImage(placeId: string, media: PickedMedia): Promise<PlaceDetail> {
+  const form = new FormData();
+  appendMedia(form, 'image', media);
+  const { place } = await request<{ place: PlaceDetail }>(`/places/${placeId}/manage/image`, {
+    method: 'PUT',
+    authenticated: true,
+    body: form,
+    timeoutMs: MEDIA_UPLOAD_TIMEOUT_MS,
+  });
+  return place;
+}
+
+export async function removePlaceImage(placeId: string): Promise<PlaceDetail> {
+  const { place } = await request<{ place: PlaceDetail }>(`/places/${placeId}/manage/image`, {
+    method: 'DELETE',
+    authenticated: true,
+  });
+  return place;
 }
 
 /** Solo viajan los cuatro campos que un gestor puede cambiar; el servidor ignora el resto. */

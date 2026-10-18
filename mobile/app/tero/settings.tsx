@@ -2,6 +2,7 @@ import { Alert, Pressable, Switch, Text, View } from 'react-native';
 
 import { TeroAvatar } from '@features/tero/components/TeroAvatar';
 import { TeroGate } from '@features/tero/components/TeroGate';
+import { TeroVoicePicker } from '@features/tero/components/TeroVoicePicker';
 import { useTero } from '@features/tero/context/TeroContext';
 import type { TeroSide } from '@features/tero/types';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
@@ -85,6 +86,15 @@ function TeroSettingsContent() {
         value={preferences.animations}
         onChange={(animations) => update({ animations })}
       />
+
+      <SwitchRow
+        label="Tero habla"
+        description="Tero lee en voz alta sus respuestas con la voz de tu teléfono. El texto no sale del dispositivo."
+        value={preferences.speakReplies}
+        onChange={(speakReplies) => update({ speakReplies })}
+      />
+
+      {preferences.speakReplies ? <TeroVoicePicker /> : null}
 
       <SwitchRow
         label="Sonidos"

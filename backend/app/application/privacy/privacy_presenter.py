@@ -30,6 +30,8 @@ def to_privacy_settings(user, pending_follow_requests_count=0):
         "show_activity_status": user.show_activity_status,
         # ADR-030-content-preferences.md
         "hide_sensitive_content": user.hide_sensitive_content,
+        # ADR-041 §7: resumen semanal de actividad por correo.
+        "weekly_summary_email": user.weekly_summary_email,
         # Solo el propio dueño ve este endpoint, así que acá `last_seen_at` sí
         # se expone aunque tenga la actividad oculta -- lo que oculta
         # `show_activity_status` es que lo vean LOS DEMÁS (ADR-024 §Seguridad).

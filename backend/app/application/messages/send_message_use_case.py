@@ -7,14 +7,17 @@
 # Desde ADR-024-content-filters-and-privacy-preferences.md respeta además la
 # preferencia `who_can_message` del destinatario.
 
-from app.application.media.attachments import discard_files, store_attachments
+from app.application.messages.message_media import attach_media
 from app.application.messages.message_presenter import to_public_messages
+from app.application.push import events as push_events
+from app.application.push.preview import message_preview_of
 from app.domain.auth.exceptions import UserNotFoundError
 from app.domain.follows.follow_status import ACCEPTED
 from app.domain.messages.exceptions import (
     CannotMessageSelfError,
     MessagesNotAllowedError,
     SharedPlaceNotFoundError,
+    SharedPostNotFoundError,
 )
 from app.domain.privacy.audience import is_allowed
 from app.domain.restrictions.exceptions import AccountBlockedError
@@ -24,7 +27,8 @@ from app.domain.restrictions.kinds import BLOCK
 def send_message(
     sender_id, recipient_id, content, user_repository, message_repository, follow_repository,
     restriction_repository, client_id=None, prepared_images=None, media_repository=None,
-    media_storage=None, place_id=None,
+    media_storage=None, place_id=None, prepared_audio=None, audio_repository=None,
+    prepared_video=None, video_repository=None, post_id=None,
 ):
     """Devuelve `(mensaje_público, created)`. Con `client_id`, reenviar el mismo
     mensaje (por ejemplo tras perder la conexión justo al recibir la respuesta)
@@ -63,28 +67,32 @@ def send_message(
     if place_id is not None and not message_repository.place_cards([place_id]):
         raise SharedPlaceNotFoundError()
 
+    # Y solo publicaciones que QUIEN COMPARTE puede ver (ADR-047): no se filtra una cuenta privada.
+    if post_id is not None and not message_repository.visible_posts([post_id], sender_id):
+        raise SharedPostNotFoundError()
+
     if client_id is None:
-        message = message_repository.create(sender_id, recipient_id, content, place_id=place_id)
+        message = message_repository.create(
+            sender_id, recipient_id, content, place_id=place_id, post_id=post_id
+        )
         created = True
     else:
         message, created = message_repository.create_idempotent(
-            sender_id, recipient_id, content, client_id, place_id=place_id
+            sender_id, recipient_id, content, client_id, place_id=place_id, post_id=post_id
         )
 
-    # Imagen (ADR-039). Solo si el mensaje es NUEVO: un reintento idempotente
-    # devuelve el original tal cual, y no debe duplicarle ni cambiarle la imagen.
-    # Los archivos se guardan después de las comprobaciones de arriba, así que un
-    # envío rechazado (bloqueo, permisos) no deja nada en el almacenamiento.
-    if created and prepared_images:
-        stored = []
-        try:
-            stored = store_attachments(prepared_images, "message", media_storage)
-            media_repository.add_for_message(message.id, sender_id, stored)
-        except Exception:
-            # Sin la imagen el mensaje no es lo que la persona quiso mandar:
-            # se retira entero para que pueda reintentar.
-            discard_files([item["key"] for item in stored], media_storage)
-            message_repository.delete(message.id, sender_id)
-            raise
+    # Adjuntos (ADR-039, 042, 046). Solo si el mensaje es NUEVO: un reintento idempotente devuelve el
+    # original tal cual. Se guardan después de las comprobaciones de arriba, así que un envío
+    # rechazado (bloqueo, permisos) no deja nada en el almacenamiento.
+    if created:
+        attach_media(
+            message, sender_id, message_repository, media_repository, media_storage,
+            audio_repository, video_repository, prepared_images=prepared_images,
+            prepared_audio=prepared_audio, prepared_video=prepared_video,
+        )
 
-    return to_public_messages([message], message_repository, viewer_id=sender_id)[0], created
+    public = to_public_messages([message], message_repository, viewer_id=sender_id)[0]
+    if created:
+        # Push al destinatario (ADR-053). Un reintento idempotente no vuelve a avisar.
+        push_events.direct_message_sent(sender_id, recipient_id, message_preview_of(public))
+    return public, created

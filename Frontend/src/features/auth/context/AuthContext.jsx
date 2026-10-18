@@ -159,6 +159,19 @@ export function AuthProvider({ children }) {
     return applyUser(res.data.user);
   };
 
+  // Vuelve a pedir el perfil SIN pasar por `isLoading` (a diferencia de
+  // loadCurrentUser, que desmontaría las rutas protegidas con un spinner). Lo usa
+  // Tero tras confirmar una acción que cambió el perfil (ADR-041). Un fallo no
+  // cierra la sesión: es una resincronización de fondo.
+  const refreshUser = async () => {
+    try {
+      const res = await api.get("/users/me", { headers: authHeaders() });
+      return applyUser(res.data.user);
+    } catch {
+      return null;
+    }
+  };
+
   // Foto de perfil / portada (ADR-015-profile-media.md, API_CONTRACT.md).
   // `kind`: "avatar" | "cover". multipart/form-data con el campo `file`; el
   // navegador fija el boundary del Content-Type por sí solo.
@@ -186,6 +199,7 @@ export function AuthProvider({ children }) {
     register,
     logout,
     loadCurrentUser,
+    refreshUser,
     updateProfile,
     uploadProfileImage,
     removeProfileImage,

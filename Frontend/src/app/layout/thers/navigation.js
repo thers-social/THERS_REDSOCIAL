@@ -24,9 +24,8 @@ export const PRIMARY_NAV = [
     icon: "history_toggle_off",
     labelKey: "nav.capsules",
   },
-  { id: "radar", to: "/radar", icon: "radar", labelKey: "nav.radar" },
-  // THERS Places (ADR-040, fase 3): catálogo de lugares con mapa. `radar` ("Ubicación") sigue siendo el
-  // marcador de posición anterior; fusionar ambos destinos es una decisión de producto pendiente.
+  // THERS Places (ADR-040, fase 3): catálogo de lugares con mapa. Sustituyó al antiguo destino
+  // "Ubicación" (`/radar`, un marcador de posición sin servicio), que se retiró.
   { id: "places", to: "/places", icon: "location_on", labelKey: "nav.places" },
   { id: "messages", to: "/messages", icon: "forum", labelKey: "nav.messages", badge: "count" },
   {

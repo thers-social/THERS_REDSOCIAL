@@ -88,15 +88,21 @@ export default function Search() {
                   </View>
                   <Icon name="chevron" size={18} color={colors.fgMuted} />
                 </Pressable>
-                <View style={styles.discover}>
+                <Pressable
+                  style={styles.discover}
+                  onPress={() => router.push('/explore')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Explorar contenido"
+                >
                   <Icon name="grid" size={22} color={colors.brandText} />
                   <View style={styles.discoverText}>
                     <Text style={styles.discoverTitle}>Explorar contenido</Text>
                     <Text style={styles.discoverHint}>
-                      Próximamente: la cuadrícula de fotos, videos y tendencias.
+                      Fotos y videos populares de personas que aún no sigues.
                     </Text>
                   </View>
-                </View>
+                  <Icon name="chevron" size={18} color={colors.fgMuted} />
+                </Pressable>
                 <Suggestions />
               </>
             )}

@@ -16,6 +16,7 @@ import {
 } from './api';
 import { describeIntervals, formatClock, nextDays, WEEKDAYS } from './businessTime';
 import { formatPlanDate } from './planTime';
+import { shareReservationPdf } from './quotePdf';
 import type { Availability, Reservation, ReservationStatus, Schedule } from './types';
 
 const STATUS_LABEL: Record<ReservationStatus, string> = {
@@ -130,6 +131,12 @@ function ReservationForm({ placeId, onDone }: FormProps) {
       {!loading && availability && availability.slots.length === 0 ? (
         <Text style={styles.muted}>No hay horarios libres ese día. Probá con otro.</Text>
       ) : null}
+      {!loading && availability?.default_hours && availability.slots.length > 0 ? (
+        <Text style={styles.muted}>
+          Este lugar no publicó su horario: te mostramos un horario de 10:00 a 21:00. Es una solicitud y el
+          lugar la confirma o la rechaza.
+        </Text>
+      ) : null}
       <View style={styles.slots}>
         {availability?.slots.map((s) => (
           <Pressable
@@ -195,9 +202,12 @@ function ReservationForm({ placeId, onDone }: FormProps) {
 export function PlaceReservations({
   placeId,
   accepts,
+  claimed = true,
 }: {
   placeId: string;
   accepts: boolean;
+  /** `false`: nadie gestiona el lugar en THERS, así que la solicitud puede no ser atendida. */
+  claimed?: boolean;
 }) {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [mine, setMine] = useState<Reservation[]>([]);
@@ -257,6 +267,11 @@ export function PlaceReservations({
         Reservas
       </Text>
       {schedule ? <Hours schedule={schedule} /> : null}
+      {!claimed ? (
+        <Text style={styles.muted}>
+          Este negocio aún no ha reclamado su lugar en THERS: tu solicitud puede no ser atendida.
+        </Text>
+      ) : null}
       {loadError ? <Banner tone="error">{loadError}</Banner> : null}
 
       {accepts ? (
@@ -289,6 +304,15 @@ export function PlaceReservations({
           {reservation.decision_note ? (
             <Text style={styles.muted}>Respuesta del lugar: {reservation.decision_note}</Text>
           ) : null}
+          <Button
+            label="Descargar PDF"
+            variant="secondary"
+            onPress={() =>
+              shareReservationPdf(reservation.id).catch((e: unknown) =>
+                Alert.alert('No pudimos abrir el PDF', message(e, 'Intentá de nuevo.')),
+              )
+            }
+          />
           {active(reservation) ? (
             <Button
               label="Cancelar reserva"

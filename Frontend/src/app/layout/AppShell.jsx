@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "@shared/hooks/useTheme";
 import { useLanguage } from "@shared/i18n";
@@ -9,6 +9,12 @@ import ShellFrame from "./thers/ShellFrame";
 import { shellVariantFor } from "./thers/navigation";
 import CreateCapsuleFlow from "@features/feed/components/CreateCapsuleFlow";
 import { mapNotification } from "@features/feed/lib/mapNotification";
+
+import { TERO_ENABLED } from "@features/tero/config";
+
+// Tero (ADR-041): solo se descarga si el interruptor está encendido; con VITE_TERO_ENABLED
+// apagado no pesa nada en el bundle de la app.
+const TeroLauncher = lazy(() => import("@features/tero/components/TeroLauncher"));
 
 function authHeaders() {
   return { Authorization: `Bearer ${getStoredToken()}` };
@@ -21,8 +27,14 @@ export default function AppShell() {
   // ProtectedRoute (app/router/ProtectedRoute.jsx), que envuelve esta rama de
   // rutas y solo renderiza AppShell cuando isAuthenticated es true. Acá solo
   // se consume el usuario ya resuelto por AuthProvider.
-  const { user: currentUser, updateProfile, uploadProfileImage, removeProfileImage, logout } =
-    useAuth();
+  const {
+    user: currentUser,
+    updateProfile,
+    uploadProfileImage,
+    removeProfileImage,
+    logout,
+    refreshUser,
+  } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { t } = useLanguage();
   const toast = useToast();
@@ -31,6 +43,21 @@ export default function AppShell() {
   // -- "Cápsula" sigue siendo el nombre de producto para un post, ya usado en
   // toda la UI (Home.jsx, Profile.jsx); ya no es mockCapsules.
   const [capsules, setCapsules] = useState([]);
+  // Publicaciones que NO son del feed (perfil ajeno, Explorar; ADR-049/050). Viven en `capsules` para
+  // que me gusta, comentarios y seguir funcionen igual, pero no se exponen en la lista del feed.
+  const [extraIds, setExtraIds] = useState(() => new Set());
+  const extraIdsRef = useRef(extraIds);
+  extraIdsRef.current = extraIds;
+  const feedCapsules = useMemo(() => capsules.filter((c) => !extraIds.has(c.id)), [capsules, extraIds]);
+  const adoptCapsules = useCallback((extra) => {
+    setCapsules((current) => {
+      const known = new Set(current.map((c) => c.id));
+      const fresh = extra.filter((c) => !known.has(c.id));
+      if (fresh.length === 0) return current;
+      setExtraIds((ids) => new Set([...ids, ...fresh.map((c) => c.id)]));
+      return [...current, ...fresh];
+    });
+  }, []);
   const [capsulesLoading, setCapsulesLoading] = useState(true);
   const [followingIds, setFollowingIds] = useState(() => new Set());
   // `notifications` = notificaciones reales (GET /api/notifications,
@@ -42,6 +69,9 @@ export default function AppShell() {
   // criterio que `capsules`/`notifications`: se carga una vez acá, no en
   // cada página que la necesita).
   const [conversations, setConversations] = useState([]);
+  // `groups` = chats grupales (GET /api/groups, ADR-048): viven junto a las conversaciones directas
+  // (misma lista de Messages.jsx, mismo badge de no leídos).
+  const [groups, setGroups] = useState([]);
   const [isComposerOpen, setComposerOpen] = useState(false);
   // El drawer de navegación móvil sustituye al buscador/menú desplegable que
   // antes vivían en el header: ahora el buscador es un formulario real del
@@ -55,7 +85,13 @@ export default function AppShell() {
       setCapsulesLoading(true);
       try {
         const res = await api.get("/posts", { headers: authHeaders() });
-        if (!cancelled) setCapsules(res.data.posts);
+        if (!cancelled) {
+          const fresh = res.data.posts;
+          setCapsules((current) => [
+            ...fresh,
+            ...current.filter((c) => extraIdsRef.current.has(c.id) && !fresh.some((f) => f.id === c.id)),
+          ]);
+        }
       } catch (error) {
         if (!cancelled) toast.error(getErrorMessage(error, t));
       } finally {
@@ -86,6 +122,12 @@ export default function AppShell() {
       } catch (error) {
         if (!cancelled) toast.error(getErrorMessage(error, t));
       }
+      try {
+        const res = await api.get("/groups", { headers: authHeaders() });
+        if (!cancelled) setGroups(res.data.groups);
+      } catch {
+        // Los grupos son un añadido a la lista: si fallan, las conversaciones siguen.
+      }
     }
 
     loadPosts();
@@ -98,8 +140,10 @@ export default function AppShell() {
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
   const unreadMessages = useMemo(
-    () => conversations.reduce((sum, c) => sum + c.unread_count, 0),
-    [conversations]
+    () =>
+      conversations.reduce((sum, c) => sum + c.unread_count, 0) +
+      groups.reduce((sum, g) => sum + g.unread_count, 0),
+    [conversations, groups]
   );
 
   // Messages.jsx llama a esto después de mandar un mensaje o de abrir un
@@ -114,6 +158,12 @@ export default function AppShell() {
     } catch {
       // Silencioso: no es una acción disparada por el usuario, es una
       // resincronización de fondo -- un fallo puntual no amerita un Toast.
+    }
+    try {
+      const res = await api.get("/groups", { headers: authHeaders() });
+      setGroups(res.data.groups);
+    } catch {
+      // Igual que arriba.
     }
   };
 
@@ -131,6 +181,26 @@ export default function AppShell() {
       // Silencioso, mismo motivo que reloadConversations.
     }
   };
+
+  // Tero (ADR-041): tras confirmar una acción que cambió datos reales, se vuelve a pedir
+  // lo que la pantalla muestra, en silencio (sin spinners ni Toast: la tarjeta de Tero ya
+  // le dijo a la persona qué pasó). Seguir/dejar de seguir cambia `follow_status` de los
+  // autores del feed; editar el perfil cambia el usuario de la sesión.
+  const handleTeroAction = useCallback(
+    async (card) => {
+      if (card.kind === "update_profile") {
+        refreshUser();
+        return;
+      }
+      try {
+        const res = await api.get("/posts", { headers: authHeaders() });
+        setCapsules(res.data.posts);
+      } catch {
+        // Silencioso, mismo criterio que reloadConversations.
+      }
+    },
+    [refreshUser]
+  );
 
   const handleToggleFollow = (id) => {
     setFollowingIds((prev) => {
@@ -183,13 +253,15 @@ export default function AppShell() {
   // `images` (ADR-039): sin imágenes se manda JSON, como siempre; con ellas,
   // multipart/form-data (el navegador pone el boundary solo, por eso no se fija
   // `Content-Type` a mano).
-  const handleCreateCapsule = async (content, isSensitive = false, images = []) => {
+  // `video` (ADR-046): un solo archivo en el campo `video`, excluyente con las imágenes.
+  const handleCreateCapsule = async (content, isSensitive = false, images = [], video = null) => {
     let body = { content, is_sensitive: isSensitive };
-    if (images.length > 0) {
+    if (images.length > 0 || video) {
       body = new FormData();
       body.append("content", content);
       body.append("is_sensitive", String(isSensitive));
       images.forEach((file) => body.append("images", file));
+      if (video) body.append("video", video);
     }
     const res = await api.post("/posts", body, { headers: authHeaders() });
     setCapsules((prev) => [res.data.post, ...prev]);
@@ -425,11 +497,14 @@ export default function AppShell() {
       <Outlet
         context={{
           currentUser,
-          capsules,
+          capsules: feedCapsules,
+          allCapsules: capsules,
+          adoptCapsules,
           capsulesLoading,
           followingIds,
           notifications,
           conversations,
+          groups,
           onReloadConversations: reloadConversations,
           theme,
           toggleTheme,
@@ -457,6 +532,12 @@ export default function AppShell() {
           onClose={() => setComposerOpen(false)}
           onSubmit={handleCreateCapsule}
         />
+      )}
+
+      {TERO_ENABLED && (
+        <Suspense fallback={null}>
+          <TeroLauncher onActionConfirmed={handleTeroAction} />
+        </Suspense>
       )}
     </ShellFrame>
   );

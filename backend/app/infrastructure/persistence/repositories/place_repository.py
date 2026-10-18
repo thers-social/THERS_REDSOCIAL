@@ -6,7 +6,8 @@
 # únicos fragmentos construidos dinámicamente (nombres de columna en `update_place`)
 # salen de un diccionario fijo de este módulo, jamás de la petición.
 #
-# Lectura pública: solo lugares activos y con `verification_status = 'verified'`.
+# Lectura pública: solo lugares activos y con `verification_status` 'verified' o 'unverified'
+# (ADR-043: los importados de OpenStreetMap se ven, con la etiqueta «sin verificar»).
 # Las rutas de moderación (`*_admin`) ven todos los estados.
 
 import json
@@ -22,14 +23,14 @@ from app.domain.places import kinds
 from app.domain.places.repositories import PlaceRepository
 from app.extensions import db
 
-_PUBLIC = "p.is_active AND p.verification_status = 'verified' AND c.is_active"
+_PUBLIC = "p.is_active AND p.verification_status IN ('verified', 'unverified') AND c.is_active"
 _LIKE_ESCAPE = "!"
 
 # `geography` -> `geometry` para extraer longitud/latitud con ST_X/ST_Y.
 _BASE_COLUMNS = """
     p.id, p.name, p.slug, p.description, p.address, p.municipality, p.department,
     p.phone, p.website, p.verification_status, p.source, p.coordinate_source,
-    p.last_verified_at,
+    p.last_verified_at, p.image_key,
     ST_Y(p.location::geometry) AS latitude, ST_X(p.location::geometry) AS longitude,
     c.id AS category_id, c.slug AS category_slug, c.name AS category_name,
     (SELECT round(avg(rv.rating), 1) FROM place_reviews rv
@@ -77,8 +78,8 @@ def _claim_columns(user_id):
     )
     return (
         "EXISTS (SELECT 1 FROM place_managers pm WHERE pm.place_id = p.id) AS is_claimed, "
-        "EXISTS (SELECT 1 FROM place_reservation_settings rs WHERE rs.place_id = p.id "
-        "AND rs.enabled) AS accepts_reservations, "
+        "NOT EXISTS (SELECT 1 FROM place_reservation_settings rs WHERE rs.place_id = p.id "
+        "AND NOT rs.enabled) AS accepts_reservations, "
         f"{mine} AS managed_by_me"
     )
 
@@ -124,6 +125,20 @@ class SQLAlchemyPlaceRepository(PlaceRepository):
                 "ORDER BY p.name, p.id LIMIT :limit OFFSET :offset"
             ),
             {"category": category_slug, "limit": limit, "offset": offset, **_uid(user_id)},
+        ).mappings()
+        return [dict(row) for row in rows]
+
+    def top_places(self, category_slug, limit, user_id=None):
+        """Los mejor valorados (promedio de reseñas visibles, luego cantidad de reseñas); a igualdad,
+        los que ya tienen imagen y, al final, por nombre. Sin ubicación de nadie (ADR-053)."""
+        rows = db.session.execute(
+            text(
+                f"SELECT {_columns(user_id)} {_FROM} "
+                f"WHERE {_PUBLIC} AND (CAST(:category AS text) IS NULL OR c.slug = :category) "
+                "ORDER BY rating_average DESC NULLS LAST, reviews_count DESC, "
+                "(p.image_key IS NULL), p.name, p.id LIMIT :limit"
+            ),
+            {"category": category_slug, "limit": limit, **_uid(user_id)},
         ).mappings()
         return [dict(row) for row in rows]
 
@@ -679,6 +694,24 @@ class SQLAlchemyPlaceRepository(PlaceRepository):
             self._audit(actor_id, kinds.AUDIT_PLACE_UPDATED, "place", place_id, audit)
         db.session.commit()
         return True
+
+    def set_image(self, actor_id, place_id, key):
+        """Fija (o quita, con `None`) la imagen del lugar y audita el cambio en la misma transacción.
+        Devuelve `(existe, clave_anterior)`: la anterior se borra del almacenamiento fuera de aquí."""
+        row = db.session.execute(
+            text("SELECT image_key FROM places WHERE id = :id FOR UPDATE"), {"id": str(place_id)}
+        ).first()
+        if row is None:
+            db.session.rollback()
+            return False, None
+        previous = row[0]
+        db.session.execute(
+            text("UPDATE places SET image_key = :k, updated_at = now() WHERE id = :id"),
+            {"k": key, "id": str(place_id)},
+        )
+        self._audit(actor_id, kinds.AUDIT_PLACE_UPDATED, "place", place_id, {"image": [bool(previous), bool(key)]})
+        db.session.commit()
+        return True, previous
 
     def set_place_status(self, actor_id, place_id, changes):
         """Cambia `verification_status` y/o `is_active`. Al verificar, registra quién y

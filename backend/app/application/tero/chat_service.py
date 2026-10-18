@@ -7,6 +7,7 @@
 # la ejecuta con la identidad del JWT. El resultado vuelve al modelo como DATO (`tool_result`),
 # nunca como instrucción (ADR-041 §6.1).
 
+import base64
 import json
 import logging
 import time
@@ -78,6 +79,7 @@ def _execute_tool(call, user_id, deps, allow_proposals, cards):
 
 def send_message(
     data, settings, provider, usage_repository, now=None, user_id=None, tool_deps=None,
+    prepared_image=None,
 ):
     request = chat.parse_chat_request(data)
 
@@ -107,6 +109,25 @@ def send_message(
                 {"type": "text", "text": request.message},
                 {"type": "text", "text": hint},
             ]
+    # Imagen (ADR-046): solo en la pregunta actual, nunca en el historial (que es solo texto). El bloque de
+    # imagen va PRIMERO, como recomienda el proveedor. Ya viene decodificada, reducida y sin metadatos.
+    if prepared_image is not None:
+        image_bytes, media_type = prepared_image
+        blocks = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": base64.b64encode(image_bytes).decode("ascii"),
+                },
+            }
+        ]
+        if isinstance(last_user_content, str):
+            blocks.append({"type": "text", "text": last_user_content})
+        else:
+            blocks.extend(last_user_content)
+        last_user_content = blocks
     messages = request.history + [{"role": "user", "content": last_user_content}]
 
     input_tokens = output_tokens = 0

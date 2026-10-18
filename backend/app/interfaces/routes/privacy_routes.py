@@ -65,6 +65,8 @@ _BOOLEAN_FIELDS = (
     "show_activity_status",
     # ADR-030-content-preferences.md
     "hide_sensitive_content",
+    # ADR-041 §7: resumen semanal por correo (n8n). Apagado por defecto.
+    "weekly_summary_email",
 )
 _AUDIENCE_FIELDS = (
     "who_can_mention",

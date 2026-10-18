@@ -1,0 +1,260 @@
+{
+  "name": "THERS - Reporte resuelto",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "thers-report-resolved",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Webhook THERS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "thers-report-resolved"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Verifica que el mensaje viene de THERS y no es una repetición. NADA se envía si algo falla.\n// El cuerpo se firma EXACTO (bytes), por eso el Webhook guarda el cuerpo crudo (rawBody).\nconst crypto = require('crypto');\n\nconst secret = $env.N8N_WEBHOOK_SECRET || '';\nconst headers = $input.first().json.headers || {};\nconst timestamp = headers['x-thers-timestamp'];\nconst signature = headers['x-thers-signature'] || '';\nconst idempotencyKey = headers['x-thers-idempotency-key'] || '';\nconst fail = (reason) => [{ json: { valid: false, reason } }];\n\nif (!secret) return fail('sin secreto configurado');\n\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\n\n// 1) Marca de tiempo reciente (5 minutos): una captura no se puede repetir pasado ese rato.\nconst now = Math.floor(Date.now() / 1000);\nconst ts = Number.parseInt(timestamp, 10);\nif (!Number.isFinite(ts) || Math.abs(now - ts) > 300) return fail('marca de tiempo');\n\n// 2) Firma HMAC-SHA256 de \"<marca>.<cuerpo>\", comparada en tiempo constante.\nconst expected = 'sha256=' + crypto.createHmac('sha256', secret).update(ts + '.').update(raw).digest('hex');\nconst a = Buffer.from(expected);\nconst b = Buffer.from(signature);\nif (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return fail('firma');\n\n// 3) Idempotencia: la misma clave no se procesa dos veces (los reintentos de THERS son seguros).\n//    Se marca ANTES de enviar: es \"como máximo una vez\"; perder un correo es mejor que mandar dos.\nconst seen = $getWorkflowStaticData('global');\nseen.keys = seen.keys || [];\nif (seen.keys.includes(idempotencyKey)) return [{ json: { valid: true, duplicate: true } }];\nseen.keys.push(idempotencyKey);\nif (seen.keys.length > 500) seen.keys.shift();\n\nreturn [{ json: { valid: true, duplicate: false, payload: JSON.parse(raw.toString('utf8')) } }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Verificar firma",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Firma valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"msg\":\"firma invalida\"}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Responder 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Responder 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $('Verificar firma').first().json.duplicate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "No es repeticion",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Redacta el correo. Es GENÉRICO a propósito: no dice qué se hizo, a quién ni por qué\n// (ADR-032: la nota de quien modera y la identidad de la otra cuenta no se cuentan).\nconst { payload } = $('Verificar firma').first().json;\n\nconst texts = {\n  es: {\n    subject: 'Revisamos tu reporte',\n    actioned: 'Gracias por avisarnos. Revisamos tu reporte y tomamos medidas. Por seguridad no damos más detalles sobre otras cuentas. Si ves algo más, puedes volver a reportarlo desde la app.',\n    dismissed: 'Gracias por avisarnos. Revisamos tu reporte y, con la información disponible, no encontramos una infracción de nuestras normas. Si crees que nos falta contexto, puedes volver a reportarlo con más detalle desde la app.',\n  },\n  en: {\n    subject: 'We reviewed your report',\n    actioned: 'Thanks for letting us know. We reviewed your report and took action. For safety we do not share details about other accounts. If you see anything else, you can report it again from the app.',\n    dismissed: 'Thanks for letting us know. We reviewed your report and, with the information available, did not find a violation of our rules. If you think we are missing context, you can report it again with more detail from the app.',\n  },\n};\nconst t = texts[payload.language] || texts.es;\nconst body = t[payload.outcome];\nif (!body) throw new Error('desenlace desconocido');\n\nreturn [{ json: { to: payload.recipient_email, subject: t.subject, text: body + '\\n\\n— THERS' } }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "Redactar correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RESEND_API_URL || 'https://api.resend.com/emails' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.RESEND_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ from: $env.EMAIL_FROM || 'onboarding@resend.dev', to: [$json.to], subject: $json.subject, text: $json.text }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000008",
+      "name": "Enviar con Resend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -160
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook THERS": {
+      "main": [
+        [
+          {
+            "node": "Verificar firma",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar firma": {
+      "main": [
+        [
+          {
+            "node": "Firma valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firma valida": {
+      "main": [
+        [
+          {
+            "node": "Responder 200",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder 200": {
+      "main": [
+        [
+          {
+            "node": "No es repeticion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No es repeticion": {
+      "main": [
+        [
+          {
+            "node": "Redactar correo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Redactar correo": {
+      "main": [
+        [
+          {
+            "node": "Enviar con Resend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

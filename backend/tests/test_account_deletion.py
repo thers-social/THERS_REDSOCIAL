@@ -487,6 +487,8 @@ class TestEveryTableThatPointsToUsersIsDeleted:
         set_null_on_purpose = {
             "reports", "places", "place_reports", "admin_audit_log",
             "place_plan_members", "place_claims", "place_managers", "place_reservations", "place_quotes",
+            # ADR-048: un chat grupal sobrevive a quien lo creó; `created_by` queda en NULL.
+            "group_chats",
             "moderation_appeals",
         }
         not_cascading = [

@@ -37,7 +37,12 @@ export type IconName =
   | 'userAdd'
   | 'pin'
   | 'locate'
-  | 'phone';
+  | 'phone'
+  | 'mic'
+  | 'play'
+  | 'pause'
+  | 'stop'
+  | 'close';
 
 type Props = {
   name: IconName;
@@ -234,6 +239,21 @@ export function Icon({ name, size = 24, color, filled = false }: Props) {
       {name === 'phone' ? (
         <Path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" {...line} />
       ) : null}
+      {name === 'mic' ? (
+        <>
+          <Rect x="9" y="2.5" width="6" height="12" rx="3" {...line} />
+          <Path d="M5 11a7 7 0 0 0 14 0M12 18v3.5M8.5 21.5h7" {...line} />
+        </>
+      ) : null}
+      {name === 'play' ? <Path d="M8 5.5v13l11-6.5z" {...stroke} fill={tint} /> : null}
+      {name === 'pause' ? (
+        <>
+          <Rect x="6.5" y="5" width="4" height="14" rx="1" {...stroke} fill={tint} />
+          <Rect x="13.5" y="5" width="4" height="14" rx="1" {...stroke} fill={tint} />
+        </>
+      ) : null}
+      {name === 'stop' ? <Rect x="6" y="6" width="12" height="12" rx="2" {...stroke} fill={tint} /> : null}
+      {name === 'close' ? <Path d="M6 6l12 12M18 6 6 18" {...line} /> : null}
     </Svg>
   );
 }

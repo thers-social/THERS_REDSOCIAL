@@ -16,6 +16,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { unregisterPushDevice } from '@features/push/push';
 import { ApiError, request, revokeSessionOnServer, waitForRefresh } from '@shared/lib/api';
 import { clearSession, getRefreshToken, getToken, setSession } from '@shared/lib/session';
 
@@ -176,6 +177,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // El access token ya emitido sigue siendo válido hasta expirar (<= 15 min):
     // el backend no tiene lista de revocación de access tokens.
     await waitForRefresh();
+    // Antes de revocar la sesión: el servidor necesita el token de acceso para quitar este teléfono (ADR-053).
+    await unregisterPushDevice();
     await revokeSessionOnServer();
     await clearSession();
     setUser(null);

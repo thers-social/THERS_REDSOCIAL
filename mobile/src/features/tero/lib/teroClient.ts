@@ -20,6 +20,8 @@ export type SendOptions = {
   postContent?: string | null;
   /** Conversación previa; el servidor no guarda historial. */
   history?: ChatTurn[];
+  /** Imagen adjunta (ADR-046), ya reducida y en base64. Solo la usa el cliente real. */
+  image?: { media_type: string; data: string } | null;
   signal?: AbortSignal;
 };
 
@@ -71,7 +73,7 @@ export const liveTeroClient: TeroClient = {
     const payload = await request<unknown>('/tero/chat', {
       method: 'POST',
       authenticated: true,
-      body: chatBody(text, context, options?.history ?? []),
+      body: chatBody(text, context, options?.history ?? [], options?.image ?? null),
       timeoutMs: CHAT_TIMEOUT_MS,
       signal: options?.signal,
     });

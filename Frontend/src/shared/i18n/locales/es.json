@@ -27,7 +27,6 @@
     "ariaMobile": "Navegación inferior",
     "videos": "Videos",
     "capsules": "Cápsulas",
-    "radar": "Ubicación",
     "create": "Crear",
     "hasUnread": "Tienes elementos sin leer",
     "openMenu": "Abrir menú de navegación",
@@ -346,6 +345,9 @@
     "title": "Lugares",
     "subtitle": "Descubre qué hay cerca de ti.",
     "verified": "Verificado",
+    "unverified": "Sin verificar",
+    "unverifiedNotice": "Este lugar aún no ha sido verificado: los datos pueden estar incompletos o desactualizados.",
+    "osmAttribution": "Datos © colaboradores de OpenStreetMap.",
     "panel": {
       "aria": "Lista de lugares"
     },
@@ -389,7 +391,7 @@
     },
     "route": {
       "title": "Cómo llegar",
-      "privacy": "Al pulsar el botón, tu ubicación aproximada (a unos 100 m) se envía a nuestro servidor y a OpenRouteService para calcular la ruta. No la guardamos.",
+      "privacy": "Al pulsar el botón, tu ubicación aproximada (a unos 100 m) se envía a nuestro servidor y a OpenRouteService (o, si este no responde, al enrutador público de OpenStreetMap) para calcular la ruta. No la guardamos.",
       "profile": "Cómo te mueves",
       "profiles": { "walk": "A pie", "bike": "En bici", "car": "En carro" },
       "steps": "Indicaciones",
@@ -397,7 +399,7 @@
       "noSteps": "Esta ruta no trae indicaciones calle por calle.",
       "noStreet": "Vía sin nombre",
       "start": "Cómo llegar",
-      "attribution": "Ruta: OpenRouteService · Datos © colaboradores de OpenStreetMap",
+      "attribution": "Ruta: OpenRouteService / OpenStreetMap · Datos © colaboradores de OpenStreetMap",
       "dur": {
         "seconds": "{{n}} s",
         "minutes": "{{n}} min",
@@ -436,7 +438,8 @@
     "detail": {
       "back": "Volver a la lista",
       "notFound": "Este lugar no existe o ya no está disponible.",
-      "verifiedOn": "el {{date}}"
+      "verifiedOn": "el {{date}}",
+      "imageAlt": "Imagen de {{name}}"
     },
     "pulse": { "title": "Actividad reciente", "moving": "Con movimiento", "active": "Activo", "buzzing": "Muy activo", "hint": "Últimos 7 días, sin mostrar quién." },
     "report": {
@@ -589,6 +592,18 @@
       "removed": "Respuesta quitada"
     },
     "manage": {
+      "image": {
+        "title": "Imagen del lugar",
+        "current": "Imagen actual del lugar",
+        "none": "Sin imagen",
+        "add": "Subir imagen",
+        "change": "Cambiar imagen",
+        "remove": "Quitar imagen",
+        "working": "Subiendo…",
+        "saved": "Imagen guardada",
+        "removed": "Imagen quitada",
+        "hint": "Un logo o una foto que identifique tu negocio. JPG, PNG o WebP, hasta 5 MB. Se muestra en el mapa, las listas y la ficha."
+      },
       "title": "Panel del negocio",
       "save": "Guardar cambios",
       "saving": "Guardando…",
@@ -606,7 +621,10 @@
       }
     },
     "reservations": {
+      "pdf": "Descargar PDF",
+      "defaultHours": "Este lugar no publicó su horario: te mostramos un horario de 10:00 a 21:00. Es una solicitud y el lugar la confirma o la rechaza.",
       "title": "Reservar",
+      "unclaimed": "Este negocio aún no ha reclamado su lugar en THERS: tu solicitud puede no ser atendida.",
       "book": "Reservar",
       "sent": "Solicitud enviada",
       "cancelled": "Reserva cancelada",
@@ -670,6 +688,7 @@
       "seatsLeft": "{{count}} lugares"
     },
     "quotes": {
+      "empty": "Este lugar todavía no publicó su lista de precios, así que aún no se puede pedir una cotización. Cuando la cargue, aparecerá aquí el botón para pedirla.",
       "title": "Cotizar",
       "request": "Pedir cotización",
       "sending": "Calculando…",
@@ -709,6 +728,192 @@
         "rejected": "Cotización rechazada",
         "expired": "Vencida"
       }
+    }
+  },
+  "groups": {
+    "new": "Nuevo grupo",
+    "label": "Grupo",
+    "createTitle": "Crear un grupo",
+    "nameLabel": "Nombre del grupo",
+    "membersLabel": "Personas (de tus conversaciones)",
+    "noPeople": "Aún no tienes conversaciones. Escribe a alguien primero y podrás añadirle a un grupo.",
+    "create": "Crear grupo",
+    "creating": "Creando…",
+    "cancel": "Cancelar",
+    "created": "Grupo creado",
+    "members": "{{count}} personas",
+    "info": "Información del grupo",
+    "admin": "Administrador",
+    "you": "tú",
+    "save": "Guardar",
+    "addPeople": "Añadir personas",
+    "noOneToAdd": "Todas las personas con las que chateas ya están en el grupo.",
+    "add": "Añadir",
+    "remove": "Quitar",
+    "makeAdmin": "Hacer administrador",
+    "leave": "Salir del grupo",
+    "leaveConfirmTitle": "¿Salir de este grupo?",
+    "leaveConfirmText": "Dejarás de recibir sus mensajes. Para volver, un administrador tendrá que añadirte.",
+    "left": "Saliste del grupo",
+    "close": "Cerrar",
+    "openInfo": "Ver información del grupo",
+    "empty": "Todavía no hay mensajes en este grupo."
+  },
+  "postActions": {
+    "save": {
+      "add": "Guardar publicación",
+      "remove": "Quitar de guardados",
+      "added": "Publicación guardada",
+      "removed": "Quitada de guardados"
+    },
+    "saved": {
+      "menu": "Guardados",
+      "title": "Guardados",
+      "subtitle": "Solo tú ves lo que guardas. No se avisa a nadie.",
+      "empty": "Aún no has guardado publicaciones. Toca el marcador de una publicación para verla aquí."
+    },
+    "share": {
+      "open": "Compartir publicación",
+      "title": "Enviar la publicación de {{name}}",
+      "commentLabel": "Comentario (opcional)",
+      "people": "Personas",
+      "empty": "Aún no tienes conversaciones. Escribe a alguien primero y podrás enviarle publicaciones.",
+      "send": "Enviar",
+      "sending": "Enviando…",
+      "cancel": "Cancelar",
+      "done": "Publicación enviada a {{name}}"
+    },
+    "card": {
+      "unavailable": "Esta publicación ya no está disponible",
+      "sensitive": "Contenido marcado como sensible por su autor.",
+      "preview": "📝 Publicación"
+    }
+  },
+  "tero": {
+    "name": "Tero",
+    "tagline": "Tu asistente en THERS",
+    "thinking": "Pensando…",
+    "open": "Abrir a Tero, tu asistente",
+    "close": "Cerrar a Tero",
+    "clear": "Borrar la conversación",
+    "retry": "Reintentar",
+    "send": "Enviar mensaje",
+    "inputLabel": "Escríbele a Tero",
+    "placeholder": "Pregúntale algo a Tero…",
+    "welcome": "¡Hola! Soy Tero. Puedo ayudarte a encontrar gente, mejorar tu perfil y resolver dudas sobre THERS. Si te propongo algo, tú decides si se hace.",
+    "privacyNote": "La conversación no se guarda: se borra al cerrar la pestaña.",
+    "speech": {
+      "on": "Tero habla: activado. Pulsa para silenciarlo",
+      "off": "Tero habla: apagado. Pulsa para que lea sus respuestas",
+      "note": "Tero lee sus respuestas con la voz de tu navegador; el texto no sale de tu dispositivo.",
+      "voice": { "es": "Voz en español", "en": "Voz en inglés" },
+      "auto": "Automática (la mejor disponible)"
+    },
+  "voice": {
+    "start": "Dictarle a Tero",
+    "stop": "Dejar de dictar",
+    "listening": "Escuchando… habla ahora",
+    "privacy": "El dictado lo procesa tu navegador (en Chrome, Google; en Safari, Apple). THERS no recibe el audio: solo el texto que tú envíes.",
+    "errors": {
+      "denied": "No tenemos permiso para usar el micrófono. Actívalo en la configuración del navegador y vuelve a intentarlo.",
+      "noSpeech": "No te escuché. Pulsa el micrófono y habla de nuevo.",
+      "noDevice": "No encontramos ningún micrófono en este dispositivo.",
+      "network": "El dictado necesita conexión. Revisa tu internet e inténtalo de nuevo.",
+      "language": "Tu navegador no reconoce este idioma para dictar.",
+      "busy": "El micrófono está ocupado por otra aplicación.",
+      "insecure": "El dictado solo funciona en una conexión segura (https).",
+      "unsupported": "Este navegador no puede dictar.",
+      "generic": "No se pudo dictar. Inténtalo de nuevo."
+    }
+  },
+    "suggestions": {
+      "whoToFollow": "¿A quién puedo seguir?",
+      "recommendPlace": "Recomiéndame un lugar",
+      "reservePlace": "Quiero reservar una mesa",
+      "improveBio": "Ayúdame a mejorar mi biografía",
+      "whatCanYouDo": "¿Qué puedes hacer?"
+    },
+    "input": {
+      "empty": "Escribe una pregunta para Tero.",
+      "tooLong": "Máximo {{max}} caracteres."
+    },
+    "image": {
+      "attach": "Adjuntar una imagen para Tero",
+      "preview": "Imagen que vas a enviar a Tero",
+      "sent": "Imagen que enviaste a Tero",
+      "remove": "Quitar imagen",
+      "preparing": "Preparando la imagen…",
+      "privacy": "La imagen se envía a Anthropic, la IA de Tero, para que la vea. THERS no la guarda.",
+      "failed": "No se pudo preparar la imagen. Prueba con otra."
+    },
+    "errors": {
+      "imagesDisabled": "Tero todavía no puede ver imágenes. Pregúntale con texto.",
+      "offline": "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
+      "rateLimited": "Estás enviando muchos mensajes. Espera un momento.",
+      "disabled": "Tero no está disponible en este momento.",
+      "unavailable": "Tero no está disponible ahora. Inténtalo más tarde.",
+      "badRequest": "Tero no pudo entender el mensaje. Prueba con otro texto.",
+      "generic": "Tero no pudo responder. Puedes reintentar."
+    },
+    "card": {
+      "aria": "Acción propuesta por Tero",
+      "notDoneYet": "Propuesta · todavía no se ha hecho nada",
+      "confirm": "Confirmar",
+      "confirming": "Confirmando…",
+      "cancel": "Cancelar",
+      "cancelling": "Cancelando…",
+      "status": {
+        "confirmed": "Hecho",
+        "cancelled": "Cancelada",
+        "expired": "Venció",
+        "unavailable": "No disponible",
+        "failed": "No se pudo completar"
+      },
+      "notes": {
+        "expired": "Venció. Pídele a Tero que la prepare de nuevo.",
+        "offline": "Sin conexión. Inténtalo de nuevo.",
+        "rateLimited": "Demasiados intentos. Espera un momento.",
+        "gone": "Esta acción ya no existe.",
+        "alreadyCancelled": "Ya estaba cancelada.",
+        "alreadyConfirmed": "Ya estaba confirmada.",
+        "failed": "No se pudo completar la acción.",
+        "unavailable": "Las acciones de Tero no están disponibles ahora.",
+        "retry": "No se pudo completar. Inténtalo de nuevo.",
+        "done": "Listo.",
+        "profileUpdated": "Listo, tu perfil se actualizó.",
+        "requestSent": "Listo, enviaste la solicitud.",
+        "nowFollowing": "Listo, ahora lo sigues.",
+        "unfollowed": "Listo, ya no lo sigues.",
+        "cancelled": "Cancelada. No se hizo nada."
+      }
+    }
+  },
+  "voice": {
+    "record": "Grabar una nota de voz",
+    "recording": "Grabando una nota de voz",
+    "requesting": "Esperando permiso…",
+    "maxHint": "Máximo {{max}} minutos",
+    "stop": "Detener la grabación",
+    "cancel": "Cancelar la grabación",
+    "preview": "Tu nota de voz, lista para enviar",
+    "discard": "Descartar la nota de voz",
+    "send": "Enviar la nota de voz",
+    "play": "Reproducir la nota de voz",
+    "pause": "Pausar la nota de voz",
+    "seek": "Posición de la nota de voz",
+    "note": "Nota de voz",
+    "preview_list": "🎤 Nota de voz",
+    "errors": {
+      "denied": "No tenemos permiso para usar el micrófono. Actívalo en la configuración del navegador y vuelve a intentarlo.",
+      "noDevice": "No encontramos ningún micrófono en este dispositivo.",
+      "busy": "El micrófono está ocupado por otra aplicación. Ciérrala e inténtalo de nuevo.",
+      "insecure": "El micrófono solo funciona en una conexión segura (https).",
+      "unsupported": "Este navegador no puede grabar audio.",
+      "tooShort": "La nota de voz es demasiado corta. Mantén la grabación un poco más.",
+      "tooBig": "La nota de voz pesa demasiado. Graba una más corta.",
+      "disabled": "Las notas de voz no están disponibles ahora.",
+      "generic": "No se pudo grabar el audio. Inténtalo de nuevo.",
+      "playback": "No se pudo reproducir"
     }
   }
 }

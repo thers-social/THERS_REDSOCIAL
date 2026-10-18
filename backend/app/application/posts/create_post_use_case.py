@@ -7,7 +7,7 @@
 # hacerlo DESPUÉS de crear la fila, porque una mención necesita el `post_id`
 # al que apunta.
 
-from app.application.media.attachments import discard_files, store_attachments
+from app.application.media.attachments import discard_files, store_attachments, store_video
 from app.application.mentions.resolve_mentions import resolve_post_mentions
 from app.application.posts.post_presenter import to_public_post
 from app.domain.posts.exceptions import PostPlaceNotFoundError
@@ -17,7 +17,7 @@ def create_post(
     author_id, content, post_repository, user_repository, follow_repository,
     mention_repository, notification_repository, restriction_repository,
     is_sensitive=False, prepared_images=None, media_repository=None, media_storage=None,
-    place_id=None,
+    place_id=None, prepared_video=None, video_repository=None,
 ):
     # Imágenes (ADR-039). `prepared_images` ya viene decodificada, sin EXIF y
     # reducida (la route la procesó antes de llegar acá). Se guardan los
@@ -31,6 +31,14 @@ def create_post(
         raise PostPlaceNotFoundError()
 
     stored = store_attachments(prepared_images, "post", media_storage) if prepared_images else []
+    # Video (ADR-046): imágenes y video son excluyentes (lo garantiza la route); mismo criterio.
+    stored_video = None
+    try:
+        if prepared_video:
+            stored_video = store_video(prepared_video, media_storage)
+    except Exception:
+        discard_files([item["key"] for item in stored], media_storage)
+        raise
 
     try:
         post = post_repository.create(author_id, content, is_sensitive, place_id=place_id)
@@ -40,8 +48,16 @@ def create_post(
             except Exception:
                 post_repository.delete(post.id, author_id)
                 raise
+        if stored_video:
+            try:
+                video_repository.add_for_post(post.id, author_id, stored_video)
+            except Exception:
+                post_repository.delete(post.id, author_id)
+                raise
     except Exception:
         discard_files([item["key"] for item in stored], media_storage)
+        if stored_video:
+            discard_files([stored_video["key"], stored_video["thumb_key"]], media_storage)
         raise
 
     # Las menciones no autorizadas (username inexistente, o quien no acepta

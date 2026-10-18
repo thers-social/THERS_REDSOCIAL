@@ -142,19 +142,31 @@ def is_open_at(week, closures, moment):
     return False, "outside_hours"
 
 
+# Horario que se ofrece cuando el lugar no cargó el suyo (ADR-051): todos los días, de 10:00 a 21:00,
+# cada media hora. Es solo una propuesta: la reserva es una SOLICITUD que el lugar confirma o rechaza.
+DEFAULT_OPENS = time(10, 0)
+DEFAULT_CLOSES = time(21, 0)
+DEFAULT_STEP_MINUTES = 30
+
+
 def slots_for_day(week, closures, day, now=None):
-    """Horarios de entrada (cada 15 min) de un día, ya sin cierres ni horas pasadas.
-    Sin horario cargado devuelve [] (no hay forma de saber cuándo abre)."""
+    """Horarios de entrada de un día, ya sin cierres ni horas pasadas: cada 15 min dentro del horario
+    cargado; sin horario cargado, el horario por defecto (cada 30 min, ver arriba)."""
     if day in closures:
         return []
     now = now or datetime.now(timezone.utc)
     earliest = now + timedelta(minutes=kinds.MIN_LEAD_MINUTES)
     slots = []
-    for opens, closes in intervals_for(week, day):
+    step = kinds.SLOT_MINUTES
+    intervals = intervals_for(week, day)
+    if not week:
+        intervals = [(DEFAULT_OPENS, DEFAULT_CLOSES)]
+        step = DEFAULT_STEP_MINUTES
+    for opens, closes in intervals:
         cursor = datetime.combine(day, opens, tzinfo=PLACE_TZ)
         end = datetime.combine(day, closes, tzinfo=PLACE_TZ)
         while cursor < end:
             if cursor >= earliest:
                 slots.append(cursor.astimezone(timezone.utc))
-            cursor += timedelta(minutes=kinds.SLOT_MINUTES)
+            cursor += timedelta(minutes=step)
     return slots

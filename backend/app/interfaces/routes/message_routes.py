@@ -19,18 +19,35 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.application.rate_limiting import rate_limit_guard
 from app.domain.media.attachments import MAX_MESSAGE_IMAGES
+from app.domain.media.audio import (
+    MAX_VOICE_SECONDS,
+    MAX_VOICE_UPLOAD_BYTES,
+    AudioTooLargeError,
+    AudioTooLongError,
+    InvalidAudioError,
+)
 from app.domain.rate_limiting import policy
 from app.domain.rate_limiting.exceptions import RateLimitExceededError
+from app.infrastructure.media.audio_processor import process_voice
+from app.infrastructure.persistence.repositories.audio_attachment_repository import (
+    SQLAlchemyAudioAttachmentRepository,
+)
 from app.infrastructure.persistence.repositories.media_attachment_repository import (
     SQLAlchemyMediaAttachmentRepository,
+)
+from app.infrastructure.persistence.repositories.video_attachment_repository import (
+    SQLAlchemyVideoAttachmentRepository,
 )
 from app.infrastructure.persistence.repositories.rate_limit_repository import (
     SQLAlchemyRateLimitRepository,
 )
 from app.interfaces.image_upload import (
     process_files,
+    process_video_upload,
     read_request_data,
+    read_video_upload,
     too_many_images_response,
+    video_disabled_response,
 )
 from app.interfaces.rate_limited_response import rate_limited_response
 
@@ -47,6 +64,7 @@ from app.domain.messages.exceptions import (
     MessageNotFoundError,
     MessagesNotAllowedError,
     SharedPlaceNotFoundError,
+    SharedPostNotFoundError,
 )
 from app.domain.messages.validators import (
     MAX_CONTENT_LENGTH,
@@ -130,22 +148,45 @@ _follow_repository = SQLAlchemyFollowRepository()
 _restriction_repository = SQLAlchemyRestrictionRepository()
 # ADR-039: imagen adjunta y su límite de subidas.
 _media_repository = SQLAlchemyMediaAttachmentRepository()
+# ADR-042: nota de voz.
+_audio_repository = SQLAlchemyAudioAttachmentRepository()
+# ADR-046: video corto.
+_video_repository = SQLAlchemyVideoAttachmentRepository()
 _rate_limit_repository = SQLAlchemyRateLimitRepository()
 
 
-@messages_bp.route("/users/<uuid:user_id>/messages", methods=["POST"])
-@jwt_required()
-@profile_completed_required
-def create(user_id):
-    # Identidad exclusivamente del JWT -- nunca del body (mismo principio
-    # que el resto de endpoints protegidos).
-    sender_id = get_jwt_identity()
-
+def read_message_payload(sender_id):
+    """Lee y valida el cuerpo de un mensaje (texto, imágenes, nota de voz, video, lugar o publicación
+    compartidos, client_id) y prepara los adjuntos. Lo usan el mensaje directo y el de grupo (ADR-048).
+    Devuelve un dict con los datos listos, o -- si se rechaza -- la respuesta HTTP de error."""
     # JSON (como siempre) o multipart con la imagen en el campo `images` (ADR-039).
     data, files = read_request_data()
-    if not data and not files:
+    # Nota de voz (ADR-042): campo `audio` de la misma petición multipart (un solo archivo).
+    audio_upload = request.files.get("audio") if request.mimetype == "multipart/form-data" else None
+    if audio_upload is not None and not audio_upload.filename:
+        audio_upload = None
+
+    # Video corto (ADR-046): campo `video` de la misma petición multipart (un solo archivo).
+    video_upload = read_video_upload()
+
+    if not data and not files and audio_upload is None and video_upload is None:
         return jsonify({"msg": "No se enviaron datos"}), 400
     data = data or {}
+
+    if video_upload is not None:
+        if not current_app.config.get("VIDEO_UPLOADS_ENABLED"):
+            return video_disabled_response()
+        if files or audio_upload is not None:
+            return jsonify({"msg": "Un mensaje lleva imágenes, una nota de voz o un video, no varios a la vez"}), 400
+
+    if audio_upload is not None:
+        # Apagado por defecto: con el interruptor apagado ni siquiera se mira el archivo.
+        if not current_app.config.get("VOICE_MESSAGES_ENABLED"):
+            return jsonify(
+                {"msg": "Las notas de voz no están disponibles ahora", "code": "voice_disabled"}
+            ), 503
+        if files:
+            return jsonify({"msg": "No puedes enviar imágenes y una nota de voz en el mismo mensaje"}), 400
 
     if len(files) > MAX_MESSAGE_IMAGES:
         return too_many_images_response(MAX_MESSAGE_IMAGES)
@@ -164,8 +205,21 @@ def create(user_id):
             place_id = None
         if place_id is None:
             return jsonify({"msg": "place_id debe ser un identificador válido"}), 400
+    # ADR-047: `post_id` comparte una publicación; con él el texto también es opcional.
+    post_id = data.get("post_id")
+    if post_id is not None:
+        try:
+            post_id = str(uuid.UUID(post_id)) if isinstance(post_id, str) else None
+        except ValueError:
+            post_id = None
+        if post_id is None:
+            return jsonify({"msg": "post_id debe ser un identificador válido"}), 400
+        if place_id:
+            return jsonify({"msg": "Un mensaje comparte un lugar o una publicación, no ambos"}), 400
     content_ok = (
-        is_valid_content_with_images(content) if (files or place_id) else is_valid_content(content)
+        is_valid_content_with_images(content)
+        if (files or place_id or post_id or audio_upload is not None or video_upload is not None)
+        else is_valid_content(content)
     )
     if not content_ok:
         return jsonify(
@@ -197,6 +251,72 @@ def create(user_id):
         if error_response:
             return error_response
 
+    prepared_voice = None
+    if audio_upload is not None:
+        # Decodificar y re-codificar audio cuesta CPU: se cuenta cada envío con audio.
+        try:
+            rate_limit_guard.enforce(
+                policy.AUDIO_UPLOAD, f"user:{sender_id}", _rate_limit_repository
+            )
+        except RateLimitExceededError as error:
+            return rate_limited_response(error)
+
+        try:
+            # +1 para detectar el exceso sin leer un archivo gigante entero.
+            raw_audio = audio_upload.read(MAX_VOICE_UPLOAD_BYTES + 1)
+            prepared_voice = process_voice(raw_audio)
+        except AudioTooLargeError:
+            return jsonify({"msg": "La nota de voz puede pesar como máximo 3 MB"}), 413
+        except AudioTooLongError:
+            return jsonify(
+                {"msg": f"La nota de voz puede durar como máximo {MAX_VOICE_SECONDS // 60} minutos"}
+            ), 400
+        except InvalidAudioError:
+            return jsonify({"msg": "El archivo debe ser un audio válido (WebM, Ogg, MP4/M4A o WAV)"}), 400
+
+    prepared_video = None
+    if video_upload is not None:
+        # Re-codificar video es lo más caro que hace el servidor: se cuenta cada envío con video.
+        try:
+            rate_limit_guard.enforce(
+                policy.VIDEO_UPLOAD, f"user:{sender_id}", _rate_limit_repository
+            )
+        except RateLimitExceededError as error:
+            return rate_limited_response(error)
+        prepared_video, error_response = process_video_upload(video_upload)
+        if error_response:
+            return error_response
+
+    return {
+        "content": content,
+        "client_id": client_id,
+        "prepared": prepared,
+        "prepared_voice": prepared_voice,
+        "prepared_video": prepared_video,
+        "place_id": place_id,
+        "post_id": post_id,
+    }
+
+
+@messages_bp.route("/users/<uuid:user_id>/messages", methods=["POST"])
+@jwt_required()
+@profile_completed_required
+def create(user_id):
+    # Identidad exclusivamente del JWT -- nunca del body (mismo principio
+    # que el resto de endpoints protegidos).
+    sender_id = get_jwt_identity()
+
+    payload = read_message_payload(sender_id)
+    if not isinstance(payload, dict):
+        return payload
+    content = payload["content"]
+    client_id = payload["client_id"]
+    prepared = payload["prepared"]
+    prepared_voice = payload["prepared_voice"]
+    prepared_video = payload["prepared_video"]
+    place_id = payload["place_id"]
+    post_id = payload["post_id"]
+
     try:
         message, created = send_message(
             sender_id, str(user_id), content, _user_repository,
@@ -206,7 +326,14 @@ def create(user_id):
             media_repository=_media_repository,
             media_storage=current_app.extensions["media_storage"],
             place_id=place_id,
+            prepared_audio=prepared_voice,
+            audio_repository=_audio_repository,
+            prepared_video=prepared_video,
+            video_repository=_video_repository,
+            post_id=post_id,
         )
+    except SharedPostNotFoundError:
+        return jsonify({"msg": "Publicación no encontrada"}), 404
     except SharedPlaceNotFoundError:
         return jsonify({"msg": "Lugar no encontrado"}), 404
     except CannotMessageSelfError:
@@ -301,6 +428,8 @@ def delete(message_id):
         result = delete_message(
             str(message_id), sender_id, _message_repository,
             _media_repository, current_app.extensions["media_storage"],
+            audio_repository=_audio_repository,
+            video_repository=_video_repository,
         )
     except MessageNotFoundError:
         # Mismo mensaje/código tanto si el id no existe como si existe pero

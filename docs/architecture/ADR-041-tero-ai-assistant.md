@@ -22,7 +22,8 @@
 - **Fase 1 (UI con datos de ejemplo)** en `feature/tero-phase1-ui`, probada en un moto z3.
 - **Fase 2 (animaciones e interactividad)** con `Animated` + SVG, en
   `feature/tero-phase2-animations`. Pruebas físicas de rendimiento pendientes.
-- Todo vive en `mobile/src/features/tero/`, apagado por defecto con `EXPO_PUBLIC_TERO_ENABLED`
+- **Idioma (ADR-045 §6):** Tero responde en el idioma en que le escriben (español o inglés).
+- Todo vive en `mobile/src/features/tero/`, **encendido por defecto** (2026-10-17, decisión del propietario) con `EXPO_PUBLIC_TERO_ENABLED`; se apaga fijándolo a `false`
   (solo se activa si vale exactamente `true`).
 - **No existe** ningún endpoint `/api/tero/*`, ningún módulo `tero` en el backend ni variable de
   entorno de IA. El chat actual responde con mocks tipados.
@@ -182,7 +183,14 @@ Pruebas obligatorias: confirmación ajena, doble confirmación, expiración, per
 
 ---
 
-## 7. n8n (Fase 7) [PROPUESTA]
+## 7. n8n (Fase 7) [IMPLEMENTADO en código, apagado por defecto]
+
+> **Implementación (2026-10-17):** decisiones del propietario: el aviso de reporte lo **envía n8n por
+> correo**, genérico y con datos mínimos; el resumen semanal es **solo para quien lo active**
+> (`weekly_summary_email`, apagado por defecto). Firma HMAC en ambos sentidos, API interna firmada
+> (sin JWT), acuse idempotente, fallos de n8n nunca rompen la resolución. Contrato: `API_CONTRACT.md`
+> §4.38; operación y flujos: `docs/n8n/`. Verificado con n8n real en Docker y un Resend simulado.
+> Sigue bloqueado para producción por el hosting (`ADR-018`) y la elección del proveedor de correo.
 
 - **Uso permitido:** resumen semanal de actividad y aviso de cambio de estado de un reporte.
 - Flask autoriza; n8n recibe **datos mínimos** y nunca credenciales de PostgreSQL. Se prefiere una API

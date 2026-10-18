@@ -6,7 +6,10 @@ import type { User } from '@features/auth/types';
 import type { ProfilePatch } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { MediaSelectionError, pickImages } from '@shared/media/pickMedia';
+import type { PickedMedia } from '@shared/media/mediaRules';
 
+import { Avatar } from './Avatar';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { TextField } from './TextField';
@@ -16,6 +19,11 @@ type Props = {
   user: User;
   /** Debe lanzar un `Error` legible si falla. */
   onSave: (patch: ProfilePatch) => Promise<void>;
+  /**
+   * Cambia (`media`) o quita (`null`) la foto de perfil (`ADR-015`). Se aplica al momento, sin esperar a
+   * «Guardar», igual que en la web. Debe lanzar un `Error` legible si falla.
+   */
+  onAvatar: (media: PickedMedia | null) => Promise<void>;
   onClose: () => void;
 };
 
@@ -24,17 +32,17 @@ const LIMITS = { name: 120, bio: 160, location: 60, website: 100 } as const;
 
 /**
  * Edita nombre, biografía, ubicación y sitio web (`PATCH /api/users/me`). Cambiar
- * el @usuario, el teléfono o la foto todavía no está en la app móvil (el cambio de
- * usuario tiene un plazo de espera de 30 días; la foto necesita acceso a la
- * galería): se hacen desde la web.
+ * el @usuario o el teléfono todavía no está en la app móvil (el cambio de usuario tiene un plazo de
+ * espera de 30 días): se hace desde la web. La foto de perfil sí se cambia aquí (`ADR-046`).
  */
-export function EditProfileModal({ visible, user, onSave, onClose }: Props) {
+export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState(user.name);
   const [bio, setBio] = useState(user.bio ?? '');
   const [location, setLocation] = useState(user.location ?? '');
   const [website, setWebsite] = useState(user.website ?? '');
   const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,6 +55,26 @@ export function EditProfileModal({ visible, user, onSave, onClose }: Props) {
       setBusy(false);
     }
   }, [visible, user]);
+
+  async function changePhoto(remove: boolean) {
+    if (photoBusy || busy) return;
+    setError(null);
+    setPhotoBusy(true);
+    try {
+      if (remove) {
+        await onAvatar(null);
+      } else {
+        const [picked] = await pickImages(1);
+        if (picked) await onAvatar(picked);
+      }
+    } catch (e) {
+      setError(
+        e instanceof MediaSelectionError || e instanceof Error ? e.message : 'No pudimos cambiar la foto.',
+      );
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   async function save() {
     if (busy) return;
@@ -83,6 +111,26 @@ export function EditProfileModal({ visible, user, onSave, onClose }: Props) {
           </Text>
           <ScrollView keyboardShouldPersistTaps="handled">
             {error ? <Banner tone="error">{error}</Banner> : null}
+            <View style={styles.photoRow}>
+              <Avatar name={user.name} uri={user.avatar_url} size={72} />
+              <View style={styles.photoActions}>
+                <Button
+                  label={user.avatar_url ? 'Cambiar foto' : 'Subir foto'}
+                  variant="secondary"
+                  onPress={() => void changePhoto(false)}
+                  loading={photoBusy}
+                  disabled={busy}
+                />
+                {user.avatar_url ? (
+                  <Button
+                    label="Quitar foto"
+                    variant="ghost"
+                    onPress={() => void changePhoto(true)}
+                    disabled={photoBusy || busy}
+                  />
+                ) : null}
+              </View>
+            </View>
             <TextField label="Nombre" value={name} onChangeText={setName} maxLength={LIMITS.name} editable={!busy} />
             <TextField
               label="Biografía"
@@ -129,6 +177,8 @@ const styles = themedStyles(() => ({
     maxHeight: '90%',
   },
   title: { fontSize: fontSize.headlineSm, fontWeight: '700', color: colors.fg, marginBottom: space[3] },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: space[3], marginBottom: space[3] },
+  photoActions: { flex: 1, gap: space[1] },
   buttons: { flexDirection: 'row', gap: space[2], marginTop: space[3] },
   flex: { flex: 1 },
 }));

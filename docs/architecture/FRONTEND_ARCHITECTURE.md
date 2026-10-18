@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/FRONTEND_ARCHITECTURE.md` |
-| Versión | 0.5 (Propuesta) |
+| Versión | 0.7 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `HB-001` (Manual de Organización), `REPOSITORY_STRUCTURE.md` §3/§5, `BACKEND_ARCHITECTURE.md`, `DATABASE_ARCHITECTURE.md`, `API_CONTRACT.md`, `CLAUDE.md`, código real de `Frontend/` |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -451,3 +451,59 @@ Este documento **no modifica** el código de `Frontend/`, el backend, la base de
 - **Privacidad de la ubicación (ADR-040 §4.4/§6):** la ubicación se pide solo al pulsar «Usar mi ubicación» (una lectura, sin `watchPosition`), se redondea a 3 decimales antes de salir y vive solo en memoria. Rechazarla no desactiva nada. `public/_headers` tenía `Permissions-Policy: geolocation=()`, que **bloqueaba la geolocalización en la web desplegada**: ahora es `geolocation=(self)`. El CSP (aún en modo informe) admite `worker-src blob:`; al elegir proveedor hay que añadir su dominio a `connect-src`.
 - **Estados de la vista:** `loading`, `offline`, `error`, `empty` y `success` se resuelven en `lib/placesState.js` (puro, probado); `location_denied` es un aviso, no un estado que rompa la lista. Un fallo de red o del servidor nunca deja la pantalla rota.
 - **Pruebas:** `tests/places.test.mjs` (`npm test`, `node --test`, 24 pruebas; 64 en total con las de otras features) cubre la lógica pura, las traducciones completas es/en, la privacidad y la integración. **Además se verificó a mano en un Chrome real** (headless, vía DevTools) con el build de producción y la API de desarrollo: lista, mapa con pines, ficha, guardar (persiste tras recargar), reportar, búsqueda sin tildes, filtro, sin resultados y ubicación denegada. Esa verificación **no está automatizada**: la web sigue sin framework de pruebas de navegador.
+
+---
+
+## 29. Tero en la web (`ADR-041-tero-ai-assistant.md`) — v0.6
+
+**Qué es.** La burbuja de Tero y su panel de conversación en la app web, con las mismas reglas que la app móvil (`docs/tero/TERO_MOBILE_CONNECTION.md`): Flask es el único que autoriza, el modelo nunca toca la base de datos y **Tero solo prepara acciones**: la persona las confirma o las cancela en una tarjeta. El servidor no guarda historial, así que la conversación vive solo en memoria y se borra al cerrar la pestaña.
+
+**Interruptor.** `VITE_TERO_ENABLED` (**encendido por defecto desde 2026-10-17**, decisión del propietario: solo se apaga con `false`; no es un secreto, queda en el bundle). Apagado, **no se descarga nada**: `AppShell.jsx` carga el lanzador con `React.lazy` solo si el interruptor está encendido. Con el servidor apagado y este encendido solo se muestra «Tero no está disponible».
+
+**Estructura (`Frontend/src/features/tero/`).**
+
+| Archivo | Responsabilidad |
+|---|---|
+| `config.js` | interruptor |
+| `lib/teroChat.js` | lógica **pura** (validación del mensaje, historial con el desenlace de cada tarjeta, validación de la respuesta, estados de tarjeta, errores → claves de traducción) |
+| `lib/teroClient.js` | `POST /api/tero/chat` y `/api/tero/actions/<id>/confirm``|``cancel` con el `api` y el token de siempre |
+| `hooks/useTeroChat.js` | estado de la conversación, tarjetas y ánimo del avatar |
+| `components/TeroLauncher.jsx` | burbuja flotante (se duerme a los 90 s sin uso) y dueño del estado, que se conserva al navegar |
+| `components/TeroChatPanel.jsx`, `TeroActionCard.jsx` | diálogo no modal accesible (Escape cierra y devuelve el foco, `aria-live`) y tarjeta de confirmación |
+| `components/TeroAvatar.jsx`, `tero.css` | mascota en SVG con movimiento solo de `transform`/`opacity`; respeta «reducir movimiento» |
+
+**Textos.** Claves `tero.*` en `es.json` y `en.json` (la móvil sigue solo en español). La lógica devuelve claves, nunca texto para la persona, y una prueba exige que ambos idiomas tengan exactamente las mismas claves.
+
+**Tras confirmar una acción** el shell vuelve a pedir en silencio lo afectado: `refreshUser()` (nuevo en `AuthContext`; a diferencia de `loadCurrentUser` no pasa por `isLoading`, que desmontaría las rutas protegidas) para `update_profile`, y `GET /api/posts` para seguir o dejar de seguir.
+
+**Paleta.** Los colores de la mascota (`TeroAvatar.jsx`) son los mismos autorizados por el propietario el 2026-10-08 para la móvil; son solo de Tero. El resto del panel usa los tokens `th-*`, así que sigue el tema claro/oscuro.
+
+**Verificación (2026-10-17).** `tests/tero.test.mjs` (25 pruebas: lógica pura, traducciones, interruptor); `eslint` sin errores nuevos; `vite build` correcto. Además, **en un navegador real** (Edge sin cabeza) contra el backend real con Haiku 5.5: burbuja, panel con foco en el campo, respuesta sin Markdown, tarjeta «Seguir a @…» que **no cambia nada hasta pulsar «Confirmar»** (0 seguimientos antes, 1 después), Escape y foco, conversación conservada al reabrir, borrar, panel dentro de la pantalla en 390 px sin scroll horizontal, y sin red: mensaje claro, «Reintentar» y recuperación al volver la red. Esa verificación **no está automatizada** (la web sigue sin framework de pruebas de navegador).
+
+**Pendiente.** El resumen de actividad y las preferencias de Tero (lado, animaciones) de la móvil no existen en la web; la accesibilidad con lector de pantalla real no se ha probado; no hay aviso de privacidad específico (`ADR-041`, puntos de privacidad abiertos).
+
+---
+
+## 30. Notas de voz y dictado para Tero (`ADR-042-voice-messages-and-tero-voice.md`) — v0.7
+
+**Qué es.** Dos funciones de voz, **apagadas por defecto** y detrás de interruptores que no son secretos (quedan en el bundle): `VITE_VOICE_ENABLED` (notas de voz entre personas, en Mensajes) y `VITE_TERO_VOICE_ENABLED` (dictado para Tero). El servidor tiene el suyo (`VOICE_MESSAGES_ENABLED`); con el del cliente encendido y el del servidor apagado, enviar muestra «Las notas de voz no están disponibles ahora».
+
+**Notas de voz (`shared/`).**
+
+| Archivo | Responsabilidad |
+|---|---|
+| `lib/voice.js` | lógica **pura** (formato de grabación según el navegador, `mm:ss`, disponibilidad del micrófono, errores → claves de traducción, topes que coinciden con el servidor) |
+| `lib/voiceConfig.js` | los dos interruptores |
+| `hooks/useVoiceRecorder.js` | `MediaRecorder`: `idle → requesting → recording → recorded`; pide el micrófono **solo al pulsar grabar**, lo suelta (apaga las pistas) al terminar, cancelar o desmontar, y corta a los 120 s |
+| `components/VoiceRecorderBar.jsx` | barra que sustituye al campo de texto: grabando (tiempo, detener, cancelar) o vista previa (escuchar, descartar, **enviar**); y el botón de micrófono |
+| `components/VoiceNotePlayer.jsx` | reproductor (play/pausa, barra operable con teclado, duración **del servidor**); solo suena una nota a la vez |
+
+`features/feed/pages/Messages.jsx` integra la barra y el reproductor. Se envía como `multipart/form-data` con el campo `audio`; la lista de conversaciones muestra «🎤 Nota de voz» (`last_message.has_audio`). Cambiar de conversación descarta una grabación pendiente: no debe viajar a otra persona. El micrófono solo funciona en **https o localhost**; sin `MediaRecorder` el botón no aparece.
+
+**Dictado para Tero (`features/tero/`).** `lib/teroVoice.js` (puro), `hooks/useDictation.js` y un botón en `TeroChatPanel.jsx`. Usa el reconocimiento de voz **del navegador** (Web Speech API): el audio no llega a THERS ni a Tero, que sigue recibiendo solo texto; en Chrome lo procesa Google y en Safari Apple, y el panel lo dice. **Dictar nunca envía:** lo dicho se **añade** al campo (sin borrar lo escrito) para que la persona lo revise, lo corrija y pulse enviar; enviar o cerrar el panel detiene el dictado. Si el navegador no lo soporta (Firefox) el botón no aparece.
+
+**Ajuste de la burbuja de Tero.** Al probar las notas de voz en una pantalla de 390 px apareció que la burbuja flotante de Tero tapaba los botones de grabar y enviar del chat. En `/messages` la burbuja y su panel se **ocultan** (sin desmontar: la conversación con Tero se conserva al volver).
+
+**Verificación (2026-10-17).** `tests/voice.test.mjs` (20) y `tests/teroVoice.test.mjs` (16): lógica pura, claves es/en idénticas, que el micrófono solo se pida al empezar, que dictar no llame a `send`/`fetch` y que los interruptores estén apagados por defecto; en total `npm test` 170 pruebas, `eslint` sin errores nuevos, `vite build` correcto. **En un navegador real** (Edge sin cabeza, micrófono simulado, backend real): grabar, temporizador, vista previa **sin enviar nada** (0 notas antes de pulsar enviar), enviar, la nota se guarda con su duración, la otra persona la ve en la lista y la oye, pausa, barra con teclado, cancelar y descartar no envían, permiso denegado con mensaje claro, y móvil de 390 px sin scroll horizontal: 26/26. Dictado de Tero con un `SpeechRecognition` **simulado** (el headless no tiene servicio de voz): se añade al texto, no se envía, errores claros, se detiene al cerrar, sin soporte no hay botón: 26/26. Esa verificación **no está automatizada** y **no se probó con una voz real ni con Safari**.
+
+**Pendiente.** Lector de pantalla real; forma de onda y velocidad de reproducción; aviso de privacidad formal (`ADR-042` §3.5).

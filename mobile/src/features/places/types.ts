@@ -179,6 +179,8 @@ export type Schedule = { timezone: string; days: ScheduleDay[]; closures: Closur
 export type Availability = {
   date: string;
   accepts_reservations: boolean;
+  /** `true`: el lugar no cargó su horario y se ofrece el horario por defecto (`ADR-051`). */
+  default_hours?: boolean;
   max_party_size?: number;
   slots: { starts_at: string; seats_left: number }[];
 };

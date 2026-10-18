@@ -22,6 +22,14 @@ def serve_media(filename):
     if current_app.config.get("MODERATION_ENABLED") and _moderation_repository.is_withheld(filename):
         abort(404)
     response = send_from_directory(current_app.config["UPLOAD_DIR"], filename)
+    # Notas de voz (ADR-042): el tipo que adivina el sistema para .m4a varía (audio/x-m4a,
+    # audio/mp4a-latm…) y Safari es quisquilloso: siempre audio/mp4.
+    if filename.endswith(".m4a"):
+        response.mimetype = "audio/mp4"
+    # Videos (ADR-046): siempre video/mp4. `send_from_directory` atiende `Range` (206), que los
+    # navegadores y la app necesitan para buscar dentro del video.
+    if filename.endswith(".mp4"):
+        response.mimetype = "video/mp4"
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response

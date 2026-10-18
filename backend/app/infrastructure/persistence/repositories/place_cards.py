@@ -18,7 +18,7 @@ def fetch_place_cards(place_ids):
             "c.name AS category_name "
             "FROM places p JOIN place_categories c ON c.id = p.category_id "
             "WHERE p.id = ANY(CAST(:ids AS uuid[])) "
-            "AND p.is_active AND p.verification_status = 'verified' AND c.is_active"
+            "AND p.is_active AND p.verification_status IN ('verified', 'unverified') AND c.is_active"
         ),
         {"ids": ids},
     ).mappings()

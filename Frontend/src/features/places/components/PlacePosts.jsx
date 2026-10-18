@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Avatar from "@shared/components/Avatar";
 import ImageGrid from "@shared/components/ImageGrid";
+import VideoPlayer from "@shared/components/VideoPlayer";
 import Spinner from "@shared/components/Spinner";
 import { useToast } from "@shared/components/Toast";
 import { getErrorMessage } from "@shared/lib/api";
@@ -121,6 +122,7 @@ export default function PlacePosts({ placeId }) {
                       <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink dark:text-ink-dark">{post.content}</p>
                     )}
                     <ImageGrid images={post.images} alt={`Imagen de ${post.author.name}`} compact />
+                    <VideoPlayer video={post.video} label={`Video de ${post.author.name}`} compact />
                   </>
                 )}
               </div>

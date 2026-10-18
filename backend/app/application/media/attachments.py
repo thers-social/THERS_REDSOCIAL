@@ -33,6 +33,62 @@ def store_attachments(prepared, kind, storage):
     return stored
 
 
+def store_voice(prepared, storage):
+    """Guarda una nota de voz ya procesada (ADR-042) con un nombre aleatorio impredecible y
+    devuelve `{"key", "duration_ms", "size_bytes"}`. `prepared`: `(bytes, content_type, duration_ms)`."""
+    data, content_type, duration_ms = prepared
+    key = f"voice/{uuid.uuid4().hex}.m4a"
+    storage.save(key, data, content_type)
+    return {"key": key, "duration_ms": duration_ms, "size_bytes": len(data)}
+
+
+def store_video(prepared, storage):
+    """Guarda un video ya procesado (ADR-046) y su miniatura con nombres aleatorios impredecibles y
+    devuelve `{"key", "thumb_key", "width", "height", "duration_ms", "size_bytes"}`. Si la miniatura
+    falla, borra el video: nunca queda un archivo a medias.
+
+    `prepared`: `(mp4, content_type, thumbnail_webp, width, height, duration_ms)`."""
+    data, content_type, thumbnail, width, height, duration_ms = prepared
+    base = uuid.uuid4().hex
+    key, thumb_key = f"videos/{base}.mp4", f"videos/{base}.webp"
+    storage.save(key, data, content_type)
+    try:
+        storage.save(thumb_key, thumbnail, "image/webp")
+    except Exception:
+        discard_files([key], storage)
+        raise
+    return {
+        "key": key,
+        "thumb_key": thumb_key,
+        "width": width,
+        "height": height,
+        "duration_ms": duration_ms,
+        "size_bytes": len(data),
+    }
+
+
+def to_public_video(video):
+    """Forma pública del video de una publicación o un mensaje, o `None`: la URL, la miniatura, las
+    dimensiones y la duración que calculó el servidor. Nunca las claves internas ni quién lo subió."""
+    if video is None:
+        return None
+    return {
+        "url": media_url(video.storage_key),
+        "thumbnail_url": media_url(video.thumb_key),
+        "width": video.width,
+        "height": video.height,
+        "duration_ms": video.duration_ms,
+    }
+
+
+def to_public_audio(audio):
+    """Forma pública de la nota de voz de un mensaje, o `None`. Solo la URL y la duración que
+    calculó el servidor: nunca la clave interna ni quién la subió."""
+    if audio is None:
+        return None
+    return {"url": media_url(audio.storage_key), "duration_ms": audio.duration_ms}
+
+
 def discard_files(keys, storage):
     """Borra archivos del almacenamiento sin fallar: es limpieza, y un archivo
     huérfano (nombre aleatorio, sin datos personales) es preferible a perder la

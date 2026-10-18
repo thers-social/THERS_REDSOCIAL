@@ -13,7 +13,7 @@
  * el mismo, así que el servidor lo devuelve en vez de duplicarlo.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { ApiError } from '@shared/lib/api';
@@ -26,11 +26,15 @@ import {
   fetchThread,
   newClientId,
   sendMessage,
+  sendMediaMessage,
+  sendVoiceMessage,
 } from './api';
-import type { ChatMessage } from './api';
+import type { ChatMessage, ChatTarget } from './api';
 import {
   latestConfirmedAt,
   makePending,
+  makePendingMedia,
+  makePendingVoice,
   mergeMessages,
   nextPollDelayMs,
   oldestConfirmedAt,
@@ -38,12 +42,21 @@ import {
   setLocalState,
 } from './chatState';
 import type { LocalMessage } from './chatState';
+import { mediaSendErrorMessage } from '@shared/media/mediaErrors';
+import type { PickedMedia } from '@shared/media/mediaRules';
+
+import { voiceSendErrorMessage } from './voice';
+import type { VoiceRecording } from './voice';
+import { deleteVoiceFile } from './voiceFiles';
 
 type LoadState = 'loading' | 'ready' | 'error' | 'unavailable';
 
 type Options = {
   myId: string;
+  /** Id de la otra persona o, con `kind: 'group'`, del grupo. */
   otherUserId: string;
+  /** Directo (por defecto) o grupo (`ADR-048`). */
+  kind?: ChatTarget['kind'];
   /** `true` solo mientras la pantalla está enfocada. */
   active: boolean;
 };
@@ -59,14 +72,21 @@ export type ChatApi = {
   offline: boolean;
   reload: () => Promise<void>;
   loadOlder: () => Promise<void>;
-  send: (text: string) => void;
+  /** `media`: una foto o un video (ADR-046); con él el texto puede ir vacío. */
+  send: (text: string, media?: PickedMedia) => void;
+  /** Envía una nota de voz grabada (ADR-042). */
+  sendVoice: (recording: VoiceRecording) => void;
   retry: (clientId: string) => void;
   discard: (clientId: string) => void;
   edit: (messageId: string, text: string) => Promise<void>;
   remove: (messageId: string) => Promise<void>;
 };
 
-export function useChat({ myId, otherUserId, active }: Options): ChatApi {
+export function useChat({ myId, otherUserId: id, kind = 'user', active }: Options): ChatApi {
+  const channel = useMemo<ChatTarget>(() => ({ kind, id }), [kind, id]);
+  const notFound = kind === 'group' ? 'Grupo no encontrado' : 'Usuario no encontrado';
+  // Un grupo no tiene destinatario único: el mensaje local no lo lleva.
+  const recipient = kind === 'group' ? null : id;
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [state, setState] = useState<LoadState>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +120,7 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
   const reload = useCallback(async () => {
     setState((current) => (current === 'ready' ? current : 'loading'));
     try {
-      const page = await fetchThread(otherUserId, { limit: PAGE_SIZE });
+      const page = await fetchThread(channel, { limit: PAGE_SIZE });
       if (!mounted.current) return;
       apply(mergeMessages(messagesRef.current.filter((m) => m.local), page.messages));
       setHasOlder(page.has_more === true);
@@ -114,13 +134,13 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
       // servidor responde igual en ambos casos y la pantalla no distingue.
       if (e instanceof ApiError && e.status === 404) {
         setState('unavailable');
-        setError('Usuario no encontrado');
+        setError(notFound);
         return;
       }
       setError(e instanceof ApiError ? e.message : 'No pudimos cargar la conversación.');
       setState((current) => (current === 'ready' ? current : 'error'));
     }
-  }, [otherUserId, apply]);
+  }, [channel, notFound, apply]);
 
   useEffect(() => {
     void reload();
@@ -133,7 +153,7 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
     if (!cursor) return;
     setLoadingOlder(true);
     try {
-      const page = await fetchThread(otherUserId, { before: cursor, limit: PAGE_SIZE });
+      const page = await fetchThread(channel, { before: cursor, limit: PAGE_SIZE });
       if (!mounted.current) return;
       apply(mergeMessages(messagesRef.current, page.messages));
       setHasOlder(page.has_more === true);
@@ -142,7 +162,7 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
     } finally {
       if (mounted.current) setLoadingOlder(false);
     }
-  }, [otherUserId, hasOlder, loadingOlder, apply]);
+  }, [channel, hasOlder, loadingOlder, apply]);
 
   // --- consulta periódica / recuperación ------------------------------------------
   const pollOnce = useCallback(async () => {
@@ -153,7 +173,7 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
       let received = 0;
       // Si llegaron muchos mensajes mientras no había conexión, se piden por páginas.
       for (let page = 0; page < 5; page++) {
-        const result = await fetchThread(otherUserId, { after: cursor, limit: 100 });
+        const result = await fetchThread(channel, { after: cursor, limit: 100 });
         if (!mounted.current) return;
         const before = messagesRef.current.length;
         apply(mergeMessages(messagesRef.current, result.messages));
@@ -168,7 +188,7 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
       if (!mounted.current) return;
       if (e instanceof ApiError && e.status === 404) {
         setState('unavailable');
-        setError('Usuario no encontrado');
+        setError(notFound);
         return;
       }
       failures.current += 1;
@@ -176,7 +196,7 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
     } finally {
       polling.current = false;
     }
-  }, [otherUserId, apply]);
+  }, [channel, notFound, apply]);
 
   const schedule = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -233,19 +253,27 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
 
   // --- envío ----------------------------------------------------------------------
   const transmit = useCallback(
-    async (clientId: string, content: string) => {
+    async (clientId: string, content: string, recording?: VoiceRecording, media?: PickedMedia) => {
       try {
-        const sent = await sendMessage(otherUserId, content, clientId);
+        const sent = recording
+          ? await sendVoiceMessage(channel, recording, clientId, content)
+          : media
+            ? await sendMediaMessage(channel, media, clientId, content)
+            : await sendMessage(channel, content, clientId);
         if (!mounted.current) return;
         apply(mergeMessages(messagesRef.current, [sent]));
         idlePolls.current = 0;
+        // Ya está en el servidor: la copia local de la voz deja de hacer falta.
+        if (recording) deleteVoiceFile(recording.uri);
       } catch (e) {
         if (!mounted.current) return;
         if (e instanceof ApiError && !e.isNetworkError && e.status >= 400 && e.status < 500) {
           // Rechazado por una regla (bloqueo, "no acepta mensajes", cuenta que ya no
           // existe): reintentar no lo arregla, así que se quita y se explica.
           apply(removeLocal(messagesRef.current, clientId));
-          setError(e.message);
+          if (recording) deleteVoiceFile(recording.uri);
+          // Una nota de voz tiene sus propios rechazos (apagada, demasiado grande): se explican.
+          setError((recording && voiceSendErrorMessage(e)) || (media && mediaSendErrorMessage(e)) || e.message);
           if (e.status === 404) setState('unavailable');
           return;
         }
@@ -253,20 +281,37 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
         apply(setLocalState(messagesRef.current, clientId, 'failed'));
       }
     },
-    [otherUserId, apply],
+    [channel, apply],
   );
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, media?: PickedMedia) => {
       const content = text.trim();
-      if (!content || content.length > MAX_MESSAGE_LENGTH) return;
+      // Con foto o video el texto es opcional; sin ellos sigue siendo obligatorio.
+      if ((!content && !media) || content.length > MAX_MESSAGE_LENGTH) return;
       const clientId = newClientId();
       apply(mergeMessages(messagesRef.current, [])); // normaliza antes de añadir
-      apply([...messagesRef.current, makePending(clientId, myId, otherUserId, content)]);
+      apply([
+        ...messagesRef.current,
+        media
+          ? makePendingMedia(clientId, myId, recipient, media, content)
+          : makePending(clientId, myId, recipient, content),
+      ]);
       setError(null);
-      void transmit(clientId, content);
+      void transmit(clientId, content, undefined, media);
     },
-    [myId, otherUserId, apply, transmit],
+    [myId, recipient, apply, transmit],
+  );
+
+  const sendVoice = useCallback(
+    (recording: VoiceRecording) => {
+      const clientId = newClientId();
+      apply(mergeMessages(messagesRef.current, [])); // normaliza antes de añadir
+      apply([...messagesRef.current, makePendingVoice(clientId, myId, recipient, recording, '')]);
+      setError(null);
+      void transmit(clientId, '', recording);
+    },
+    [myId, recipient, apply, transmit],
   );
 
   const retry = useCallback(
@@ -274,14 +319,19 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
       const target = messagesRef.current.find((m) => m.local && m.client_id === clientId);
       if (!target) return;
       apply(setLocalState(messagesRef.current, clientId, 'sending'));
-      // Mismo `client_id`: si el envío anterior sí llegó, el servidor lo devuelve.
-      void transmit(clientId, target.content);
+      // Mismo `client_id`: si el envío anterior sí llegó, el servidor lo devuelve. Una nota de voz
+      // se reenvía con la grabación que se conservó.
+      void transmit(clientId, target.content, target.localAudio, target.localMedia);
     },
     [apply, transmit],
   );
 
   const discard = useCallback(
-    (clientId: string) => apply(removeLocal(messagesRef.current, clientId)),
+    (clientId: string) => {
+      const target = messagesRef.current.find((m) => m.local && m.client_id === clientId);
+      if (target?.localAudio) deleteVoiceFile(target.localAudio.uri);
+      apply(removeLocal(messagesRef.current, clientId));
+    },
     [apply],
   );
 
@@ -311,6 +361,7 @@ export function useChat({ myId, otherUserId, active }: Options): ChatApi {
     reload,
     loadOlder,
     send,
+    sendVoice,
     retry,
     discard,
     edit,

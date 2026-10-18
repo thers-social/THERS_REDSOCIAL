@@ -205,6 +205,8 @@ Config.STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "local")
 # Solo en el servidor: la clave nunca va en el cliente. Sin clave la función queda desactivada.
 Config.ROUTING_PROVIDER = os.environ.get("ROUTING_PROVIDER", "openrouteservice")
 Config.ROUTING_API_KEY = (os.environ.get("ROUTING_API_KEY") or "").strip() or None
+# Respaldo si el principal no responde (ADR-044): `osrm` = enrutador público de OpenStreetMap.
+Config.ROUTING_FALLBACK_PROVIDER = (os.environ.get("ROUTING_FALLBACK_PROVIDER") or "").strip().lower() or None
 try:
     Config.ROUTING_DAILY_BUDGET = int(os.environ.get("ROUTING_DAILY_BUDGET") or 1500)
 except ValueError:
@@ -299,6 +301,18 @@ def _positive_float_env(name, default):
     return value
 
 
+# Notas de voz en mensajes (ADR-042). Apagado por defecto: con el interruptor apagado un envío con
+# audio responde 503 `voice_disabled` y el resto de la mensajería no cambia.
+Config.VOICE_MESSAGES_ENABLED = _flag_env("VOICE_MESSAGES_ENABLED")
+# Notificaciones push por Firebase (ADR-053). Apagado por defecto: sin él no se envía nada, pero los
+# dispositivos se siguen registrando. La cuenta de servicio de Firebase (JSON) es un SECRETO del
+# servidor: se da como ruta a un archivo (FCM_SERVICE_ACCOUNT_FILE) o como el JSON entero en una variable
+# (FCM_SERVICE_ACCOUNT_JSON); nunca va al repositorio ni al móvil.
+Config.PUSH_ENABLED = _flag_env("PUSH_ENABLED")
+Config.FCM_SERVICE_ACCOUNT_FILE = (os.environ.get("FCM_SERVICE_ACCOUNT_FILE") or "").strip() or None
+Config.FCM_SERVICE_ACCOUNT_JSON = (os.environ.get("FCM_SERVICE_ACCOUNT_JSON") or "").strip() or None
+# Videos cortos en publicaciones y mensajes (ADR-046). Apagado por defecto: re-codificar video cuesta CPU.
+Config.VIDEO_UPLOADS_ENABLED = _flag_env("VIDEO_UPLOADS_ENABLED")
 # Moderación de contenido (ADR-044). Apagada por defecto: con ella apagada todo se publica como
 # siempre. Encendida, lo nuevo espera revisión y solo se ve `approved`. NO encender para el público
 # sin cola atendida (ADR-044, decisión D5 de la matriz de aprobación).
@@ -373,6 +387,22 @@ Config.MUX_TIMEOUT_SECONDS = _positive_float_env("MUX_TIMEOUT_SECONDS", 10.0)
 Config.MUX_CLIENT = (os.environ.get("MUX_CLIENT") or "none").strip().lower()
 
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
+# Automatizaciones con n8n (ADR-041 §7): aviso de reporte resuelto y resumen semanal. Apagadas por
+# defecto. Flask sigue siendo la fuente de verdad: n8n recibe datos mínimos y llama de vuelta a una API
+# interna firmada. El secreto compartido firma los dos sentidos y NUNCA va al móvil ni al repositorio.
+Config.TERO_AUTOMATIONS_ENABLED = _flag_env("TERO_AUTOMATIONS_ENABLED")
+Config.N8N_BASE_URL = (os.environ.get("N8N_BASE_URL") or "").strip().rstrip("/") or None
+Config.N8N_WEBHOOK_SECRET = (os.environ.get("N8N_WEBHOOK_SECRET") or "").strip() or None
+Config.N8N_TIMEOUT_SECONDS = _positive_float_env("N8N_TIMEOUT_SECONDS", 5.0)
+Config.N8N_MAX_RETRIES = int(_positive_float_env("N8N_MAX_RETRIES", 2))
+
+if Config.TERO_AUTOMATIONS_ENABLED and not (Config.N8N_BASE_URL and Config.N8N_WEBHOOK_SECRET):
+    print(
+        "[config] TERO_AUTOMATIONS_ENABLED está activo pero falta N8N_BASE_URL o N8N_WEBHOOK_SECRET; "
+        "las automatizaciones quedarán apagadas. Definir las dos en backend/.env.",
+        file=sys.stderr,
+    )
+
 # Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
 # es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.
 Config.TERO_TOOLS_ENABLED = _flag_env("TERO_TOOLS_ENABLED")
@@ -380,6 +410,8 @@ Config.TERO_TOOLS_ENABLED = _flag_env("TERO_TOOLS_ENABLED")
 # editar nombre o biografía; la persona confirma aparte. Otro interruptor, apagado por defecto.
 Config.TERO_ACTIONS_ENABLED = _flag_env("TERO_ACTIONS_ENABLED")
 Config.TERO_AI_ENABLED = _flag_env("TERO_AI_ENABLED")
+# Preguntas con imagen (ADR-046): la imagen sale a Anthropic y cuesta por uso. Apagado por defecto.
+Config.TERO_IMAGES_ENABLED = _flag_env("TERO_IMAGES_ENABLED")
 Config.ANTHROPIC_API_KEY = (os.environ.get("ANTHROPIC_API_KEY") or "").strip() or None
 Config.TERO_MODEL = (os.environ.get("TERO_MODEL") or "").strip() or "claude-haiku-5-5"
 Config.TERO_AI_TIMEOUT_SECONDS = _positive_float_env("TERO_AI_TIMEOUT_SECONDS", 20.0)

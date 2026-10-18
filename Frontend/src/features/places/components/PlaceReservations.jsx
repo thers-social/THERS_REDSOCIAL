@@ -4,7 +4,13 @@ import { useToast } from "@shared/components/Toast";
 import { getErrorMessage } from "@shared/lib/api";
 import { useLanguage } from "@shared/i18n";
 import { useAuth } from "@features/auth/context/AuthContext";
-import { cancelReservation, createReservation, fetchAvailability, fetchMyReservations } from "../lib/placesApi";
+import {
+  cancelReservation,
+  createReservation,
+  downloadReservationPdf,
+  fetchAvailability,
+  fetchMyReservations,
+} from "../lib/placesApi";
 
 // `datetime-local` entrega la hora LOCAL sin zona; el servidor exige zona, así que se envía en UTC.
 function toIso(localValue) {
@@ -79,6 +85,9 @@ export default function PlaceReservations({ place }) {
           </button>
         )}
       </div>
+      {!place.is_claimed && (
+        <p className="mt-2 text-xs text-muted dark:text-muted-dark">{t("places.reservations.unclaimed")}</p>
+      )}
       {open && (
         <BookingForm
           placeId={place.id}
@@ -108,6 +117,15 @@ export default function PlaceReservations({ place }) {
             )}
             <button
               type="button"
+              onClick={() =>
+                downloadReservationPdf(item.id).catch((error) => toast.error(getErrorMessage(error, t)))
+              }
+              className="mr-3 mt-1 text-xs font-semibold text-th-brand-fg hover:underline"
+            >
+              {t("places.reservations.pdf")}
+            </button>
+            <button
+              type="button"
               disabled={busyId === item.id}
               onClick={() => cancel(item)}
               className="mt-1 text-xs font-semibold text-th-danger-fg hover:underline disabled:opacity-50"
@@ -125,6 +143,7 @@ function BookingForm({ placeId, onCancel, onBooked }) {
   const { t } = useLanguage();
   const [day, setDay] = useState("");
   const [slots, setSlots] = useState(null); // null = aún sin consultar
+  const [defaultHours, setDefaultHours] = useState(false); // el lugar no cargó su horario (ADR-051)
   const [slot, setSlot] = useState("");
   const [fallbackWhen, setFallbackWhen] = useState("");
   const [party, setParty] = useState(2);
@@ -140,7 +159,10 @@ function BookingForm({ placeId, onCancel, onBooked }) {
     setSlots(null);
     setSlot("");
     fetchAvailability(placeId, day, controller.signal)
-      .then((data) => setSlots(data.slots))
+      .then((data) => {
+        setSlots(data.slots);
+        setDefaultHours(Boolean(data.default_hours));
+      })
       .catch((err) => {
         if (!controller.signal.aborted) {
           setSlots([]);
@@ -187,6 +209,9 @@ function BookingForm({ placeId, onCancel, onBooked }) {
             ))}
           </select>
         </label>
+      )}
+      {hasSlots && defaultHours && (
+        <p className="text-xs text-muted">{t("places.reservations.defaultHours")}</p>
       )}
       {day && slots && slots.length === 0 && (
         <>

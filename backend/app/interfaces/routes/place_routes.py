@@ -100,6 +100,19 @@ def list_all():
     return jsonify({"places": places}), 200
 
 
+@places_bp.route("/places/top", methods=["GET"])
+def top():
+    """Mejor valorados (ADR-053): `?category=` y `?limit=` opcionales. Sin ubicación."""
+    try:
+        places = place_use_cases.top_places(
+            request.args.get("category"), request.args.get("limit"), _place_repository,
+            optional_user_id(),
+        )
+    except InvalidPlaceQueryError as error:
+        return jsonify({"msg": error.message}), 400
+    return jsonify({"places": places}), 200
+
+
 @places_bp.route("/places/nearby", methods=["GET"])
 def nearby():
     try:

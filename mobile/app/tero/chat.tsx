@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import { Animated, Easing, FlatList, Image, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@features/auth/context/AuthContext';
@@ -19,7 +19,12 @@ import { TeroAvatar } from '@features/tero/components/TeroAvatar';
 import { TeroDots } from '@features/tero/components/TeroDots';
 import { TeroGate } from '@features/tero/components/TeroGate';
 import { TeroPreviewNotice } from '@features/tero/components/TeroPreviewNotice';
+import { TeroDictationButton } from '@features/tero/components/TeroDictationButton';
 import { TERO_LIVE } from '@features/tero/config';
+import { TERO_IMAGES_ENABLED } from '@shared/media/mediaConfig';
+import { fitsTero, teroImagePayload } from '@shared/media/mediaRules';
+import { MediaSelectionError, pickImageBase64 } from '@shared/media/pickMedia';
+import { useTero } from '@features/tero/context/TeroContext';
 import { teroColors } from '@features/tero/design/teroColors';
 import {
   cardStateFromError,
@@ -36,6 +41,9 @@ import {
   withStatus,
 } from '@features/tero/lib/teroChat';
 import { teroClient } from '@features/tero/lib/teroClient';
+import { useTeroSpeech } from '@features/tero/lib/useTeroSpeech';
+import { DICTATION_PRIVACY } from '@features/tero/lib/teroVoice';
+import { TERO_VOICE_ENABLED } from '@features/messages/voiceConfig';
 import type {
   TeroActionCard,
   TeroCardState,
@@ -77,12 +85,20 @@ function TeroChatContent() {
   const { refreshUser } = useAuth();
   const insets = useSafeAreaInsets();
   const animate = useTeroMotionAllowed();
+  // La voz de Tero (ADR-045): lee sus respuestas si la persona lo tiene encendido.
+  const { preferences, update } = useTero();
+  const { speaking, speak, stop } = useTeroSpeech({ es: preferences.voiceId, en: preferences.voiceIdEn });
+  const speakRepliesRef = useRef(preferences.speakReplies);
+  speakRepliesRef.current = preferences.speakReplies;
 
   const [messages, setMessages] = useState<TeroMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Dictado (ADR-042 §1.2): mensaje propio (escuchando / error) y si está escuchando ahora.
+  const [dictationMessage, setDictationMessage] = useState<string | null>(null);
+  const [dictating, setDictating] = useState(false);
   const [replyMood, setReplyMood] = useState<TeroMood>('idle');
   // Reacción breve de Tero al desenlace de una tarjeta (celebrar / encogerse).
   const [reaction, setReaction] = useState<ReactionRequest | null>(null);
@@ -135,6 +151,7 @@ function TeroChatContent() {
 
       try {
         const reply = await teroClient.send(message.text, context, {
+          image: message.image?.payload ?? null,
           postContent,
           history: historyForRequest(messagesRef.current, message.id, cardStatesRef.current),
           signal: controller.signal,
@@ -153,6 +170,7 @@ function TeroChatContent() {
           { ...makeMessage('tero', reply.text, new Date(), reply.isMock), cards },
         ]);
         setReplyMood(reply.mood);
+        if (speakRepliesRef.current) void speak(reply.text);
       } catch (caught) {
         if (controller.signal.aborted) return;
         setMessages((current) => withStatus(current, message.id, 'failed'));
@@ -162,22 +180,24 @@ function TeroChatContent() {
         if (!controller.signal.aborted) setPending(false);
       }
     },
-    [posts],
+    [posts, speak],
   );
 
   const send = useCallback(
-    (input: string, context: TeroContext) => {
-      const check = checkMessage(input);
+    (input: string, context: TeroContext, image?: TeroMessage['image']) => {
+      // Con imagen el texto es opcional (ADR-046): sin él, Tero la describe.
+      const check = image && !input.trim() ? { ok: true as const, text: '' } : checkMessage(input);
       if (!check.ok) {
         setError(check.error);
         return;
       }
-      const message: TeroMessage = { ...makeMessage('user', check.text), status: 'sending' };
+      stop();
+      const message: TeroMessage = { ...makeMessage('user', check.text), status: 'sending', ...(image ? { image } : {}) };
       contexts.current.set(message.id, context);
       setMessages((current) => [...current, message]);
       void deliver(message, context);
     },
-    [deliver],
+    [deliver, stop],
   );
 
   function retry(message: TeroMessage) {
@@ -238,20 +258,47 @@ function TeroChatContent() {
     }
   }, [params.postId, params.prompt, send]);
 
+  // Imagen adjunta a la pregunta (ADR-046): una sola, ya reducida y en base64.
+  const [attached, setAttached] = useState<TeroMessage['image'] | null>(null);
+  const [preparingImage, setPreparingImage] = useState(false);
+
+  async function chooseImage() {
+    if (pending || preparingImage) return;
+    setError(null);
+    setPreparingImage(true);
+    try {
+      const picked = await pickImageBase64();
+      if (!picked) return;
+      if (!fitsTero(picked.base64)) {
+        setError('La imagen pesa demasiado para Tero. Prueba con otra.');
+        return;
+      }
+      setAttached({ uri: picked.uri, payload: teroImagePayload(picked.base64, picked.mimeType) });
+    } catch (caught) {
+      setError(caught instanceof MediaSelectionError ? caught.message : 'No pudimos abrir tu galería.');
+    } finally {
+      setPreparingImage(false);
+    }
+  }
+
   function submit() {
     if (pending) return;
     const text = draft;
+    const image = attached ?? undefined;
     setDraft('');
-    send(text, { screen: 'tero' });
+    setAttached(null);
+    send(text, { screen: 'tero' }, image);
   }
 
   // Pensando mientras espera; escuchando solo mientras la persona escribe en
   // este campo (no hay ninguna otra "atención": nada de vigilancia).
   const mood: TeroMood = pending
     ? 'thinking'
-    : inputFocused && draft.trim()
+    : (inputFocused && draft.trim()) || dictating
       ? 'listening'
-      : replyMood;
+      : speaking
+        ? 'speaking'
+        : replyMood;
 
   const heroText = pending
     ? 'Tero está pensando…'
@@ -274,6 +321,22 @@ function TeroChatContent() {
         <Text style={styles.heroText} accessibilityLiveRegion="polite">
           {heroText}
         </Text>
+        <Pressable
+          onPress={() => {
+            stop();
+            update({ speakReplies: !preferences.speakReplies });
+          }}
+          style={[styles.voiceToggle, preferences.speakReplies && styles.voiceToggleOn]}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: preferences.speakReplies }}
+          accessibilityLabel="Tero habla"
+          accessibilityHint="Activa o apaga la lectura en voz alta de las respuestas de Tero"
+          hitSlop={8}
+        >
+          <Text style={[styles.voiceToggleText, preferences.speakReplies && styles.voiceToggleTextOn]}>
+            {preferences.speakReplies ? 'Voz: sí' : 'Voz: no'}
+          </Text>
+        </Pressable>
       </View>
       <FlatList
         ref={listRef}
@@ -326,6 +389,36 @@ function TeroChatContent() {
           {error}
         </Text>
       ) : null}
+      {TERO_VOICE_ENABLED && dictationMessage ? (
+        <Text style={styles.error} accessibilityLiveRegion="polite">
+          {dictationMessage}
+        </Text>
+      ) : null}
+      {TERO_VOICE_ENABLED && dictating ? (
+        <Text style={styles.dictationHint} accessibilityLiveRegion="polite">
+          Escuchando… habla ahora
+        </Text>
+      ) : null}
+
+      {attached ? (
+        <View style={styles.attachedRow}>
+          <Image source={{ uri: attached.uri }} style={styles.attachedThumb} accessibilityLabel="Imagen que vas a enviar a Tero" />
+          <Pressable
+            onPress={() => setAttached(null)}
+            disabled={pending}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Quitar la imagen"
+          >
+            <Text style={styles.retry}>Quitar imagen</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {TERO_IMAGES_ENABLED && attached ? (
+        <Text style={styles.dictationHint}>
+          La imagen se envía a Anthropic, la IA de Tero, para que la vea. THERS no la guarda.
+        </Text>
+      ) : null}
 
       <View style={[styles.composer, { paddingBottom: insets.bottom + space[2] }]}>
         <TextInput
@@ -340,17 +433,43 @@ function TeroChatContent() {
           maxLength={MAX_TERO_MESSAGE_LENGTH}
           accessibilityLabel="Pregunta para Tero"
         />
+        {TERO_VOICE_ENABLED ? (
+          <TeroDictationButton
+            draft={draft}
+            onDraft={setDraft}
+            onMessage={setDictationMessage}
+            onListening={(listening) => {
+              if (listening) stop();
+              setDictating(listening);
+            }}
+            disabled={pending}
+          />
+        ) : null}
+        {TERO_IMAGES_ENABLED ? (
+          <Pressable
+            onPress={() => void chooseImage()}
+            disabled={pending || preparingImage || attached !== null}
+            style={[styles.attach, (pending || preparingImage || attached !== null) && styles.sendDisabled]}
+            accessibilityRole="button"
+            accessibilityLabel="Adjuntar una imagen para Tero"
+          >
+            <Text style={styles.attachText}>{preparingImage ? '…' : 'Foto'}</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           onPress={submit}
-          disabled={!draft.trim() || pending}
-          style={[styles.send, (!draft.trim() || pending) && styles.sendDisabled]}
+          disabled={(!draft.trim() && !attached) || pending}
+          style={[styles.send, ((!draft.trim() && !attached) || pending) && styles.sendDisabled]}
           accessibilityRole="button"
           accessibilityLabel="Enviar pregunta"
-          accessibilityState={{ disabled: !draft.trim() || pending, busy: pending }}
+          accessibilityState={{ disabled: (!draft.trim() && !attached) || pending, busy: pending }}
         >
           <Text style={styles.sendText}>Enviar</Text>
         </Pressable>
       </View>
+      {TERO_VOICE_ENABLED ? (
+        <Text style={[styles.dictationHint, { paddingBottom: insets.bottom + space[2] }]}>{DICTATION_PRIVACY}</Text>
+      ) : null}
     </Screen>
   );
 }
@@ -400,7 +519,10 @@ function MessageBubble({
           message.status === 'failed' && styles.failed,
         ]}
       >
-        <Text style={mine ? styles.mineText : styles.theirsText}>{message.text}</Text>
+        {message.image ? (
+          <Image source={{ uri: message.image.uri }} style={styles.sentImage} accessibilityLabel="Imagen que enviaste a Tero" />
+        ) : null}
+        {message.text ? <Text style={mine ? styles.mineText : styles.theirsText}>{message.text}</Text> : null}
       </View>
       {label ? (
         <View style={styles.statusRow}>
@@ -434,6 +556,16 @@ const styles = themedStyles(() => ({
     borderBottomColor: colors.borderSubtle,
   },
   heroText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.fgSecondary },
+  voiceToggle: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: space[3],
+    paddingVertical: space[1],
+  },
+  voiceToggleOn: { borderColor: teroColors.blue },
+  voiceToggleText: { fontSize: fontSize.labelMd, color: colors.fgMuted },
+  voiceToggleTextOn: { color: teroColors.blue },
   liveHint: {
     fontSize: fontSize.bodySm,
     color: colors.fgMuted,
@@ -471,6 +603,19 @@ const styles = themedStyles(() => ({
   statusFailed: { color: colors.dangerFg },
   retry: { fontSize: fontSize.labelMd, fontWeight: '700', color: colors.brandText },
   error: { fontSize: fontSize.bodySm, color: colors.dangerFg, paddingHorizontal: space[4], paddingBottom: space[2] },
+  dictationHint: { fontSize: fontSize.labelMd, color: colors.fgMuted, paddingHorizontal: space[4], paddingTop: space[1] },
+  attach: {
+    paddingHorizontal: space[3],
+    paddingVertical: space[2],
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignSelf: 'flex-end',
+  },
+  attachText: { color: colors.fg, fontSize: fontSize.labelLg },
+  attachedRow: { flexDirection: 'row', alignItems: 'center', gap: space[3], paddingHorizontal: space[4], paddingTop: space[2] },
+  attachedThumb: { width: 56, height: 56, borderRadius: radius.input },
+  sentImage: { width: 180, height: 130, borderRadius: radius.input, marginBottom: space[1] },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',

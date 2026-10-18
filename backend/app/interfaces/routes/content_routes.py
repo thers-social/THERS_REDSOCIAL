@@ -13,6 +13,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
+from app.application.media.media_url import media_url
 from app.application.moderation.muted_topics_use_case import (
     add_muted_topic,
     list_muted_topics,
@@ -113,7 +114,12 @@ def delete_muted_topic():
 @jwt_required()
 def get_suggestions():
     viewer_id = get_jwt_identity()
-    users = _suggestion_repository.list_for_user(viewer_id, DEFAULT_SUGGESTION_LIMIT)
+    # `?limit=` opcional (1–20) para el panel de sugerencias del perfil (ADR-052); sin él, el de siempre.
+    try:
+        limit = min(max(int(request.args.get("limit", DEFAULT_SUGGESTION_LIMIT)), 1), 20)
+    except ValueError:
+        return jsonify({"msg": "limit debe ser un número"}), 400
+    users = _suggestion_repository.list_for_user(viewer_id, limit)
 
     # Forma reducida: nunca email/phone/etc. Mismo criterio que el autor de un
     # post (post_presenter.py). `is_private` para que el botón diga «Solicitar»
@@ -125,6 +131,7 @@ def get_suggestions():
                 "name": user.name,
                 "username": user.username,
                 "is_private": user.is_private,
+                "avatar_url": media_url(user.avatar_path),
             }
             for user in users
         ]

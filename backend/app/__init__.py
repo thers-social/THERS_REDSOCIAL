@@ -102,6 +102,8 @@ def create_app():
 
     from app.interfaces.routes.message_routes import messages_bp
     app.register_blueprint(messages_bp, url_prefix="/api")
+    from app.interfaces.routes.group_routes import groups_bp
+    app.register_blueprint(groups_bp, url_prefix="/api")
 
     from app.interfaces.routes.privacy_routes import privacy_bp
     app.register_blueprint(privacy_bp, url_prefix="/api")
@@ -145,9 +147,22 @@ def create_app():
     from app.interfaces.routes.plan_routes import plans_bp
     app.register_blueprint(plans_bp, url_prefix="/api")
 
+    # Notificaciones push (ADR-053): registro de dispositivos y emisor por Firebase. El emisor solo se
+    # crea con PUSH_ENABLED y credenciales; sin ellos los casos de uso llaman a un registro vacío.
+    from app.interfaces.routes.push_routes import push_bp
+    app.register_blueprint(push_bp, url_prefix="/api")
+    from app.infrastructure.push.factory import build_push_notifier
+    from app.application.push import events as push_events
+
+    push_events.set_notifier(build_push_notifier(app))
+
     # Tero, asistente con IA (ADR-041, fase 4): chat. Apagado por defecto (TERO_ENABLED).
     from app.interfaces.routes.tero_routes import tero_bp
     app.register_blueprint(tero_bp, url_prefix="/api")
+
+    # API interna que usa n8n (ADR-041 §7): firmada con HMAC, no con JWT. Apagada por defecto.
+    from app.interfaces.routes.automation_routes import automation_bp
+    app.register_blueprint(automation_bp, url_prefix="/api")
 
     # Moderación de contenido (ADR-044): clasificador de imágenes. Solo existe el simulado y solo si
     # se pide explícitamente; sin él, el worker deja todo retenido (falla cerrado).

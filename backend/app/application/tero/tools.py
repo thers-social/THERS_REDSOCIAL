@@ -19,7 +19,10 @@ from app.application.tero import actions as action_use_cases
 from app.application.places import place_use_cases
 from app.application.posts.list_posts_use_case import list_posts
 from app.domain.follows.follow_status import ACCEPTED, PENDING
-from app.domain.places.exceptions import InvalidPlaceQueryError
+from app.domain.places.exceptions import InvalidPlaceQueryError, PlaceNotFoundError
+from app.domain.reservations import schedule as reservation_schedule
+from app.domain.reservations import validators as reservation_validators
+from app.domain.reservations.exceptions import InvalidReservationDataError
 from app.domain.restrictions.kinds import BLOCK
 from app.domain.tero import actions as action_rules
 from app.domain.tero import tools as tool_rules
@@ -38,7 +41,7 @@ class ToolDependencies:
         self, user_repository, follow_repository, notification_repository,
         restriction_repository, post_repository, like_repository, comment_repository,
         mention_repository, muted_keyword_repository, place_repository, user_search_repository,
-        action_repository=None,
+        action_repository=None, suggestion_repository=None, reservation_repository=None,
     ):
         self.user_repository = user_repository
         self.follow_repository = follow_repository
@@ -52,6 +55,8 @@ class ToolDependencies:
         self.place_repository = place_repository
         self.user_search_repository = user_search_repository
         self.action_repository = action_repository
+        self.suggestion_repository = suggestion_repository
+        self.reservation_repository = reservation_repository
 
 
 def _clip(text, limit):
@@ -170,6 +175,68 @@ def _places_search(user_id, args, deps):
     }
 
 
+# --------------------------------------------------------------- people_suggestions
+
+
+def _people_suggestions(user_id, args, deps):
+    """Cuentas que la persona aún no sigue (las mismas reglas que `GET /api/users/suggestions`:
+    sin bloqueadas, sin solicitudes ya enviadas)."""
+    if deps.suggestion_repository is None:
+        return {"results": []}
+    users = deps.suggestion_repository.list_for_user(user_id, MAX_RESULTS)
+    return {
+        "results": [
+            {
+                "username": user.username,
+                "name": user.name,
+                "bio": _clip(user.bio, MAX_BIO),
+                "is_private": user.is_private,
+            }
+            for user in users
+        ]
+    }
+
+
+# ------------------------------------------------------ places_recommend / place_read
+
+
+def _place_line(place):
+    return {
+        "id": place["id"],
+        "name": place["name"],
+        "category": (place.get("category") or {}).get("name"),
+        "address": _clip(place.get("address"), 160),
+        "rating_average": place.get("rating_average"),
+        "reviews_count": place.get("reviews_count"),
+        "accepts_reservations": bool(place.get("accepts_reservations")),
+    }
+
+
+def _places_recommend(user_id, args, deps):
+    """Los mejor valorados (y, a igualdad, los que aceptan reservas), de una categoría si se pide.
+    No usa la ubicación de la persona: Tero nunca la recibe."""
+    try:
+        places = place_use_cases.top_places(
+            args.get("category"), MAX_RESULTS, deps.place_repository, user_id
+        )
+    except InvalidPlaceQueryError as error:
+        raise tool_rules.ToolInputError(error.message) from None
+    return {"results": [_place_line(p) for p in places]}
+
+
+def _place_read(user_id, args, deps):
+    try:
+        place = place_use_cases.get_place(UUID(args["place_id"]), deps.place_repository, user_id)
+    except PlaceNotFoundError:
+        return {"found": False}
+    return {
+        "found": True,
+        **_place_line(place),
+        "municipality": place.get("municipality"),
+        "website": place.get("website"),
+    }
+
+
 # ------------------------------------------------- propuestas (NO ejecutan nada)
 #
 # Cada `propose_*` valida, GUARDA una acción pendiente y devuelve una tarjeta de confirmación. El
@@ -213,6 +280,41 @@ def _propose(user_id, kind, params, summary, deps):
 
 
 _NOT_FOUND = {"proposed": False, "reason": "No encontré a esa persona."}
+
+
+def _propose_reserve_place(user_id, args, deps):
+    """Prepara una SOLICITUD de reserva. Valida lo mismo que `POST /places/<id>/reservations`
+    (fecha en cuarto de hora, ≥ 30 min, horario y cierres) para no ofrecer una tarjeta que fallaría."""
+    repository = deps.reservation_repository
+    if repository is None:
+        return {"proposed": False, "reason": "Las reservas no están disponibles ahora."}
+    try:
+        starts_at = reservation_validators.parse_starts_at(args["starts_at"])
+        party_size = reservation_validators.parse_int(args["party_size"], "party_size", 1, 50)
+    except InvalidReservationDataError as error:
+        raise tool_rules.ToolInputError(str(error)) from None
+    try:
+        place = place_use_cases.get_place(UUID(args["place_id"]), deps.place_repository, user_id)
+    except PlaceNotFoundError:
+        return {"proposed": False, "reason": "No encontré ese lugar."}
+    if not place.get("accepts_reservations"):
+        return {"proposed": False, "reason": f"{place['name']} no recibe reservas por THERS."}
+    day = reservation_schedule.to_local(starts_at).date()
+    is_open, _reason = reservation_schedule.is_open_at(
+        repository.get_week(place["id"]), repository.get_closures(place["id"], day, day), starts_at
+    )
+    if not is_open:
+        return {"proposed": False, "reason": f"{place['name']} está cerrado a esa hora."}
+    local = reservation_schedule.to_local(starts_at)
+    summary = (
+        f"Solicitar reserva en {place['name']} el {local.strftime('%d/%m/%Y')} a las "
+        f"{local.strftime('%H:%M')} para {party_size} {'persona' if party_size == 1 else 'personas'}"
+    )
+    return _propose(
+        user_id, action_rules.KIND_RESERVE_PLACE,
+        {"place_id": place["id"], "starts_at": starts_at.isoformat(), "party_size": party_size},
+        summary, deps,
+    )
 
 
 def _propose_follow_user(user_id, args, deps):
@@ -332,6 +434,51 @@ _TOOLS = [
             required=("query",),
         ),
         _places_search,
+    ),
+    Tool(
+        ToolSpec(
+            "people_suggestions",
+            "Sugiere hasta 5 cuentas de THERS que la persona aún no sigue, con usuario, nombre y "
+            "biografía. No acepta argumentos. Úsala cuando pida a quién seguir.",
+        ),
+        _people_suggestions,
+    ),
+    Tool(
+        ToolSpec(
+            "places_recommend",
+            "Recomienda hasta 5 lugares de THERS Places, los mejor valorados, opcionalmente de una "
+            "categoría (por ejemplo cafes, restaurantes). No conoce la ubicación de la persona.",
+            {"category": tool_rules.string_prop("Categoría opcional (por ejemplo cafes)", 2, 40)},
+        ),
+        _places_recommend,
+    ),
+    Tool(
+        ToolSpec(
+            "place_read",
+            "Lee un lugar por su identificador: nombre, categoría, dirección, valoración, sitio web "
+            "y si recibe reservas. Úsala para dar detalles o antes de proponer una reserva.",
+            {"place_id": tool_rules.uuid_prop("Identificador (UUID) del lugar")},
+            required=("place_id",),
+        ),
+        _place_read,
+    ),
+    Tool(
+        ToolSpec(
+            "propose_reserve_place",
+            "PROPONE solicitar una reserva en un lugar. No la hace: crea una tarjeta que la persona "
+            "debe confirmar, y el lugar luego la acepta o la rechaza. Necesitas el lugar (place_id), "
+            "la fecha y hora con zona horaria (ISO 8601, El Salvador es -06:00, en punto, y cuarto, "
+            "y media o menos cuarto, al menos 30 minutos en el futuro) y cuántas personas. Pídele a "
+            "la persona lo que falte; no lo inventes. Úsala solo si lo pidió.",
+            {
+                "place_id": tool_rules.uuid_prop("Identificador (UUID) del lugar"),
+                "starts_at": tool_rules.string_prop("Fecha y hora ISO 8601 con zona, p. ej. 2026-10-25T19:00:00-06:00", 20, 40),
+                "party_size": tool_rules.integer_prop("Cantidad de personas (1 a 50)", 1, 50),
+            },
+            required=("place_id", "starts_at", "party_size"),
+            risk=tool_rules.RISK_PROPOSE,
+        ),
+        _propose_reserve_place,
     ),
     Tool(
         ToolSpec(

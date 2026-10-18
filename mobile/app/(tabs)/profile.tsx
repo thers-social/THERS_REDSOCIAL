@@ -6,7 +6,9 @@ import { useAuth } from '@features/auth/context/AuthContext';
 import { PostCard } from '@features/posts/PostCard';
 import { usePosts } from '@features/posts/PostsContext';
 import { usePostMenu } from '@features/posts/usePostMenu';
-import { patchProfile } from '@features/settings/api';
+import { shareProfile } from '@features/profile/shareProfile';
+import { SuggestedAccounts } from '@features/profile/SuggestedAccounts';
+import { patchProfile, removeAvatar, uploadAvatar } from '@features/settings/api';
 import { colors, fontSize, fonts, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { messageOf } from '@features/posts/PostsContext';
@@ -34,6 +36,7 @@ export default function Profile() {
   const menu = usePostMenu();
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState<Tab>('posts');
+  const [suggesting, setSuggesting] = useState(false);
 
   const mine = useMemo(
     () => posts.posts.filter((post) => post.author.id === user?.id),
@@ -52,6 +55,13 @@ export default function Profile() {
   }
 
   const data = tab === 'posts' ? mine : mentioned;
+
+  function openConnections(kind: 'followers' | 'following') {
+    router.push({
+      pathname: '/connections/[userId]',
+      params: { userId: user!.id, tab: kind, username: user!.username },
+    });
+  }
 
   return (
     <Screen
@@ -92,14 +102,24 @@ export default function Profile() {
                   <Text style={styles.statValue}>{mine.length}</Text>
                   <Text style={styles.statLabel}>Publicaciones</Text>
                 </View>
-                <View style={styles.stat}>
+                <Pressable
+                  style={styles.stat}
+                  onPress={() => openConnections('followers')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver tus seguidores, ${user.followers_count}`}
+                >
                   <Text style={styles.statValue}>{user.followers_count}</Text>
                   <Text style={styles.statLabel}>Seguidores</Text>
-                </View>
-                <View style={styles.stat}>
+                </Pressable>
+                <Pressable
+                  style={styles.stat}
+                  onPress={() => openConnections('following')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver a quién sigues, ${user.following_count}`}
+                >
                   <Text style={styles.statValue}>{user.following_count}</Text>
                   <Text style={styles.statLabel}>Siguiendo</Text>
-                </View>
+                </Pressable>
               </View>
             </View>
 
@@ -139,18 +159,21 @@ export default function Profile() {
               <Button
                 label="Compartir"
                 variant="secondary"
-                onPress={() => comingSoon('Compartir perfil')}
+                onPress={() => shareProfile(user).catch(() => {})}
                 style={styles.flex}
               />
               <Pressable
-                onPress={() => comingSoon('Las sugerencias de amigos')}
-                style={styles.iconBtn}
+                onPress={() => setSuggesting((open) => !open)}
+                style={[styles.iconBtn, suggesting && styles.iconBtnOn]}
                 accessibilityRole="button"
-                accessibilityLabel="Sugerencias de amigos (próximamente)"
+                accessibilityState={{ expanded: suggesting }}
+                accessibilityLabel="Descubrir personas"
               >
-                <Icon name="userAdd" size={20} color={colors.fg} />
+                <Icon name="userAdd" size={20} color={suggesting ? colors.brandText : colors.fg} />
               </Pressable>
             </View>
+
+            {suggesting ? <SuggestedAccounts onClose={() => setSuggesting(false)} /> : null}
 
             <Pressable
               onPress={() => comingSoon('Las historias destacadas')}
@@ -225,6 +248,15 @@ export default function Profile() {
             throw new Error(messageOf(e));
           }
         }}
+        onAvatar={async (media) => {
+          try {
+            if (media) await uploadAvatar(media);
+            else await removeAvatar();
+            await refreshUser();
+          } catch (e) {
+            throw new Error(messageOf(e));
+          }
+        }}
       />
     </Screen>
   );
@@ -248,6 +280,7 @@ const styles = themedStyles(() => ({
   statLabel: { fontSize: fontSize.labelSm, color: colors.fgMuted, marginTop: space[1] },
   buttons: { flexDirection: 'row', gap: space[2], marginBottom: space[4], alignItems: 'center' },
   flex: { flex: 1, paddingHorizontal: space[2] },
+  iconBtnOn: { borderColor: colors.brand },
   iconBtn: {
     width: 44,
     height: 44,

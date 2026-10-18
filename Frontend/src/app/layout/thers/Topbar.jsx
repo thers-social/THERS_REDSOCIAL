@@ -98,8 +98,8 @@ export default function Topbar({
 
       <div className="flex shrink-0 items-center gap-3">
         <Link
-          to="/radar"
-          aria-label={t("nav.radar")}
+          to="/places"
+          aria-label={t("nav.places")}
           className="hidden h-10 w-10 items-center justify-center rounded-th-pill text-th-fg-muted transition-colors th-focus-ring hover:bg-th-surface-raised hover:text-th-fg-strong sm:flex"
         >
           <Icon name="bolt" size={20} />
@@ -154,6 +154,9 @@ export default function Topbar({
 
               <MenuLink to="/profile" icon="person" onSelect={() => setMenuOpen(false)}>
                 {t("nav.viewProfile")}
+              </MenuLink>
+              <MenuLink to="/saved" icon="bookmark" onSelect={() => setMenuOpen(false)}>
+                {t("postActions.saved.menu")}
               </MenuLink>
               <MenuLink to="/settings" icon="settings" onSelect={() => setMenuOpen(false)}>
                 {t("nav.settings")}

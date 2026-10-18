@@ -38,8 +38,8 @@ def present_summary(row):
         "longitude": row["longitude"],
         "verification_status": row["verification_status"],
         "address": row["address"],
-        # Todavía no hay fotos de lugares (fase 4).
-        "cover_image_url": None,
+        # Imagen que identifica al lugar (ADR-046); `null` si no tiene. Nunca la clave interna.
+        "cover_image_url": media_url(row.get("image_key")),
         "is_saved": bool(row["is_saved"]),
         "rating_average": _average(row["rating_average"]),
         "reviews_count": int(row["reviews_count"]),

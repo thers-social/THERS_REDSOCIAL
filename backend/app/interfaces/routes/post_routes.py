@@ -29,13 +29,19 @@ from app.domain.rate_limiting.exceptions import RateLimitExceededError
 from app.infrastructure.persistence.repositories.media_attachment_repository import (
     SQLAlchemyMediaAttachmentRepository,
 )
+from app.infrastructure.persistence.repositories.video_attachment_repository import (
+    SQLAlchemyVideoAttachmentRepository,
+)
 from app.infrastructure.persistence.repositories.rate_limit_repository import (
     SQLAlchemyRateLimitRepository,
 )
 from app.interfaces.image_upload import (
     process_files,
+    process_video_upload,
     read_request_data,
+    read_video_upload,
     too_many_images_response,
+    video_disabled_response,
 )
 from app.interfaces.profile_gate import profile_completed_required
 from app.interfaces.rate_limited_response import rate_limited_response
@@ -63,6 +69,10 @@ from app.infrastructure.persistence.repositories.restriction_repository import (
 from app.infrastructure.persistence.repositories.user_repository import (
     SQLAlchemyUserRepository,
 )
+from app.infrastructure.persistence.repositories.saved_post_repository import (
+    SQLAlchemySavedPostRepository,
+)
+from app.application.saved_posts.saved_post_use_cases import save_post, unsave_post
 from app.infrastructure.persistence.repositories.post_repository import (
     SQLAlchemyPostRepository,
 )
@@ -70,6 +80,8 @@ from app.infrastructure.persistence.repositories.post_repository import (
 posts_bp = Blueprint("posts", __name__)
 
 PLACE_POSTS_LIMIT = 30
+SAVED_POSTS_LIMIT = 100
+EXPLORE_LIMIT = 30  # ADR-050: página de Explorar
 
 _post_repository = SQLAlchemyPostRepository()
 _like_repository = SQLAlchemyLikeRepository()
@@ -86,7 +98,11 @@ _muted_keyword_repository = SQLAlchemyMutedKeywordRepository()
 _restriction_repository = SQLAlchemyRestrictionRepository()
 # ADR-039: imágenes adjuntas y su límite de subidas.
 _media_repository = SQLAlchemyMediaAttachmentRepository()
+# ADR-046: video corto.
+_video_repository = SQLAlchemyVideoAttachmentRepository()
 _rate_limit_repository = SQLAlchemyRateLimitRepository()
+# ADR-047: publicaciones guardadas.
+_saved_repository = SQLAlchemySavedPostRepository()
 
 
 @posts_bp.route("/posts", methods=["POST"])
@@ -99,9 +115,18 @@ def create():
 
     # JSON (como siempre) o multipart con imágenes en el campo `images` (ADR-039).
     data, files = read_request_data()
-    if not data and not files:
+    # Video corto (ADR-046): campo `video` de la misma petición multipart (un solo archivo).
+    video_upload = read_video_upload()
+    if not data and not files and video_upload is None:
         return jsonify({"msg": "No se enviaron datos"}), 400
     data = data or {}
+
+    if video_upload is not None:
+        # Apagado por defecto: con el interruptor apagado ni siquiera se mira el archivo.
+        if not current_app.config.get("VIDEO_UPLOADS_ENABLED"):
+            return video_disabled_response()
+        if files:
+            return jsonify({"msg": "No puedes adjuntar imágenes y un video en la misma publicación"}), 400
 
     if len(files) > MAX_POST_IMAGES:
         return too_many_images_response(MAX_POST_IMAGES)
@@ -113,7 +138,9 @@ def create():
     # Con imágenes el texto puede ir vacío (publicar solo una foto); sin ellas
     # sigue siendo obligatorio, igual que antes.
     content = data.get("content")
-    content_ok = is_valid_content_with_images(content) if files else is_valid_content(content)
+    content_ok = (
+        is_valid_content_with_images(content) if (files or video_upload is not None) else is_valid_content(content)
+    )
     if not content_ok:
         return jsonify(
             {"msg": f"El contenido debe tener entre 1 y {MAX_CONTENT_LENGTH} caracteres"}
@@ -152,6 +179,19 @@ def create():
         if error_response:
             return error_response
 
+    prepared_video = None
+    if video_upload is not None:
+        # Re-codificar video es lo más caro que hace el servidor: se cuenta cada envío con video.
+        try:
+            rate_limit_guard.enforce(
+                policy.VIDEO_UPLOAD, f"user:{author_id}", _rate_limit_repository
+            )
+        except RateLimitExceededError as error:
+            return rate_limited_response(error)
+        prepared_video, error_response = process_video_upload(video_upload)
+        if error_response:
+            return error_response
+
     try:
         post = create_post(
             author_id, content, _post_repository, _user_repository,
@@ -161,6 +201,8 @@ def create():
             media_repository=_media_repository,
             media_storage=current_app.extensions["media_storage"],
             place_id=place_id,
+            prepared_video=prepared_video,
+            video_repository=_video_repository,
         )
     except PostPlaceNotFoundError:
         return jsonify({"msg": "Lugar no encontrado"}), 404
@@ -176,11 +218,75 @@ def list_all():
     # viewer_id (ADR-005): quién pregunta, para resolver `liked_by_me` por
     # post -- mismo JWT que ya identifica al autor en create().
     viewer_id = get_jwt_identity()
+    # `?author_id=<uuid>`: solo las publicaciones de esa persona (perfil ajeno). Un valor que no es
+    # un UUID es 400; las reglas de visibilidad del feed aplican igual.
+    author_id = request.args.get("author_id")
+    if author_id is not None:
+        try:
+            author_id = uuid.UUID(author_id)
+        except ValueError:
+            return jsonify({"msg": "author_id no es válido"}), 400
     posts = list_posts(
         _post_repository, _like_repository, _comment_repository, _follow_repository,
         _mention_repository, _muted_keyword_repository, viewer_id, DEFAULT_LIMIT,
+        saved_repository=_saved_repository, author_id=author_id,
     )
     return jsonify({"posts": posts}), 200
+
+
+@posts_bp.route("/explore", methods=["GET"])
+@jwt_required()
+def explore():
+    """Explorar (ADR-050): fotos y videos populares de personas que no sigues. `kind`:
+    `all` (por defecto) | `images` | `videos`; `offset` para paginar."""
+    kind = request.args.get("kind", "all")
+    if kind not in ("all", "images", "videos"):
+        return jsonify({"msg": "kind debe ser all, images o videos"}), 400
+    try:
+        offset = max(int(request.args.get("offset", 0)), 0)
+    except ValueError:
+        return jsonify({"msg": "offset debe ser un número"}), 400
+    viewer_id = get_jwt_identity()
+    posts = list_posts(
+        _post_repository, _like_repository, _comment_repository, _follow_repository,
+        _mention_repository, _muted_keyword_repository, viewer_id, EXPLORE_LIMIT,
+        saved_repository=_saved_repository, explore=kind, offset=offset,
+    )
+    return jsonify({"posts": posts, "has_more": len(posts) == EXPLORE_LIMIT}), 200
+
+
+@posts_bp.route("/posts/saved", methods=["GET"])
+@jwt_required()
+def list_saved():
+    """Las publicaciones que esta persona guardó, la última guardada primero (ADR-047). Solo las que
+    sigue pudiendo ver: las mismas reglas de visibilidad que el feed."""
+    viewer_id = get_jwt_identity()
+    posts = list_posts(
+        _post_repository, _like_repository, _comment_repository, _follow_repository,
+        _mention_repository, _muted_keyword_repository, viewer_id, SAVED_POSTS_LIMIT,
+        saved_repository=_saved_repository, saved_by=viewer_id,
+    )
+    return jsonify({"posts": posts}), 200
+
+
+@posts_bp.route("/posts/<uuid:post_id>/save", methods=["POST"])
+@jwt_required()
+@profile_completed_required
+def save(post_id):
+    try:
+        result = save_post(
+            post_id, get_jwt_identity(), _post_repository, _saved_repository,
+            _follow_repository, _restriction_repository,
+        )
+    except PostNotFoundError:
+        return jsonify({"msg": "Post no encontrado"}), 404
+    return jsonify(result), 200
+
+
+@posts_bp.route("/posts/<uuid:post_id>/save", methods=["DELETE"])
+@jwt_required()
+def unsave(post_id):
+    return jsonify(unsave_post(post_id, get_jwt_identity(), _saved_repository)), 200
 
 
 @posts_bp.route("/places/<uuid:place_id>/posts", methods=["GET"])
@@ -195,7 +301,7 @@ def list_for_place(place_id):
     posts = list_posts(
         _post_repository, _like_repository, _comment_repository, _follow_repository,
         _mention_repository, _muted_keyword_repository, viewer_id, PLACE_POSTS_LIMIT,
-        place_id=str(place_id),
+        place_id=str(place_id), saved_repository=_saved_repository,
     )
     return jsonify({"posts": posts}), 200
 
@@ -255,6 +361,7 @@ def delete(post_id):
         result = delete_post(
             str(post_id), author_id, _post_repository,
             _media_repository, current_app.extensions["media_storage"],
+            video_repository=_video_repository,
         )
     except PostNotFoundError:
         # Mismo mensaje/código tanto si el id no existe como si existe pero

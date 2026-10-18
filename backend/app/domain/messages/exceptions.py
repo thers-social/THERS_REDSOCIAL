@@ -29,5 +29,9 @@ class MessagesNotAllowedError(Exception):
     existencia de la cuenta."""
 
 
+class SharedPostNotFoundError(Exception):
+    """La publicación que se quiere compartir no existe o quien comparte no puede verla (ADR-047)."""
+
+
 class SharedPlaceNotFoundError(Exception):
     """El lugar que se quiere compartir no existe o no es público (ADR-040 fase 4c)."""

@@ -112,9 +112,6 @@ export function PlaceQuote({ placeId }: { placeId: string }) {
     }
   }
 
-  // Sin catálogo y sin cotizaciones previas no hay nada que mostrar.
-  if (items !== null && items.length === 0 && mine.length === 0 && !loadError) return null;
-
   return (
     <View style={styles.section}>
       <Text style={styles.title} accessibilityRole="header">
@@ -179,6 +176,13 @@ export function PlaceQuote({ placeId }: { placeId: string }) {
         ) : (
           <Button label="Pedir una cotización" variant="secondary" onPress={() => setOpen(true)} />
         )
+      ) : null}
+
+      {items !== null && items.length === 0 && !loadError ? (
+        <Text style={styles.muted}>
+          Este lugar todavía no publicó su lista de precios, así que aún no se puede pedir una cotización. Cuando
+          la cargue, aparecerá aquí el botón para pedirla.
+        </Text>
       ) : null}
 
       {mine.map((quote) => (

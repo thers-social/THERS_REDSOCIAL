@@ -61,6 +61,17 @@ def _one_own(row, repository):
     return _present(row, to_place_card(row["place_id"], cards))
 
 
+def reservation_pdf(reservation_id, user_id, repository):
+    """PDF con el comprobante de una reserva PROPIA (cualquier otra persona recibe 404)."""
+    from app.infrastructure.pdf.reservation_pdf import build_reservation_pdf
+
+    row = _mine(reservation_id, user_id, repository)
+    presented = _one_own(row, repository)
+    place = presented["place"]
+    name = place["name"] if place and place.get("available") else "Lugar no disponible"
+    return build_reservation_pdf(name, repository.requester_name(user_id), presented)
+
+
 def settings(place_id, user_id, repository):
     _require_manager(place_id, user_id, repository)
     return repository.get_settings(place_id)

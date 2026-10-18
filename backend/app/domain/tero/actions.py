@@ -19,7 +19,9 @@ FAILED = "failed"
 KIND_FOLLOW = "follow_user"
 KIND_UNFOLLOW = "unfollow_user"
 KIND_UPDATE_PROFILE = "update_profile"
-KINDS = (KIND_FOLLOW, KIND_UNFOLLOW, KIND_UPDATE_PROFILE)
+# Reservar en un lugar (ADR-053): crea una SOLICITUD de reserva, que el lugar confirma o rechaza.
+KIND_RESERVE_PLACE = "reserve_place"
+KINDS = (KIND_FOLLOW, KIND_UNFOLLOW, KIND_UPDATE_PROFILE, KIND_RESERVE_PLACE)
 
 #: Cuánto vive una propuesta sin respuesta. Corto a propósito: una tarjeta olvidada no debe poder
 #: ejecutarse horas después, cuando la persona ya no recuerda qué aprobaba.

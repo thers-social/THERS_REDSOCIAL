@@ -40,6 +40,12 @@ export type TeroPreferences = {
   animations: boolean;
   /** Reservado: Tero aún no reproduce sonidos. */
   sounds: boolean;
+  /** Tero lee en voz alta sus respuestas (ADR-045). Se apaga con el botón de la conversación. */
+  speakReplies: boolean;
+  /** Voz del sistema elegida para Tero; `null` = la mejor disponible (automática). */
+  voiceId: string | null;
+  /** Igual, para las respuestas en inglés. */
+  voiceIdEn: string | null;
   /** Solo español por ahora: la app móvil no tiene i18n todavía. */
   language: 'es';
   /** ISO 8601 de la última modificación local. */
@@ -67,12 +73,18 @@ export type TeroMessage = {
   cards?: TeroActionCard[];
   /** Solo en los mensajes de la persona: en camino, entregado o fallido. */
   status?: TeroMessageStatus;
+  /**
+   * Solo en los mensajes de la persona (ADR-046): la imagen que adjuntó. `payload` es lo que viaja al
+   * servidor (base64, ya reducida) y sirve para reintentar; `uri` es el archivo del teléfono para mostrarla.
+   * No se guarda en ninguna parte: vive mientras la pantalla está abierta, igual que la conversación.
+   */
+  image?: { uri: string; payload: { media_type: string; data: string } };
 };
 
 export type TeroMessageStatus = 'sending' | 'sent' | 'failed';
 
 /** Acciones que Tero puede PREPARAR (ADR-041 §6.2). Nunca las ejecuta: las confirma la persona. */
-export type TeroActionKind = 'follow_user' | 'unfollow_user' | 'update_profile';
+export type TeroActionKind = 'follow_user' | 'unfollow_user' | 'update_profile' | 'reserve_place';
 
 /**
  * Una acción que Tero preparó y que NO se ha hecho. `summary` lo redacta el servidor a partir de

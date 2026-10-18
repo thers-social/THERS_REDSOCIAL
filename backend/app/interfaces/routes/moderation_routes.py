@@ -40,6 +40,11 @@ from app.infrastructure.persistence.repositories.refresh_token_repository import
 from app.infrastructure.persistence.repositories.session_repository import (
     SQLAlchemySessionRepository,
 )
+from app.application.automations.notifier import AutomationNotifier
+from app.infrastructure.automations.factory import automation_state
+from app.infrastructure.persistence.repositories.automation_repository import (
+    SQLAlchemyAutomationRepository,
+)
 from app.interfaces.moderator_required import moderator_required
 
 moderation_bp = Blueprint("platform_moderation", __name__)
@@ -48,6 +53,19 @@ _moderation_repository = SQLAlchemyModerationRepository()
 _post_repository = SQLAlchemyPostRepository()
 _comment_repository = SQLAlchemyCommentRepository()
 _message_repository = SQLAlchemyMessageRepository()
+_automation_repository = SQLAlchemyAutomationRepository()
+
+
+def _notify_reporter(result):
+    """Avisa a quien reportó (ADR-041 §7, n8n). De mejor esfuerzo: un fallo aquí NUNCA debe
+    deshacer ni retrasar la resolución, que ya quedó guardada."""
+    try:
+        state = automation_state(current_app)
+        AutomationNotifier(state["client"], state["runner"], _automation_repository).report_resolved(
+            result["id"], result["status"]
+        )
+    except Exception as error:  # noqa: BLE001
+        current_app.logger.warning("aviso de reporte resuelto falló (%s)", type(error).__name__)
 _place_repository = SQLAlchemyPlaceRepository()
 
 
@@ -119,4 +137,5 @@ def post_resolve_report(report_id):
     except CannotModerateSelfError:
         return jsonify({"msg": "No puedes resolver un reporte sobre tu propia cuenta"}), 403
 
+    _notify_reporter(result)
     return jsonify({"report": result}), 200

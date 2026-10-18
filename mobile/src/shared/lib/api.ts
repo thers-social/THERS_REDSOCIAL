@@ -272,8 +272,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   } = options;
 
   const baseHeaders: Record<string, string> = { Accept: binary ? 'application/pdf, application/json' : 'application/json' };
-  if (body !== undefined) baseHeaders['Content-Type'] = 'application/json';
-  const serializedBody = form ?? (body === undefined ? undefined : JSON.stringify(body));
+  // `FormData` (notas de voz, ADR-042) puede venir como `body` o en `form`: viaja tal cual y SIN
+  // `Content-Type` (lo fija React Native con el `boundary`). Con JSON se serializa como siempre.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isForm) baseHeaders['Content-Type'] = 'application/json';
+  const serializedBody =
+    form ?? (body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body));
 
   const send = (accessToken: string | null) =>
     fetchWithTimeout(

@@ -167,6 +167,14 @@ class User(db.Model):
         db.Boolean, nullable=False, server_default=text("true")
     )
 
+    # Resumen semanal de actividad por correo (ADR-041 §7, n8n). Nace en `false`: nadie recibe
+    # correos que no pidió. `weekly_summary_sent_at` marca el último resumen entregado y es lo que
+    # impide mandar dos veces el de la misma semana, aunque el flujo de n8n se repita.
+    weekly_summary_email = db.Column(
+        db.Boolean, nullable=False, server_default=text("false")
+    )
+    weekly_summary_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     # Autenticación en dos pasos con TOTP (ADR-026-two-factor-authentication.md).
     #
     # `totp_secret` se guarda **recuperable, no hasheado**, y es inevitable:
@@ -284,6 +292,15 @@ class Post(db.Model):
         "MediaAttachment",
         primaryjoin="Post.id == MediaAttachment.post_id",
         order_by="MediaAttachment.position",
+        lazy="selectin",
+        viewonly=True,
+    )
+
+    # Video corto (ADR-046): como mucho uno por publicación. Misma estrategia de carga que `images`.
+    video = db.relationship(
+        "VideoAttachment",
+        primaryjoin="Post.id == VideoAttachment.post_id",
+        uselist=False,
         lazy="selectin",
         viewonly=True,
     )
@@ -562,10 +579,17 @@ class Message(db.Model):
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # NULL en un mensaje de grupo (ADR-048): exactamente uno de `recipient_id` y `group_id` (CHECK).
     recipient_id = db.Column(
         PG_UUID(as_uuid=True),
         db.ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+    )
+    # Chat grupal al que pertenece el mensaje (ADR-048). NULL = mensaje directo.
+    group_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("group_chats.id", ondelete="CASCADE"),
+        nullable=True,
     )
 
     # Sin límite de longitud a nivel de esquema -- la validación de negocio
@@ -607,6 +631,12 @@ class Message(db.Model):
         nullable=True,
     )
 
+    # Publicación compartida por mensaje (ADR-047). SET NULL: si se borra la publicación, el mensaje
+    # queda y la tarjeta se muestra como no disponible.
+    post_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("posts.id", ondelete="SET NULL"), nullable=True
+    )
+
     sender = db.relationship("User", foreign_keys=[sender_id], lazy="joined")
     recipient = db.relationship("User", foreign_keys=[recipient_id], lazy="joined")
 
@@ -619,6 +649,24 @@ class Message(db.Model):
         viewonly=True,
     )
 
+    # Nota de voz (ADR-042): como mucho una por mensaje. Misma estrategia de carga que `images`.
+    audio = db.relationship(
+        "AudioAttachment",
+        primaryjoin="Message.id == AudioAttachment.message_id",
+        uselist=False,
+        lazy="selectin",
+        viewonly=True,
+    )
+
+    # Video corto (ADR-046): como mucho uno por mensaje.
+    video = db.relationship(
+        "VideoAttachment",
+        primaryjoin="Message.id == VideoAttachment.message_id",
+        uselist=False,
+        lazy="selectin",
+        viewonly=True,
+    )
+
     __table_args__ = (
         # Sin UNIQUE: dos mensajes entre las mismas dos personas son eventos
         # legítimos e independientes, no un duplicado a impedir (mismo
@@ -626,6 +674,10 @@ class Message(db.Model):
         db.CheckConstraint(
             "sender_id <> recipient_id", name="ck_messages_no_self_message"
         ),
+        db.CheckConstraint(
+            "(recipient_id IS NULL) <> (group_id IS NULL)", name="ck_messages_one_target"
+        ),
+        db.Index("ix_messages_group_created", "group_id", "created_at"),
         # El hilo entre A y B se busca con
         # (sender_id=A AND recipient_id=B) OR (sender_id=B AND recipient_id=A),
         # ordenado por created_at -- ninguna columna única cubre ese acceso,
@@ -651,6 +703,59 @@ class Message(db.Model):
 
     def __repr__(self):
         return f"<Message sender_id={self.sender_id} recipient_id={self.recipient_id}>"
+
+
+class GroupChat(db.Model):
+    __tablename__ = "group_chats"
+
+    # Chat grupal (ADR-048). Los mensajes viven en `messages` con `group_id`; aquí solo el grupo.
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    name = db.Column(db.String(60), nullable=False)
+    # SET NULL: si quien lo creó borra su cuenta, el grupo sigue para los demás.
+    created_by = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    def __repr__(self):
+        return f"<GroupChat id={self.id} name={self.name!r}>"
+
+
+class GroupMember(db.Model):
+    __tablename__ = "group_members"
+
+    group_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("group_chats.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    role = db.Column(db.String(10), nullable=False, server_default="member")
+    joined_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    # Cada miembro lee a su ritmo: sin `read_at` por mensaje (en un grupo no tiene sentido un único
+    # booleano). Los no leídos son los de otras personas posteriores a este instante.
+    last_read_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    user = db.relationship("User", lazy="joined")
+
+    __table_args__ = (
+        db.CheckConstraint("role IN ('admin', 'member')", name="ck_group_members_role"),
+        db.Index("ix_group_members_user_id", "user_id"),
+    )
 
 
 class MediaAttachment(db.Model):
@@ -729,6 +834,103 @@ class MediaAttachment(db.Model):
 
     def __repr__(self):
         return f"<MediaAttachment id={self.id} key={self.storage_key}>"
+
+
+class VideoAttachment(db.Model):
+    __tablename__ = "video_attachments"
+
+    # Video corto de una publicación o de un mensaje directo (ADR-046). Tabla propia, no
+    # `media_attachments`: esa asume imágenes (`width`/`height` de una foto, varias por post).
+    # Los archivos viven en el almacenamiento de medios; aquí solo sus claves.
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    # Quién lo subió: permite recoger sus archivos al eliminar la cuenta (ADR-031).
+    owner_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # EXACTAMENTE uno de los dos (CHECK); UNIQUE: un solo video por publicación o mensaje.
+    post_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+    message_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+    # `videos/<uuid4>.mp4` y `videos/<uuid4>.webp` (miniatura): aleatorios e impredecibles. Únicos.
+    storage_key = db.Column(db.Text, nullable=False, unique=True)
+    thumb_key = db.Column(db.Text, nullable=False, unique=True)
+    # Las calcula el servidor al decodificar; nunca las que declara el cliente.
+    width = db.Column(db.Integer, nullable=False)
+    height = db.Column(db.Integer, nullable=False)
+    duration_ms = db.Column(db.Integer, nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "(post_id IS NOT NULL)::int + (message_id IS NOT NULL)::int = 1",
+            name="ck_video_attachments_one_target",
+        ),
+        db.CheckConstraint("duration_ms > 0", name="ck_video_attachments_duration_positive"),
+        db.CheckConstraint("size_bytes > 0", name="ck_video_attachments_size_positive"),
+        db.CheckConstraint("width > 0 AND height > 0", name="ck_video_attachments_size_dims"),
+        db.Index("ix_video_attachments_owner_id", "owner_id"),
+    )
+
+
+class AudioAttachment(db.Model):
+    __tablename__ = "audio_attachments"
+
+    # Nota de voz de un mensaje directo (ADR-042). Tabla propia, no `media_attachments`: esa
+    # exige `width`/`height` y su CHECK de exclusividad, y todo lo que la lee asume imágenes.
+    # El archivo vive en el almacenamiento de medios; aquí solo su clave.
+    id = db.Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    # Quién la subió: permite recoger sus archivos al eliminar la cuenta (ADR-031).
+    owner_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # UNIQUE: una sola nota de voz por mensaje.
+    message_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    # `voice/<uuid4>.m4a`: aleatorio e impredecible. Único.
+    storage_key = db.Column(db.Text, nullable=False, unique=True)
+    # La calcula el servidor al decodificar; nunca la que declara el cliente.
+    duration_ms = db.Column(db.Integer, nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        db.CheckConstraint("duration_ms > 0", name="ck_audio_attachments_duration_positive"),
+        db.CheckConstraint("size_bytes > 0", name="ck_audio_attachments_size_positive"),
+        db.Index("ix_audio_attachments_owner_id", "owner_id"),
+    )
+
+    def __repr__(self):
+        return f"<AudioAttachment id={self.id} key={self.storage_key}>"
 
 
 class PasswordResetToken(db.Model):
@@ -1583,7 +1785,7 @@ class Place(db.Model):
     # un valor inválido nunca llega a guardarse.
     __table_args__ = (
         CheckConstraint(
-            "verification_status IN ('pending','verified','needs_review','rejected','inactive')",
+            "verification_status IN ('pending','verified','needs_review','rejected','inactive','unverified')",
             name="ck_places_verification_status",
         ),
         CheckConstraint(
@@ -1594,9 +1796,20 @@ class Place(db.Model):
             "coordinate_source IN ('gps','map_selected','geocoded','imported')",
             name="ck_places_coordinate_source",
         ),
+        CheckConstraint(
+            "osm_type IS NULL OR osm_type IN ('node','way','relation')",
+            name="ck_places_osm_type",
+        ),
         Index("ix_places_location", "location", postgresql_using="gist"),
         Index("ix_places_category_id", "category_id"),
         Index("ix_places_public", "is_active", "verification_status"),
+        Index(
+            "uq_places_osm_ref",
+            "osm_type",
+            "osm_id",
+            unique=True,
+            postgresql_where=text("osm_id IS NOT NULL"),
+        ),
     )
 
     id = db.Column(
@@ -1628,6 +1841,13 @@ class Place(db.Model):
     )
     source = db.Column(db.String(20), nullable=False)
     coordinate_source = db.Column(db.String(20), nullable=False)
+    # Imagen que identifica al lugar (ADR-046): clave en el almacenamiento de medios, o NULL. La sube
+    # quien lo gestiona; el archivo lo re-codifica el servidor (sin EXIF) igual que el resto de imágenes.
+    image_key = db.Column(db.Text, nullable=True)
+    # Trazabilidad de OpenStreetMap (ADR-043): `node`/`way`/`relation` y su identificador. Con
+    # ellos la importación es idempotente y se puede separar (`source = 'osm'`) lo que sigue ODbL.
+    osm_type = db.Column(db.String(10), nullable=True)
+    osm_id = db.Column(db.BigInteger, nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, server_default=text("true"))
 
     # SET NULL: si quien creó o verificó elimina su cuenta (ADR-031), el lugar
@@ -1673,6 +1893,29 @@ class SavedPlace(db.Model):
     created_at = db.Column(
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class SavedPost(db.Model):
+    __tablename__ = "saved_posts"
+
+    # Publicaciones guardadas por una persona (ADR-047). PK compuesta: la base impide guardar dos
+    # veces la misma. CASCADE en ambas FKs: al borrar la publicación o la cuenta (ADR-031)
+    # desaparece el guardado. Es PRIVADO: nadie más ve qué guardó una persona.
+    user_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    post_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("posts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (db.Index("ix_saved_posts_user_created", "user_id", "created_at"),)
 
 
 class PlaceReport(db.Model):
@@ -2446,3 +2689,28 @@ class PendingExternalDeletion(db.Model):
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
     done_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+# --- Notificaciones push (ADR-053) ---
+
+
+class PushDevice(db.Model):
+    __tablename__ = "push_devices"
+
+    # Un dispositivo (token de Firebase) registrado por una persona con sesión. El token es único: si
+    # alguien inicia sesión en un teléfono que antes usaba otra cuenta, el token pasa a la nueva (así
+    # la cuenta anterior deja de recibir avisos ahí). CASCADE: al borrar la cuenta se borran (ADR-031).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    token = db.Column(db.String(4096), nullable=False, unique=True)
+    platform = db.Column(db.String(16), nullable=False, server_default=text("'android'"))
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    last_seen_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    __table_args__ = (
+        CheckConstraint("platform IN ('android', 'ios')", name="ck_push_devices_platform"),
+        Index("ix_push_devices_user", "user_id"),
+    )

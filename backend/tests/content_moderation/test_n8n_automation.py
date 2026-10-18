@@ -457,7 +457,14 @@ class TestInternalRoutes:
         """Ninguna ruta interna, y ninguna ruta de moderación acepta la firma de n8n."""
         with app.app_context():
             internal = sorted(str(r) for r in app.url_map.iter_rules() if str(r).startswith("/api/internal"))
-            assert internal == ["/api/internal/moderation/summary", "/api/internal/notices"]
+            # Dos familias: moderación (resumen y avisos, ADR-044) y resumen semanal por correo (ADR-041 §7).
+            # Ninguna decide ni sanciona: leen conteos, avisan o confirman un envío.
+            assert internal == [
+                "/api/internal/automations/weekly-summaries/ack",
+                "/api/internal/automations/weekly-summaries/next",
+                "/api/internal/moderation/summary",
+                "/api/internal/notices",
+            ]
             for path in ("/api/moderation/media", "/api/moderation/stats", "/api/moderation/audit"):
                 assert _signed("get", path, client).status_code in (401, 404)
             fake_id = "123e4567-e89b-42d3-a456-426614174000"

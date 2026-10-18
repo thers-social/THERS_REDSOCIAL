@@ -3,21 +3,27 @@
 # de las capas -- domain/ y application/ no importan SQLAlchemy directamente
 # (BACKEND_ARCHITECTURE.md §17), solo reciben el objeto `Post` ya resuelto.
 
-from sqlalchemy import and_, delete as sa_delete, func, literal_column, or_, select, update
+from sqlalchemy import and_, delete as sa_delete, func, literal_column, or_, select, text, update
 
 from sqlalchemy.sql.elements import Grouping
 
-from app.domain.follows.follow_status import ACCEPTED
 from app.domain.posts.repositories import PostRepository
-from app.domain.restrictions.kinds import BLOCK
 from app.extensions import db
 from app.infrastructure.persistence.repositories.place_cards import fetch_place_cards
 from app.infrastructure.persistence.models import (
+    Comment,
     Follow,
+    Like,
+    MediaAttachment,
     MutedTopic,
     Post,
+    SavedPost,
     User,
-    UserRestriction,
+    VideoAttachment,
+)
+from app.infrastructure.persistence.repositories.post_visibility_sql import (
+    not_blocked as _not_blocked,
+    visible_to_viewer as _visible_to_viewer,
 )
 
 
@@ -39,7 +45,10 @@ class SQLAlchemyPostRepository(PostRepository):
     def place_cards(self, place_ids):
         return fetch_place_cards(place_ids)
 
-    def list_recent(self, limit, viewer_id, muted_keywords=(), place_id=None, post_id=None):
+    def list_recent(
+        self, limit, viewer_id, muted_keywords=(), place_id=None, post_id=None, saved_by=None,
+        author_id=None, explore=None, offset=0,
+    ):
         # Traducción literal a SQL de domain/privacy/visibility.py
         # (can_view_content_of): el post entra en el feed si el autor no es
         # privado, O es el propio espectador, O el espectador tiene un follow
@@ -48,38 +57,12 @@ class SQLAlchemyPostRepository(PostRepository):
         #
         # Va en el WHERE y no en Python a propósito: filtrar después del
         # LIMIT devolvería páginas cortas (ADR-022 §Decisión).
-        visible_to_viewer = or_(
-            User.is_private.is_(False),
-            Post.author_id == viewer_id,
-            select(Follow.id)
-            .where(
-                Follow.follower_id == viewer_id,
-                Follow.followed_id == Post.author_id,
-                Follow.status == ACCEPTED,
-            )
-            .exists(),
-        )
-
-        # Un bloqueo en CUALQUIERA de los dos sentidos oculta el post
-        # (ADR-029-blocked-and-restricted-accounts.md). También en el WHERE, por
-        # el mismo motivo: filtrar después del LIMIT devolvería páginas cortas.
-        not_blocked = ~(
-            select(UserRestriction.id)
-            .where(
-                UserRestriction.kind == BLOCK,
-                or_(
-                    and_(
-                        UserRestriction.owner_id == viewer_id,
-                        UserRestriction.target_id == Post.author_id,
-                    ),
-                    and_(
-                        UserRestriction.owner_id == Post.author_id,
-                        UserRestriction.target_id == viewer_id,
-                    ),
-                ),
-            )
-            .exists()
-        )
+        # Las reglas de visibilidad (cuentas privadas, ADR-022; bloqueos en cualquiera de los dos
+        # sentidos, ADR-029) viven en `post_visibility_sql.py`: las comparte con las tarjetas de una
+        # publicación compartida por mensaje (ADR-047). Van en el WHERE y no en Python a propósito:
+        # filtrar después del LIMIT devolvería páginas cortas.
+        visible_to_viewer = _visible_to_viewer(viewer_id)
+        not_blocked = _not_blocked(viewer_id)
 
         # Preferencias de contenido (ADR-030-content-preferences.md). Mismas
         # reglas que el resto de filtros: en el WHERE, y su propio post nunca
@@ -135,6 +118,37 @@ class SQLAlchemyPostRepository(PostRepository):
         if place_id is not None:
             conditions.append(Post.place_id == place_id)
 
+        # Publicaciones de una sola persona (perfil ajeno). Las reglas de arriba aplican igual:
+        # abrir un perfil no es una forma de saltarse cuentas privadas, bloqueos ni filtros.
+        if author_id is not None:
+            conditions.append(Post.author_id == author_id)
+
+        # Explorar (ADR-050): publicaciones con foto o video de personas que quien mira NO sigue (ni
+        # se ha pedido seguir) y que no son suyas, de los últimos 30 días. `explore` es
+        # 'all' | 'images' | 'videos'. Las reglas de visibilidad de arriba aplican igual.
+        popularity = None
+        if explore is not None:
+            has_image = (
+                select(MediaAttachment.id).where(MediaAttachment.post_id == Post.id).exists()
+            )
+            has_video = (
+                select(VideoAttachment.id).where(VideoAttachment.post_id == Post.id).exists()
+            )
+            kinds = {"images": has_image, "videos": has_video}
+            conditions.append(kinds.get(explore) if explore in kinds else or_(has_image, has_video))
+            conditions.append(Post.author_id != viewer_id)
+            conditions.append(
+                ~select(Follow.id)
+                .where(Follow.follower_id == viewer_id, Follow.followed_id == Post.author_id)
+                .exists()
+            )
+            conditions.append(Post.created_at >= func.now() - text("interval '30 days'"))
+            likes = select(func.count(Like.id)).where(Like.post_id == Post.id).scalar_subquery()
+            comments = (
+                select(func.count(Comment.id)).where(Comment.post_id == Post.id).scalar_subquery()
+            )
+            popularity = likes + 2 * comments
+
         # Un solo post por id (Tero, ADR-041 `post_read`). Reutiliza TODAS las reglas de arriba
         # (cuentas privadas, bloqueos, contenido sensible, temas y términos silenciados): leer un
         # post por id no es una forma de saltárselas.
@@ -150,17 +164,20 @@ class SQLAlchemyPostRepository(PostRepository):
             )
             conditions.append(or_(Post.author_id == viewer_id, not_muted))
 
-        return (
-            db.session.execute(
-                select(Post)
-                .join(User, User.id == Post.author_id)
-                .where(*conditions)
-                .order_by(Post.created_at.desc())
-                .limit(limit)
-            )
-            .scalars()
-            .all()
-        )
+        query = select(Post).join(User, User.id == Post.author_id)
+        if saved_by is not None:
+            # Guardadas (ADR-047): las de esta persona, las más recientes primero POR FECHA DE GUARDADO,
+            # y solo las que sigue pudiendo ver (las demás reglas de arriba aplican igual).
+            query = query.join(
+                SavedPost, and_(SavedPost.post_id == Post.id, SavedPost.user_id == saved_by)
+            ).order_by(SavedPost.created_at.desc())
+        elif popularity is not None:
+            query = query.order_by(popularity.desc(), Post.created_at.desc())
+        else:
+            query = query.order_by(Post.created_at.desc())
+        return db.session.execute(
+            query.where(*conditions).offset(offset).limit(limit)
+        ).scalars().all()
 
     def get_by_id(self, post_id):
         return db.session.get(Post, post_id)

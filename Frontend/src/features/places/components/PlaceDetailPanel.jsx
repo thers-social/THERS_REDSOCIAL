@@ -116,9 +116,25 @@ export default function PlaceDetailPanel({ status, place, error, onBack, onRetry
   return (
     <article>
       {back}
+      {place.cover_image_url && (
+        // Imagen que identifica al lugar (ADR-046).
+        <img
+          src={place.cover_image_url}
+          alt={t("places.detail.imageAlt", { name: place.name })}
+          loading="lazy"
+          decoding="async"
+          className="mb-3 max-h-56 w-full rounded-2xl border border-line object-cover dark:border-line-dark"
+        />
+      )}
       <header className="space-y-1">
         <h2 className="text-lg font-semibold text-ink dark:text-ink-dark">{place.name}</h2>
         <p className="text-sm text-muted dark:text-muted-dark">{place.category.name}</p>
+        {place.verification_status === "unverified" && (
+          <p className="text-xs text-muted dark:text-muted-dark">
+            {t("places.unverifiedNotice")}
+            {place.source === "osm" && ` ${t("places.osmAttribution")}`}
+          </p>
+        )}
         {place.verification_status === "verified" && (
           <p className="inline-flex items-center gap-1 text-xs font-semibold text-th-success-fg">
             <Icon name="verified" size={16} fill={1} />

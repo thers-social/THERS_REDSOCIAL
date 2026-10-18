@@ -524,3 +524,154 @@ def test_identity_is_the_token_not_the_body(client, world):
     users, place_id, provider = world
     response = _route(client, users["ana"][0], place_id, user_id=users["beto"][1])
     assert response.status_code == 200 and len(provider.calls) == 1
+
+
+# --- Respaldo: enrutador público de OpenStreetMap y proveedor compuesto (ADR-044) ---
+
+from app.infrastructure.routing.fallback import FallbackProvider  # noqa: E402
+from app.infrastructure.routing.factory import create_provider  # noqa: E402
+from app.infrastructure.routing.osrm import OsrmProvider  # noqa: E402
+
+OSRM_ROUTE = {
+    "code": "Ok",
+    "routes": [{
+        "distance": 1000.4, "duration": 200.2,
+        "geometry": {"type": "LineString", "coordinates": [[-89.218, 13.693], [-89.21, 13.696], [-89.2, 13.7]]},
+        "legs": [{"steps": [
+            {"distance": 500, "duration": 100, "name": "Calle Uno",
+             "maneuver": {"type": "depart"},
+             "geometry": {"coordinates": [[-89.218, 13.693], [-89.21, 13.696]]}},
+            {"distance": 500.4, "duration": 100.2, "name": "1a Calle Poniente",
+             "maneuver": {"type": "turn", "modifier": "left"},
+             "geometry": {"coordinates": [[-89.21, 13.696], [-89.2, 13.7]]}},
+            {"distance": 0, "duration": 0, "name": "",
+             "maneuver": {"type": "arrive"}, "geometry": {"coordinates": [[-89.2, 13.7]]}},
+        ]}],
+    }],
+}
+
+
+def _osrm(opener):
+    return OsrmProvider(opener=opener)
+
+
+@pytest.mark.parametrize("profile, server", [("walk", "routed-foot"), ("bike", "routed-bike"), ("car", "routed-car")])
+def test_osrm_uses_the_server_of_each_profile_and_sends_lon_lat_without_a_key(profile, server):
+    seen = {}
+
+    def opener(request, timeout):
+        seen["url"], seen["timeout"], seen["auth"] = request.full_url, timeout, request.get_header("Authorization")
+        return _Response(OSRM_ROUTE)
+
+    _osrm(opener).route((13.693, -89.218), (13.7, -89.2), profile)
+
+    assert f"/{server}/route/v1/driving/-89.218,13.693;-89.2,13.7?" in seen["url"]
+    assert seen["auth"] is None and seen["timeout"] == routing.PROVIDER_TIMEOUT_SECONDS
+
+
+def test_osrm_returns_the_public_shape_with_written_steps_in_spanish_and_english():
+    es = _osrm(lambda request, timeout: _Response(OSRM_ROUTE)).route((13.693, -89.218), (13.7, -89.2), "car")
+    en = _osrm(lambda request, timeout: _Response(OSRM_ROUTE)).route((13.693, -89.218), (13.7, -89.2), "car", "en")
+
+    assert es["distance_m"] == 1000 and es["geometry"]["coordinates"][0] == [-89.218, 13.693]
+    assert [s["instruction"] for s in es["steps"]] == [
+        "Empieza el recorrido", "Gira a la izquierda por 1a Calle Poniente", "Has llegado a tu destino"]
+    assert es["steps"][1]["type"] == 0 and es["steps"][1]["street"] == "1a Calle Poniente"
+    assert en["steps"][1]["instruction"] == "Turn left onto 1a Calle Poniente"
+
+
+def test_osrm_steps_that_do_not_fit_the_line_are_dropped_but_the_route_stays():
+    body = json.loads(json.dumps(OSRM_ROUTE))
+    body["routes"][0]["legs"][0]["steps"][0]["geometry"]["coordinates"] = [[0, 0]] * 50
+
+    result = _osrm(lambda request, timeout: _Response(body)).route((1, 1), (2, 2), "walk")
+
+    assert result["distance_m"] == 1000 and result["steps"] == []
+
+
+@pytest.mark.parametrize("code", ["NoRoute", "NoSegment"])
+def test_osrm_no_route_is_a_422_case(code):
+    with pytest.raises(RouteNotFoundError):
+        _osrm(lambda request, timeout: _Response({"code": code})).route((1, 1), (2, 2), "walk")
+
+
+@pytest.mark.parametrize("failure", [TimeoutError(), ConnectionError("dns"), urllib.error.URLError("x")])
+def test_osrm_network_failures_and_garbage_are_unavailable(failure):
+    def opener(request, timeout):
+        raise failure
+
+    with pytest.raises(RoutingUnavailableError):
+        _osrm(opener).route((1, 1), (2, 2), "walk")
+    for body in (b"no es json", b"{}", b'{"routes": []}', json.dumps({"routes": [{}]}).encode()):
+        with pytest.raises(RoutingUnavailableError):
+            _osrm(lambda request, timeout, body=body: _Response(body)).route((1, 1), (2, 2), "walk")
+
+
+class _Stub(RoutingProvider):
+    def __init__(self, name, result=None, error=None):
+        self.name, self.result, self.error, self.calls = name, result, error, 0
+
+    def route(self, origin, destination, profile, language="es"):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return self.result
+
+
+def test_fallback_uses_the_primary_when_it_works():
+    primary, secondary = _Stub("a", {"ok": "a"}), _Stub("b", {"ok": "b"})
+
+    assert FallbackProvider(primary, secondary).route((1, 1), (2, 2), "walk") == {"ok": "a"}
+    assert secondary.calls == 0
+
+
+def test_fallback_switches_when_the_primary_is_unavailable_and_rests_it():
+    now = {"t": 0.0}
+    primary = _Stub("a", error=RoutingUnavailableError())
+    secondary = _Stub("b", {"ok": "b"})
+    provider = FallbackProvider(primary, secondary, cooldown=100, clock=lambda: now["t"])
+
+    assert provider.route((1, 1), (2, 2), "walk") == {"ok": "b"}
+    assert provider.route((1, 1), (2, 2), "walk") == {"ok": "b"}
+    assert primary.calls == 1  # en descanso: no se le espera otra vez
+    now["t"] = 101
+    provider.route((1, 1), (2, 2), "walk")
+    assert primary.calls == 2
+
+
+def test_fallback_does_not_hide_a_real_no_route_answer():
+    primary = _Stub("a", error=RouteNotFoundError())
+    secondary = _Stub("b", {"ok": "b"})
+
+    with pytest.raises(RouteNotFoundError):
+        FallbackProvider(primary, secondary).route((1, 1), (2, 2), "walk")
+    assert secondary.calls == 0
+
+
+def test_fallback_gives_a_last_chance_to_the_rested_primary_and_then_fails():
+    now = {"t": 0.0}
+    primary = _Stub("a", error=RoutingUnavailableError())
+    secondary = _Stub("b", error=RoutingUnavailableError())
+    provider = FallbackProvider(primary, secondary, cooldown=100, clock=lambda: now["t"])
+
+    with pytest.raises(RoutingUnavailableError):
+        provider.route((1, 1), (2, 2), "walk")
+    assert primary.calls == 2 and secondary.calls == 1
+
+
+def test_the_factory_builds_primary_fallback_or_nothing():
+    assert create_provider("openrouteservice", "k", "osrm").name == "openrouteservice+osrm"
+    assert create_provider("openrouteservice", "k").name == "openrouteservice"
+    assert create_provider("openrouteservice", None, "osrm").name == "osrm"  # sin clave: solo el respaldo
+    assert create_provider("openrouteservice", None) is None
+    assert create_provider("openrouteservice", "k", "openrouteservice").name == "openrouteservice"
+
+
+def test_osrm_accepts_the_two_point_arrival_step_the_real_server_sends():
+    body = json.loads(json.dumps(OSRM_ROUTE))
+    body["routes"][0]["legs"][0]["steps"][2]["geometry"]["coordinates"] = [[-89.2, 13.7], [-89.2, 13.7]]
+
+    result = _osrm(lambda request, timeout: _Response(body)).route((1, 1), (2, 2), "walk")
+
+    assert [s["type"] for s in result["steps"]] == [11, 0, 10]
+    assert result["steps"][-1]["at"] == [-89.2, 13.7]

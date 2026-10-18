@@ -37,9 +37,33 @@
       ],
       "expo-sharing",
       [
+        "expo-notifications",
+        {
+          "color": "#a855f7"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "THERS usa el micrófono solo cuando pulsás el botón de grabar una nota de voz o de dictarle a Tero. El audio de las notas de voz se envía a la persona que elegís."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "THERS usa el micrófono solo cuando pulsás el botón de dictarle a Tero. Lo que decís se convierte en texto en tu teléfono y vos decidís si se envía.",
+          "speechRecognitionPermission": "THERS usa el reconocimiento de voz del teléfono solo cuando pulsás el botón de dictarle a Tero. El texto aparece en el campo para que lo revisés antes de enviarlo.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ],
+      "expo-asset",
+      [
         "expo-image-picker",
         {
-          "photosPermission": "THERS accede a tus fotos solo para que elijas la imagen de una historia."
+          "photosPermission": "THERS usa tu galería solo cuando eliges una foto o un video para tu foto de perfil, una publicación, un mensaje, una pregunta a Tero la imagen de tu negocio o una historia.",
+          "cameraPermission": false
         }
       ],
       "expo-video"

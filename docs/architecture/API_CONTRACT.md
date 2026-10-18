@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.65 (Propuesta) |
+| Versión | 0.71 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -43,6 +43,29 @@
 > **v0.16 — verificación obligatoria de email al registrarse (`ADR-011-mandatory-email-verification.md`, reemplaza `send-verification-email`/`verify-email` de v0.14):** `POST /api/register` (§4.1) sigue devolviendo `201` con el usuario creado, pero ahora `email_verified` nace en `false` y de inmediato se envía un código de 6 dígitos — la cuenta no puede iniciar sesión todavía. Registrar de nuevo con un email que existe pero nunca se verificó **actualiza esa misma cuenta** (incluida la contraseña) y reenvía un código, en vez de un `409` — el `409` real solo ocurre si el email ya pertenece a una cuenta verificada. `POST /api/login` (§4.1) gana un caso nuevo: credenciales correctas pero cuenta sin verificar responde `403` con `{"msg": "...", "email_verified": false}`, sin emitir ningún JWT. Se agregan `POST /api/verify-registration-code` y `POST /api/resend-registration-code` (§4.8) — mismo patrón que `verify-reset-code`/`forgot-password` (`ADR-010`): 6 dígitos, hash scrypt, máximo 5 intentos, cooldown de 60s, índice único parcial (a lo sumo un código activo por usuario). Un código de registro nunca sirve para verificar una recuperación de contraseña ni viceversa — viven en tablas/repositorios completamente separados, no un discriminador de tipo sobre una tabla compartida. **Se retiran** `POST /api/send-verification-email` y `POST /api/verify-email` (`ADR-009`, flujo de enlace) — con el login ya bloqueado para cuentas sin verificar, una cuenta sin verificar nunca puede obtener el JWT que el primero exigía, dejando ambos permanentemente inalcanzables. El Frontend queda conectado de punta a punta: `Register.jsx` navega a la nueva pantalla `VerifyRegistrationCode.jsx` en vez de a `/login`; `Login.jsx` distingue el `403` de cuenta sin verificar y redirige a la misma pantalla. Verificado con 36 pruebas nuevas (`test_registration.py`, reemplaza a `test_email_verification.py`) + la suite completa (212/212, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`).
 >
 > **v0.14 — recuperación de contraseña y verificación de email vía Resend (`ADR-009-password-reset-and-email-verification.md`):** se agregan `POST /api/forgot-password`, `POST /api/reset-password`, `POST /api/send-verification-email` y `POST /api/verify-email` (§4.8) — séptima y octava entidad del alcance objetivo del producto (`DATABASE_ARCHITECTURE.md` §4.B, candidata "Verificación de correo, Recuperación de contraseña") en pasar a implementadas. Rutas planas bajo `/api`, sin prefijo `/auth/` — mismo criterio que `/api/register`/`/api/login`. `forgot-password` nunca revela si un email está registrado (mismo mensaje `200` siempre); `reset-password`/`verify-email` usan tokens de un solo uso, expirables, con hash SHA-256 persistido (nunca el valor crudo). `GET`/`PATCH /api/users/me` y `register`/`login` se extienden de forma aditiva con `email_verified` (§4.2, §5) — no rompe el contrato existente. Nuevo servicio de correo centralizado (Resend, SDK oficial) detrás de un `EmailSender` abstracto — ningún endpoint llama a Resend directamente. Verificado con 30 pruebas nuevas + la suite completa (175/175, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`), más una prueba manual end-to-end contra el backend real (los cuatro endpoints, con `NullEmailSender` en desarrollo sin `RESEND_API_KEY`).
+>
+> **v0.71 — PDF de reserva y sugerencias (`ADR-052`, **PROPUESTO**):** nuevo `GET /api/reservations/<id>/pdf` (comprobante en PDF de una reserva propia; `404` a cualquier otra persona, también a quien gestiona el lugar). `GET /api/users/suggestions` gana `avatar_url` y `?limit=` (1–20, `400` si no es número). Aditivo.
+>
+> **v0.70 — horario por defecto en reservas (`ADR-051`, **PROPUESTO**):** `GET /api/places/<id>/availability` gana `default_hours` (boolean). Si el lugar no cargó horario semanal, antes devolvía `slots: []`; ahora ofrece 10:00–21:00 cada 30 min con `default_hours: true`. Aditivo.
+>
+> **v0.69 — Explorar y listas de seguidores/seguidos (`ADR-050`, **PROPUESTO**):** nuevo §4.42 con `GET /api/explore` y `GET /api/users/<id>/followers|following`. Aditivo; sin migración.
+>
+> **v0.68 — perfil de otra persona (`ADR-049`, **PROPUESTO**):** nuevo §4.41 con `GET /api/users/<id>` (perfil público + relación de quien mira) y el filtro `?author_id=<uuid>` de `GET /api/posts`. Aditivo; sin migración.
+>
+> **v0.67 — chats grupales (`ADR-048`, **PROPUESTO**):** nuevo §4.44 con `POST`/`GET /api/groups`, `GET`/`PATCH /api/groups/<id>`, `POST /api/groups/<id>/members`, `PATCH`/`DELETE /api/groups/<id>/members/<user_id>`, `POST /api/groups/<id>/leave` y `GET`/`POST /api/groups/<id>/messages`. Un mensaje de grupo tiene el formato de uno directo con `recipient_id: null`, `group_id` y `sender` (quien lo escribió); `read` es relativo a quien mira. Migración `b6f1d8a3c927`. Un mensaje de grupo se puede reportar (`target_type: message`) por cualquier miembro salvo su autor.
+> **v0.66 — guardar y compartir publicaciones (`ADR-047`, **PROPUESTO**):** nuevos `POST`/`DELETE /api/posts/<id>/save` (idempotentes, `200 {"saved": bool}`; guardar un post que no puedes ver es `404`, quitar nunca) y `GET /api/posts/saved` (`{posts}`, la última guardada primero, máx. 100, mismas reglas de visibilidad y filtros que el feed). Todo post gana `saved_by_me`. `POST /api/users/<id>/messages` acepta `post_id` (texto opcional; `400` si va junto a `place_id` o no es un UUID; `404` si quien comparte no puede ver la publicación); los mensajes ganan `post`: `null` o tarjeta `{id, available, author{id,name,username,avatar_url}, is_sensitive, excerpt, thumbnail_url, has_video}` calculada para quien mira (`{id, available:false}` si no puede verla). Las conversaciones ganan `last_message.has_post`. La exportación añade `saved_posts.json`. Migración `a9d3b7e1c542`.
+>
+> **v0.65 — videos cortos, imagen del lugar e imágenes para Tero (`ADR-046`, **PROPUESTO**):** **(1)** `POST /api/posts` y `POST /api/users/<id>/messages` aceptan el campo multipart **`video`** (un archivo, MP4/MOV/WebM, hasta 60 s y 25 MB; excluyente con `images` y `audio`; con él el texto puede ir vacío). El servidor lo re-codifica a MP4 H.264+AAC (máx. 720p, 30 fps) y genera una miniatura. Posts y mensajes ganan `video: {url, thumbnail_url, width, height, duration_ms}` (o `null`) y las conversaciones `last_message.has_video`. Errores: `503 {"code":"video_disabled"}` con `VIDEO_UPLOADS_ENABLED` apagado (por defecto), `413` > 25 MB, `400` inválido / más de 60 s / mezclado, `429` más de 10 envíos con video por hora (regla `video_upload`). `GET /api/media/videos/<id>.mp4` atiende `Range` (206). La exportación de datos añade `video_seconds` a los mensajes. **(2)** Nuevos `PUT /api/places/<id>/manage/image` (multipart, campo `image`) y `DELETE /api/places/<id>/manage/image`, solo para quien gestiona el lugar (`404` al resto, antes de decodificar nada); `place.cover_image_url` (que existía y era siempre `null`) pasa a traer la URL. **(3)** `POST /api/tero/chat` acepta `image: {media_type, data(base64)}` (JPEG/PNG/WebP, ≤ 4 MB decodificada): una por pregunta, no se guarda y sale a Anthropic; con ella `message` puede ir vacío. `503 {"code":"tero_images_disabled"}` con `TERO_IMAGES_ENABLED` apagado (por defecto); cuenta contra `tero_chat` y `image_upload`. Dos migraciones (`c8e5a2f4d173`: `video_attachments`; `d4a7e1b9c356`: `places.image_key`).
+>
+> **v0.64 — respaldo de rutas (`ADR-044`, **PROPUESTO**):** `POST /api/places/<id>/route` sigue igual en forma y errores. Con `ROUTING_FALLBACK_PROVIDER=osrm`, si OpenRouteService no responde (`503`), el servidor usa el enrutador público de OpenStreetMap (a pie, bici y carro; indicaciones en `es`/`en`) y el `503` solo llega si fallan los dos. El origen redondeado también llega a ese servicio. Sin migración.
+>
+> **v0.63 — reservas activas por defecto (`ADR-043` §2.7, **PROPUESTO**):** un lugar sin configuración de reservas **acepta** solicitudes (cupo 10, grupo máximo 8) hasta que quien lo gestiona las apague; `place.accepts_reservations` es `true` por defecto y `GET .../manage/reservations/settings` devuelve `enabled: true` sin fila. Reservas y cotizaciones aceptan lugares `verified` o `unverified`. Los clientes deben avisar cuando `is_claimed` es `false`. Sin migración ni endpoint nuevo.
+>
+> **v0.62 — lugares importados de OpenStreetMap (`ADR-043`, **PROPUESTO**):** `place.verification_status` gana el valor **`unverified`** (lugar importado que nadie ha revisado). Es **público**: aparece en `GET /api/places`, `/search`, `/nearby` y en el detalle, con `source: "osm"`. Los clientes deben mostrarlo como «Sin verificar» y atribuir los datos a OpenStreetMap. Reservas y cotizaciones siguen exigiendo `verified`. No cambia ningún endpoint ni forma de respuesta; una migración (`e1b7c4a9d082`: `places.osm_type`, `places.osm_id`).
+>
+> **v0.61 — notas de voz en mensajes (`ADR-042`, **PROPUESTO**):** `POST /api/users/<id>/messages` acepta el campo multipart **`audio`** (un archivo; con audio el texto puede ir vacío); cada mensaje lleva `audio: {url, duration_ms}` (o `null`) y las conversaciones `last_message.has_audio` (§4.39). Interruptor del servidor `VOICE_MESSAGES_ENABLED` (apagado por defecto). Una migración (`a5c9e2f7b136`: tabla `audio_attachments`).
+>
+> **v0.60 — Tero, fase 7, automatizaciones con n8n (`ADR-041` §7, **ACEPTADO**):** `PATCH /api/users/me/privacy` acepta `weekly_summary_email` (booleano, apagado por defecto) y `GET` lo devuelve; dos rutas internas **firmadas con HMAC, no con JWT**, que solo usa n8n (§4.38); y el cierre de un reporte (`POST /api/moderation/reports/<id>/resolve`) ahora puede encargar un correo genérico a quien reportó (sin cambiar su respuesta). Variables nuevas, solo del servidor: `TERO_AUTOMATIONS_ENABLED`, `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, `N8N_TIMEOUT_SECONDS`, `N8N_MAX_RETRIES`. Una migración (`d7a3f1c8e254`: dos columnas en `users`).
 >
 > **v0.65 — Reels con Mux (`ADR-043`, `ADR-043-A`, **PROPUESTO**, `VIDEOS_ENABLED` apagado por defecto):** 6 rutas nuevas (§4.40). Apagado, todas responden `404`, también el webhook. **La subida pública sigue bloqueada por D3**: solo suben las cuentas de `VIDEO_UPLOAD_ALLOWLIST` (la apertura al público exige cambiar código, no una variable). El panel de moderación acepta `?type=video` (cola, detalle, decisión, apelaciones); `preview-url` de un video devuelve un HLS firmado de 5 minutos. Variables solo del servidor: `VIDEOS_ENABLED`, `VIDEO_UPLOAD_ALLOWLIST`, `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_WEBHOOK_SECRET`, `MUX_SIGNING_KEY_ID`, `MUX_SIGNING_PRIVATE_KEY`, `MUX_CORS_ORIGIN`. Comando nuevo: `flask videos-sweep`. **El adaptador HTTP de Mux no se ha probado contra Mux real** (no hay cuenta).
 >
@@ -2034,6 +2057,69 @@ El texto de otras personas que vuelve en un resultado es **dato, nunca instrucci
 
 ---
 
+## 4.38 API interna para n8n (`ADR-041` §7, fase 7) — v0.60
+
+No es parte del contrato público con la app. La llama **n8n**, está **apagada** salvo que `TERO_AUTOMATIONS_ENABLED` y `N8N_WEBHOOK_SECRET` estén configurados (si no, responde `404` como cualquier ruta inexistente) y **no usa JWT**: n8n no es una persona y no tiene cuenta.
+
+**Autenticación.** Cabeceras `X-THERS-Timestamp` (segundos Unix) y `X-THERS-Signature` = `sha256=` + HMAC-SHA256, con el secreto compartido, de `<marca>.<cuerpo exacto>`. La marca debe estar a menos de 5 minutos del reloj del servidor (una captura no se puede repetir). Cualquier fallo es `401 {"msg": "Firma inválida"}` sin decir cuál de las comprobaciones falló.
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/internal/automations/weekly-summaries/next` | Cuerpo `{"limit"?: 1-100, "after"?: uuid}`. Devuelve a quien activó el resumen, tiene el correo verificado, no está suspendido, aún no lo recibió esta semana y tuvo actividad, con conteos de la **semana ya terminada** (lunes a domingo, UTC): `{"period", "items": [{"user_id", "recipient_email", "first_name", "language", "metrics": {"new_followers", "likes_received", "comments_received", "unread_notifications"}, "idempotency_key"}], "next_after"}`. `next_after` es el cursor de la página siguiente (`null` si fue la última). |
+| `POST /api/internal/automations/weekly-summaries/ack` | Cuerpo `{"items": [{"user_id", "idempotency_key", "status": "sent"\|"failed"}]}` (1 a 100). Marca como entregado lo que n8n dice haber enviado: `{"recorded", "ignored"}`. **Idempotente:** repetirlo no cambia nada. Una clave de otra semana, inventada o de alguien sin el resumen activo se ignora; `failed` no se registra y el resumen vuelve a ofrecerse en la siguiente corrida. |
+
+**Qué viaja y qué no.** Solo conteos, el correo de quien lo recibe y su primer nombre: nunca contenido de publicaciones, nombres ni identificadores de otras personas. Las respuestas llevan `Cache-Control: no-store`. Errores: `400` (`limit`, `after` o `items` mal formados), `401`, `404`.
+
+**Aviso de reporte resuelto (backend → n8n).** Al cerrar un reporte como `dismissed` o `actioned` el backend envía a n8n `POST <N8N_BASE_URL>/webhook/thers-report-resolved`, firmado con el mismo esquema y con `X-THERS-Idempotency-Key`, el cuerpo mínimo `{"event", "report_id", "outcome": "actioned"\|"dismissed", "recipient_email", "language"}`. **Genérico a propósito:** sin quién fue reportado, sin el contenido y sin la nota de quien modera (`ADR-032`). Solo se envía si las automatizaciones están encendidas, el reporte aún tiene reportante, su correo está verificado y su cuenta no está suspendida. Se hace en segundo plano y de mejor esfuerzo: **un fallo de n8n nunca retrasa ni deshace la resolución**. Reintentos: 2 más, con espera creciente, solo ante fallos transitorios (red, tiempo agotado, 5xx, 408, 429); un 4xx es definitivo.
+
+**Preferencia.** `weekly_summary_email` (booleano, `false` por defecto) en `GET`/`PATCH /api/users/me/privacy` y en la exportación de datos. Nadie recibe el resumen sin activarlo.
+
+---
+
+## 4.43 Notas de voz en mensajes (`ADR-042`) — v0.61
+
+**Enviar.** `POST /api/users/<id>/messages` con `multipart/form-data` y el campo **`audio`** (un solo archivo). Se puede añadir `content` (opcional con audio) y `client_id` (idempotente, `ADR-035`). **No se puede combinar con `images`** (`400`). Sin `audio` el endpoint no cambia.
+
+| Aspecto | Comportamiento |
+|---|---|
+| Formatos de entrada | WebM/Matroska, Ogg, MP4/M4A y WAV, reconocidos por su **cabecera** (no por la extensión ni el `Content-Type`). Un video o un archivo con varios flujos de audio se rechaza. |
+| Límites | 3 MiB de archivo y **120 s** de duración. |
+| Salida | El servidor **re-codifica siempre** a AAC mono 24 kHz en MP4 (`audio/mp4`, `.m4a`); el original no se guarda. La duración la **calcula el servidor**: un `duration_ms` que mande el cliente se ignora. |
+| Respuesta | `audio: {"url", "duration_ms"}` o `null` en cada mensaje (envío, hilo, edición). Nunca la clave interna ni el dueño. `GET /api/conversations`: `last_message.has_audio` (un mensaje solo de audio trae `content: ""`). |
+| Reproducción | `GET /api/media/voice/<id>.m4a` (público, sin sesión, nombre aleatorio; con `STORAGE_BACKEND=local`). Admite peticiones por rangos (`206`), necesarias en Safari. |
+| Edición / borrado | Editar el mensaje cambia el texto, **no** el audio. `DELETE /api/messages/<id>` borra también el archivo. Borrar la cuenta recoge sus audios (`ADR-031`). |
+
+**Errores.** `503 {"code": "voice_disabled"}` con el interruptor apagado (la mensajería de texto e imágenes no cambia); `400` audio inválido, demasiado largo (más de 2 minutos), mezclado con imágenes o a uno mismo; `413` archivo de más de 3 MiB; `429` más de **30 envíos con audio por hora y cuenta** (`ADR-027`, regla `audio_upload`); `404` si la otra cuenta te bloqueó; `403` si no acepta mensajes tuyos. El texto del error nunca incluye detalles del decodificador.
+
+**Exportación de datos (`ADR-028`).** `messages.json` incluye `voice_note_seconds` (duración redondeada, o `null`) para que la persona sepa que existió una nota de voz; el archivo de audio **no** se incluye.
+
+**Seguridad.** Las URL son públicas (modelo de `ADR-039` §3.1): quien tenga la URL oye la nota hasta que se borre. No hay moderación automática de audio. Ver `ADR-042` §3.
+
+---
+
+## 4.44 Chats grupales (`ADR-048`) — v0.67
+
+Todas las rutas exigen sesión (`401`) y cuenta con perfil completo para escribir. La identidad sale del JWT. **Un grupo del que no eres miembro responde `404`, igual que uno inexistente.** Roles: `admin` (quien lo crea, y quien se nombre) y `member`. Máximo **50** personas; nombre de 1 a **60** caracteres (se normalizan los espacios).
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/groups` | Cuerpo `{name, member_ids: [uuid]}` (al menos una persona además de ti). Quien crea queda como `admin`. `400` nombre o lista no válidos; `403` si **alguna** persona no se puede añadir (te bloqueó, la bloqueaste, no acepta mensajes tuyos según `who_can_message`, o no existe: un solo error, no revela cuál); `409` si pasaría de 50. Responde `201 {group}` |
+| `GET /api/groups` | `{groups: [{id, name, member_count, unread_count, created_at, last_message: {content, has_image, has_audio, has_video, has_place, has_post, sender_id, sender_name, created_at} \| null}]}`, el de actividad más reciente primero |
+| `GET /api/groups/<id>` | `{group: {id, name, created_at, my_role, members: [{id, username, name, avatar_url, role}]}}` |
+| `PATCH /api/groups/<id>` | Cuerpo `{name}`. Solo `admin` (`403`) |
+| `POST /api/groups/<id>/members` | Cuerpo `{user_ids: [uuid]}`. Solo `admin`. Mismas reglas de «se puede añadir» que al crear; `400` si todas ya estaban; `409` si pasaría de 50. Devuelve `{group}` |
+| `PATCH /api/groups/<id>/members/<user_id>` | Cuerpo `{role: "admin"}` (solo se puede **nombrar** administrador). Solo `admin`; `404` si esa persona no está |
+| `DELETE /api/groups/<id>/members/<user_id>` | Un `admin` saca a un **miembro normal** (`404` si no está o es administrador). Devuelve `{group}` |
+| `POST /api/groups/<id>/leave` | Sales tú: `200 {left: true}`. Si eras el único administrador, otro miembro pasa a serlo; si eras la última persona, el grupo y sus mensajes se borran (también sus archivos) |
+| `GET /api/groups/<id>/messages` | Misma paginación que un hilo directo (`limit`, `before`, `after`, `has_more`, `ADR-035`). **Abrirlo lo marca leído para quien lo abre.** No incluye los mensajes de cuentas bloqueadas en cualquier sentido (reaparecen al desbloquear) |
+| `POST /api/groups/<id>/messages` | Mismo cuerpo que `POST /api/users/<id>/messages` (texto, `images`, `audio`, `video`, `place_id`, `post_id`, `client_id`), mismos límites y mismos códigos de error; solo escribe un miembro (`404` si no). Solo se puede compartir una publicación que **quien envía** puede ver |
+
+**Mensaje de grupo:** el objeto `message` de siempre (§4.10) con `recipient_id: null`, `group_id`, `sender: {id, username, name, avatar_url}` y `read` calculado para quien mira (lo propio cuenta como leído; lo ajeno, si es anterior a su última apertura del grupo). `PATCH`/`DELETE /api/messages/<id>` funcionan igual: solo quien lo escribió. No hay indicador de «escribiendo» en grupos.
+
+**No leídos:** `unread_count` de cada grupo = mensajes de **otras** personas posteriores a tu última apertura (enviar un mensaje también cuenta como haber leído hasta ahí).
+
+Entra en la exportación (`messages.json`: los mensajes que **escribiste** en grupos, con `group_name` y `with_username: null`); la cuenta que se borra sale de sus grupos, y los que se quedarían vacíos o sin administrador se resuelven (`ADR-031`).
+
 ## 5. Modelo de datos expuesto por la API
 
 Este documento no define el modelo de datos (eso es `DATABASE_ARCHITECTURE.md`) pero sí documenta **qué forma tiene el dato tal como cruza la frontera HTTP**, que puede no coincidir 1:1 con el modelo de persistencia:
@@ -2123,6 +2209,26 @@ Si el catálogo de endpoints crece lo suficiente para que un Markdown plano deje
 ## Cierre
 
 Este documento **no modifica** el backend ni el Frontend: define el contrato de API que ambos deben respetar hacia adelante, separando explícitamente **lo implementado** (§4.1), **lo esperado pero ausente** (§4.2) y **lo pendiente de aprobación** (§9). Cualquier cambio a este contrato sigue el proceso de decisiones de impacto medio/alto de `HB-001` §11–12 (ADR), no el criterio individual de quien implementa. A partir de su ratificación, Backend y Frontend deben implementar contra este documento — no negociar el contrato de forma ad-hoc en cada feature.
+
+---
+
+## 4.41 Perfil de otra persona (`ADR-049`) — v0.68
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/users/<id>` | Exige sesión (`401`). `{user: {id, username, name, bio, location, website, avatar_url, cover_url, is_private, followers_count, following_count, follow_status, can_view_posts}}`. **Nunca** trae correo, teléfono, fecha de nacimiento ni banderas internas. `follow_status`: `null` \| `'pending'` \| `'accepted'` (`ADR-022`), siempre `null` en el propio perfil. `can_view_posts` es `false` en una cuenta privada que quien mira no sigue (una solicitud pendiente no cuenta). `404` si la cuenta no existe **o** hay un bloqueo en cualquier sentido (`ADR-029`); un id que no es UUID también es `404`. |
+| `GET /api/posts?author_id=<uuid>` | Igual que el feed (`§4.3`), pero solo las publicaciones de esa persona. Las reglas de visibilidad (cuentas privadas, bloqueos, contenido sensible, temas y términos silenciados) aplican igual: una cuenta privada no seguida devuelve `{posts: []}`. `400` si `author_id` no es un UUID. |
+
+---
+
+## 4.42 Explorar y seguidores/seguidos (`ADR-050`) — v0.69
+
+Todas exigen sesión (`401`).
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/explore?kind=&offset=` | `kind`: `all` (defecto) | `images` | `videos` (`400` otro valor; `400` si `offset` no es número). `{posts, has_more}`, 30 por página, cada post con la forma del feed (§4.3). Solo publicaciones **con foto o video** de los últimos 30 días, de personas que quien mira **no sigue** (ni solicitó seguir) y que no son suyas; ordenadas por popularidad (me gusta + 2 × comentarios) y luego por fecha. Mismas reglas de visibilidad que el feed (cuentas privadas, bloqueos, contenido sensible, silenciados). |
+| `GET /api/users/<id>/followers` y `/following` | `{users: [{id, username, name, avatar_url, is_private, is_me, follow_status}], has_more}`, más reciente primero; `limit` (1–100, defecto 50) y `offset` (`400` si no son números). Solo follows **aceptados**. `follow_status` es la relación de quien mira con cada persona. `404` si la cuenta no existe o hay bloqueo en cualquier sentido; `403` si la cuenta es privada y quien mira no la sigue (los bloqueados con quien mira no aparecen). |
 
 ---
 
@@ -2486,7 +2592,7 @@ Todas exigen sesión (`401`). Las de `/manage/…` exigen ser gestor del lugar (
 | Ruta | Descripción |
 |---|---|
 | `GET /api/places/<id>/hours` | `{schedule: {timezone: "UTC-06:00", days: [{weekday, intervals: [{opens, closes}]}] (7 días), closures: [{date, reason}] (próximos 90 días)}}`. `404` si el lugar no es público. Un día sin tramos está cerrado |
-| `GET /api/places/<id>/availability?date=AAAA-MM-DD` | `{availability: {date, accepts_reservations, max_party_size, slots: [{starts_at, seats_left}]}}`. Horarios de entrada cada 15 min dentro del horario, sin cierres, sin horas ya pasadas (o con menos de 30 min de margen), con el cupo que queda. `date` por defecto hoy; `400` si es anterior a hoy o a más de 90 días. Lista vacía si el lugar no acepta reservas, no cargó horario o cierra ese día |
+| `GET /api/places/<id>/availability?date=AAAA-MM-DD` | `{availability: {date, accepts_reservations, default_hours, max_party_size, slots: [{starts_at, seats_left}]}}`. Horarios de entrada cada 15 min dentro del horario, sin cierres, sin horas ya pasadas (o con menos de 30 min de margen), con el cupo que queda. `date` por defecto hoy; `400` si es anterior a hoy o a más de 90 días. Lista vacía si el lugar no acepta reservas, no cargó horario o cierra ese día |
 | `PUT /api/places/<id>/manage/hours` | Cuerpo `{days: [{weekday, intervals: [{opens: "HH:MM", closes: "HH:MM"}]}]}`. **Reemplaza** todo el horario. Máx. 3 tramos por día, en cuartos de hora exactos, `closes` > `opens`, sin solaparse; un tramo no cruza la medianoche (el último cierre posible es 23:45). `400` y nada cambia si algo es inválido |
 | `POST /api/places/<id>/manage/closures` | `{date, reason?}` (`reason` ≤ 120). Cierra un día (hoy hasta 1 año). Repetir la fecha reemplaza el motivo. `201` |
 | `DELETE /api/places/<id>/manage/closures/<AAAA-MM-DD>` | Quita el cierre; `404` si no existía |

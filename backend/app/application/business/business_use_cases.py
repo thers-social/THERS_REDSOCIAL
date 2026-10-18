@@ -4,8 +4,10 @@
 # sitio web: nombre, categoría, coordenadas y estado siguen siendo de moderación.
 
 import re
+import uuid
 from datetime import datetime, timezone
 
+from app.application.media.attachments import discard_files
 from app.application.places import place_presenter
 from app.domain.analytics import place_analytics
 from app.domain.quotes import quotes
@@ -47,7 +49,7 @@ def list_managed(user_id, repository):
             "municipality": row["municipality"],
             "department": row["department"],
             "category": {"slug": row["category_slug"], "name": row["category_name"]},
-            "is_public": bool(row["is_active"]) and row["verification_status"] == kinds.STATUS_VERIFIED,
+            "is_public": bool(row["is_active"]) and row["verification_status"] in kinds.PUBLIC_STATUSES,
             "rating_average": None if row["rating_average"] is None else float(row["rating_average"]),
             "reviews_count": int(row["reviews_count"]),
         }
@@ -91,6 +93,44 @@ def update_place(place_id, user_id, data, repository, place_repository):
     allowed = {key: data[key] for key in MANAGER_EDITABLE if key in data}
     clean = write_validators.validate_place_update(allowed)
     place_repository.update_place(user_id, place_id, clean)
+    return place_presenter.present_detail(place_repository.get_public_place(place_id, user_id))
+
+
+def can_manage(place_id, user_id, repository, place_repository):
+    """`True` si la persona gestiona un lugar público. Se pregunta ANTES de procesar un archivo: quien
+    no gestiona el lugar no debe poder gastar CPU del servidor, y recibe el mismo 404."""
+    return repository.is_manager(place_id, user_id) and place_repository.get_public_place(place_id) is not None
+
+
+def set_image(place_id, user_id, prepared, repository, place_repository, storage):
+    """Pone la imagen que identifica al lugar (ADR-046). `prepared`: `(bytes, content_type, ancho,
+    alto)` ya procesado por la route. Se guarda el archivo nuevo, se actualiza la fila y, solo
+    entonces, se borra el anterior: si la base falla, el nuevo se retira y todo queda como estaba."""
+    _require_manager(place_id, user_id, repository, place_repository)
+    data, content_type, _width, _height = prepared
+    key = f"places/{uuid.uuid4().hex}.webp"
+    storage.save(key, data, content_type)
+    try:
+        found, previous = place_repository.set_image(user_id, place_id, key)
+    except Exception:
+        discard_files([key], storage)
+        raise
+    if not found:
+        discard_files([key], storage)
+        raise PlaceNotFoundError()
+    if previous:
+        discard_files([previous], storage)
+    return place_presenter.present_detail(place_repository.get_public_place(place_id, user_id))
+
+
+def remove_image(place_id, user_id, repository, place_repository, storage):
+    """Quita la imagen del lugar. Idempotente: sin imagen, no hace nada y devuelve el lugar igual."""
+    _require_manager(place_id, user_id, repository, place_repository)
+    found, previous = place_repository.set_image(user_id, place_id, None)
+    if not found:
+        raise PlaceNotFoundError()
+    if previous:
+        discard_files([previous], storage)
     return place_presenter.present_detail(place_repository.get_public_place(place_id, user_id))
 
 

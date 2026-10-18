@@ -5,12 +5,22 @@
 # que diga el cliente amplía permisos. `entity_id` se valida pero en la fase 4 NO viaja al
 # modelo (no hay herramientas todavía); en la fase 5 se revalidará contra los permisos reales.
 
+import base64
+import binascii
 import re
 
 MAX_MESSAGE_LENGTH = 1000
 MAX_HISTORY_TURNS = 10
 MAX_REPLY_LENGTH = 4000
 MAX_OUTPUT_TOKENS = 1024
+
+# Imagen adjunta a una pregunta (ADR-046): UNA por petición, en base64 dentro del JSON. El cliente la
+# reduce antes de enviarla; el servidor la vuelve a decodificar por su contenido (nunca se fía de lo
+# que diga el cliente) y NO la guarda: va al modelo y se descarta.
+IMAGE_MEDIA_TYPES = ("image/jpeg", "image/png", "image/webp")
+MAX_IMAGE_BYTES = 4 * 1024 * 1024
+#: Con imagen y sin texto, Tero responde a esto.
+DEFAULT_IMAGE_QUESTION = "¿Qué ves en esta imagen?"
 
 ENTITY_TYPES = ("post", "profile", "place")
 _SCREEN = re.compile(r"^[a-z0-9_/\-\[\]]{1,40}$")
@@ -41,9 +51,11 @@ class TeroUnavailableError(Exception):
 
 
 class ChatRequest:
-    __slots__ = ("message", "history", "screen", "entity_type", "entity_id")
+    __slots__ = ("message", "history", "screen", "entity_type", "entity_id", "image")
 
-    def __init__(self, message, history, screen, entity_type, entity_id):
+    def __init__(self, message, history, screen, entity_type, entity_id, image=None):
+        # `image`: bytes de la imagen adjunta (sin procesar) o `None`.
+        self.image = image
         self.message = message
         self.history = history
         self.screen = screen
@@ -101,10 +113,40 @@ def _parse_context(raw):
     return screen, entity_type, entity_id
 
 
+def _parse_image(raw):
+    """Bytes de la imagen adjunta o `None`. Solo valida la forma; decodificarla es de la capa de
+    infraestructura (por contenido)."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise InvalidTeroRequestError("image debe ser un objeto")
+    if raw.get("media_type") not in IMAGE_MEDIA_TYPES:
+        raise InvalidTeroRequestError("image.media_type debe ser JPEG, PNG o WebP")
+    encoded = raw.get("data")
+    if not isinstance(encoded, str) or not encoded:
+        raise InvalidTeroRequestError("image.data debe ser texto en base64")
+    # Tope sobre el texto, antes de decodificar nada (4/3 del binario).
+    if len(encoded) > MAX_IMAGE_BYTES * 4 // 3 + 8:
+        raise InvalidTeroRequestError("La imagen pesa demasiado")
+    try:
+        data = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        raise InvalidTeroRequestError("image.data no es base64 válido") from None
+    if not data or len(data) > MAX_IMAGE_BYTES:
+        raise InvalidTeroRequestError("La imagen pesa demasiado")
+    return data
+
+
 def parse_chat_request(data):
     if not isinstance(data, dict):
         raise InvalidTeroRequestError("Se esperaba un objeto JSON")
-    message = _parse_text(data.get("message"), "message")
+    image = _parse_image(data.get("image"))
+    message_raw = data.get("message")
+    # Con imagen el texto es opcional: sin él, Tero la describe.
+    if image is not None and (message_raw is None or (isinstance(message_raw, str) and not message_raw.strip())):
+        message = DEFAULT_IMAGE_QUESTION
+    else:
+        message = _parse_text(message_raw, "message")
     history = _parse_history(data.get("history"))
     screen, entity_type, entity_id = _parse_context(data.get("context"))
-    return ChatRequest(message, history, screen, entity_type, entity_id)
+    return ChatRequest(message, history, screen, entity_type, entity_id, image)

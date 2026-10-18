@@ -18,3 +18,7 @@ class FollowRequestNotFoundError(Exception):
     tratan igual (404, sin distinguir cuál ocurrió): un 403 confirmaría que
     esa solicitud existe y de quién es (ADR-022-private-accounts.md
     §Seguridad, mismo criterio que NotificationNotFoundError)."""
+
+
+class CannotViewConnectionsError(Exception):
+    """La lista de seguidores/seguidos de una cuenta privada que no sigues (ADR-050)."""

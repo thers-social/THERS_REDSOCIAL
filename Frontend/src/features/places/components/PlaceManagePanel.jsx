@@ -5,6 +5,7 @@ import { getErrorMessage } from "@shared/lib/api";
 import { useLanguage } from "@shared/i18n";
 import { fetchManagePanel, updateManagedPlace } from "../lib/placesApi";
 import ManageAnalytics from "./ManageAnalytics";
+import ManageImage from "./ManageImage";
 import ManageReservations from "./ManageReservations";
 
 const STAT_KEYS = ["saves", "reviews", "reviews_without_reply", "upcoming_plans"];
@@ -25,7 +26,7 @@ export default function PlaceManagePanel({ placeId, onUpdated }) {
     (signal) =>
       fetchManagePanel(placeId, signal)
         .then((panel) => {
-          setState({ status: "ready", stats: panel.stats });
+          setState({ status: "ready", stats: panel.stats, imageUrl: panel.place.cover_image_url ?? null });
           setForm({
             description: panel.place.description ?? "",
             address: panel.place.address ?? "",
@@ -85,6 +86,14 @@ export default function PlaceManagePanel({ placeId, onUpdated }) {
           </div>
         ))}
       </dl>
+      <ManageImage
+        placeId={placeId}
+        imageUrl={state.imageUrl}
+        onChanged={() => {
+          onUpdated?.();
+          load();
+        }}
+      />
       <form onSubmit={submit} className="mt-3 space-y-3">
         <label className="block text-sm text-ink dark:text-ink-dark">
           {t("places.manage.description")}
