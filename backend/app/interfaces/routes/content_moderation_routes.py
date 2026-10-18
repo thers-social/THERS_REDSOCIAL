@@ -18,6 +18,9 @@ from app.domain.rate_limiting.exceptions import RateLimitExceededError
 from app.infrastructure.persistence.repositories.content_moderation_repository import (
     SQLAlchemyContentModerationRepository,
 )
+from app.infrastructure.persistence.repositories.domain_event_repository import (
+    SQLAlchemyDomainEventRepository,
+)
 from app.infrastructure.persistence.repositories.moderation_queue_repository import (
     SQLAlchemyModerationQueueRepository,
 )
@@ -33,6 +36,7 @@ content_moderation_bp = Blueprint("content_moderation", __name__)
 _queue = SQLAlchemyModerationQueueRepository()
 _repository = SQLAlchemyContentModerationRepository()
 _users = SQLAlchemyUserRepository()
+_events = SQLAlchemyDomainEventRepository()
 _rate_limit_repository = SQLAlchemyRateLimitRepository()
 
 #: Vida de la URL firmada con la que moderación ve un archivo privado.
@@ -251,7 +255,8 @@ def create_appeal():
         if subject is None:
             raise uc.InvalidRequestError("type debe ser media o story")
         result = uc.create_appeal(
-            user_id, attachment_id, data.get("reason"), _queue, _repository, subject_type=subject
+            user_id, attachment_id, data.get("reason"), _queue, _repository, subject_type=subject,
+            events=_events,
         )
     except (
         uc.InvalidRequestError, uc.NotFoundError, uc.ConflictError, uc.TooManyAppealsError,

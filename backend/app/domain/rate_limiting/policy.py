@@ -188,3 +188,7 @@ TERO_ACTION = RateLimitRule("tero_action", 30, _HOUR, clear_on_success=False)
 # Apelar una decisión de moderación (ADR-044 §2.7): por CUENTA. Cada apelación cuesta tiempo de
 # revisión; además hay un tope de apelaciones abiertas por persona.
 MODERATION_APPEAL = RateLimitRule("moderation_appeal", 10, _HOUR, clear_on_success=False)
+
+# Avisos pedidos por n8n a las rutas internas (ADR-044 §2.8): un tope global, sin identidad de
+# persona. Un secreto filtrado no puede convertirse en una avalancha de correos.
+INTERNAL_NOTICE = RateLimitRule("internal_notice", 20, _HOUR, clear_on_success=False)

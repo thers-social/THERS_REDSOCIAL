@@ -344,6 +344,18 @@ Config.MODERATION_TEXT_CLASSIFIER = (os.environ.get("MODERATION_TEXT_CLASSIFIER"
 # almacenamiento privado, publicar una historia responde 503 (nunca cae al bucket público).
 Config.STORIES_PRIVATE_STORAGE = _flag_env("STORIES_PRIVATE_STORAGE")
 
+# n8n (ADR-044 §2.8): AVISA y ESCALA, nunca decide. Apagado por defecto y sin ninguna URL ni secreto
+# por defecto: sin ambos, no se envía nada y los eventos esperan en la base. Los secretos viven solo
+# en el servidor (nunca en el repositorio).
+Config.N8N_ENABLED = _flag_env("N8N_ENABLED")
+Config.N8N_WEBHOOK_URL = (os.environ.get("N8N_WEBHOOK_URL") or "").strip() or None
+Config.N8N_OUTBOUND_SECRET = (os.environ.get("N8N_OUTBOUND_SECRET") or "").strip() or None
+Config.N8N_INBOUND_SECRET = (os.environ.get("N8N_INBOUND_SECRET") or "").strip() or None
+Config.N8N_TIMEOUT_SECONDS = _positive_float_env("N8N_TIMEOUT_SECONDS", 5.0)
+# Aviso DIRECTO por correo (Resend) de reportes y contenido críticos, sin depender de n8n.
+Config.MODERATION_ALERT_EMAIL = (os.environ.get("MODERATION_ALERT_EMAIL") or "").strip() or None
+Config.MODERATION_PANEL_URL = (os.environ.get("MODERATION_PANEL_URL") or "").strip() or None
+
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
 # Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
 # es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.

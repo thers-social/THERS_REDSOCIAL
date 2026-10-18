@@ -179,7 +179,7 @@ def stats(role, queue):
 
 
 def create_appeal(user_id, attachment_id, reason, queue, repository,
-                  subject_type=subjects.MEDIA_ATTACHMENT):
+                  subject_type=subjects.MEDIA_ATTACHMENT, events=None):
     if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= MAX_REASON:
         raise InvalidRequestError(f"El motivo debe tener entre 1 y {MAX_REASON} caracteres")
     attachment = queue.attachment_for_appeal(attachment_id, subject_type)
@@ -199,6 +199,10 @@ def create_appeal(user_id, attachment_id, reason, queue, repository,
         raise ConflictError("Ya tienes una apelación abierta para este contenido")
     repository.audit(user_id, status.ACTOR_KIND_HUMAN, "moderation_appeal_opened",
                      subject_type, attachment_id, {"appeal_id": str(created["id"])})
+    if events is not None:
+        events.enqueue("moderation.appeal_opened",
+                       {"appeal_id": str(created["id"]), "subject_type": subject_type},
+                       created["id"])
     repository.commit()
     return {"id": str(created["id"]), "status": "open", "target_hours": APPEAL_TARGET_HOURS}
 

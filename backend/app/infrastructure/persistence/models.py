@@ -2345,3 +2345,32 @@ class StoryView(db.Model):
     viewed_at = db.Column(
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class DomainEvent(db.Model):
+    __tablename__ = "domain_events"
+
+    # Outbox de eventos hacia n8n (ADR-044 §2.8). El payload son identificadores, categorías y
+    # conteos validados contra un esquema cerrado (`domain/automation/events.py`).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    event_type = db.Column(db.String(40), nullable=False)
+    payload = db.Column(JSONB, nullable=False)
+    idempotency_key = db.Column(db.String(120), nullable=False, unique=True)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'queued'"))
+    attempts = db.Column(db.SmallInteger, nullable=False, server_default=text("0"))
+    next_attempt_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    last_error = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('queued', 'sent', 'failed', 'dead')", name="ck_domain_events_status"
+        ),
+    )

@@ -86,17 +86,54 @@ def register_cli(app):
         settings = settings_from_config(app.config)
         if not settings.enabled:
             raise click.ClickException("MODERATION_ENABLED está apagado; no hay nada que procesar.")
+        from app.infrastructure.persistence.repositories.domain_event_repository import (
+            SQLAlchemyDomainEventRepository,
+        )
+
         classifier = app.extensions["thers_content_moderation"]["image_classifier"]
         repository = SQLAlchemyContentModerationRepository()
+        events = SQLAlchemyDomainEventRepository()
+        alerter = app.extensions.get("team_alerter")
         worker_id = f"worker-{uuid.uuid4().hex[:8]}"
         while True:
             processed = 0
             while process_next(
-                repository, classifier, settings, worker_id, datetime.now(timezone.utc)
+                repository, classifier, settings, worker_id, datetime.now(timezone.utc),
+                events=events, alerter=alerter,
             ) is not None:
                 processed += 1
             if once:
                 click.echo(f"Trabajos procesados: {processed}")
+                return
+            time.sleep(interval)
+
+    @app.cli.command("n8n-dispatch")
+    @click.option("--once", is_flag=True, help="Despacha un lote y termina.")
+    @click.option("--interval", default=10.0, show_default=True, help="Segundos entre lotes.")
+    def n8n_dispatch(once, interval):
+        """Envía a n8n los eventos pendientes (ADR-044 §2.8). Sin N8N_* configurado no envía nada."""
+        import time
+        from datetime import datetime, timezone
+
+        from app.application.automation.dispatch import dispatch_batch
+        from app.infrastructure.automation.transports import build_transport
+        from app.infrastructure.persistence.repositories.domain_event_repository import (
+            SQLAlchemyDomainEventRepository,
+        )
+
+        transport = build_transport(app.config)
+        if transport is None:
+            raise click.ClickException(
+                "n8n no está configurado (N8N_ENABLED, N8N_WEBHOOK_URL y N8N_OUTBOUND_SECRET); "
+                "los eventos esperan en la base."
+            )
+        repository = SQLAlchemyDomainEventRepository()
+        while True:
+            counts = dispatch_batch(
+                repository, transport, app.config["N8N_OUTBOUND_SECRET"], datetime.now(timezone.utc)
+            )
+            if once:
+                click.echo(f"Enviados: {counts['sent']}, fallidos: {counts['failed']}, muertos: {counts['dead']}")
                 return
             time.sleep(interval)
 

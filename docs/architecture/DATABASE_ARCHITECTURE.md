@@ -4,13 +4,15 @@
 |---|---|
 | Documento | `docs/architecture/DATABASE_ARCHITECTURE.md` |
 | Identificador propuesto | `DB-001` (sigue el patrón `HB-001`/`ARC-001`/`DS-001`/`WF-001`/`PV-001`/`FAS-001`) — **pendiente de ratificación formal** |
-| Versión | 0.46 |
+| Versión | 0.47 |
 | Estado | **Borrador / Contrato técnico — pendiente de aprobación del equipo** |
 | Depende de | `HB-001` (organización, gobernanza, git flow, seguridad), `REPOSITORY_STRUCTURE.md` (ubicación del backend y carpeta futura `database/`) |
 | Motivo | El `CLAUDE.md` maestro (§4, §14) identificó que la arquitectura de Base de Datos no estaba formalmente documentada |
 | Idioma | Español (documentación oficial), identificadores/código en inglés |
 
 > ⚠️ **Nota de alcance y honestidad de fuentes.** Este documento es un **contrato técnico previo a la implementación**, no una descripción de un esquema ya existente. Al momento de escribirlo (v0.1), el backend **no tenía base de datos, ni ORM, ni driver de PostgreSQL instalado**: la autenticación funcionaba contra credenciales hardcodeadas (ver §4). Todo lo que aquí se define como "decidido" se limita a lo que la documentación oficial ya respalda o a lo que el estado real del código justifica de forma evidente. Todo lo demás está marcado explícitamente como **PENDIENTE DE APROBACIÓN** (§14). No se inventan entidades, columnas, índices ni políticas que el proyecto no necesite hoy.
+>
+> **v0.47 — eventos hacia n8n (`ADR-044` §2.8, **PROPUESTO**):** una migración aditiva (`d8a4b2e6f517`, cuelga de `c6f3a9d2e485`) y una tabla, `domain_events` (outbox): `event_type`, `payload` (`JSONB`: solo identificadores, categorías y conteos, validado contra un esquema cerrado), `idempotency_key` **único**, `status` (`queued`/`sent`/`failed`/`dead`), `attempts`, `next_attempt_at`, `last_error` (clase del error), `sent_at`. Se escribe en la misma transacción que el hecho. Contrato en `docs/integration/N8N_CONTRACT.md`.
 >
 > **v0.46 — gasto de IA por propósito (`ADR-045` §2.3, **PROPUESTO**):** una migración aditiva (`a4d1e7b9c263`, cuelga de `f3c9a5e1d742`) y una tabla, `ai_usage`, con clave compuesta (`period` `YYYY-MM`, `purpose`), `input_tokens`, `output_tokens`, `cost_micro_usd`, `updated_at` y los mismos `CHECK` que `tero_usage`. **`tero_usage` no se modifica**: Tero conserva su contador global. Un propósito agotado no gasta el de otro. La tabla no guarda texto ni identificadores de cuenta.
 >

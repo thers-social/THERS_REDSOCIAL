@@ -158,6 +158,21 @@ def create_app():
         "text_classifier": text_classifier(app),
     }
 
+    # Avisos y automatización (ADR-044 §2.8): aviso directo por correo y rutas internas para n8n.
+    from app.application.automation.alerts import TeamAlerter
+    from app.infrastructure.email.factory import create_email_sender
+
+    app.extensions["team_alerter"] = TeamAlerter(
+        create_email_sender(
+            app.config.get("RESEND_API_KEY"), app.config.get("EMAIL_FROM"),
+            app.config.get("EMAIL_REPLY_TO"),
+        ),
+        app.config.get("MODERATION_ALERT_EMAIL"),
+        app.config.get("MODERATION_PANEL_URL"),
+    )
+    from app.interfaces.routes.internal_routes import internal_bp
+    app.register_blueprint(internal_bp, url_prefix="/api")
+
     # Comandos de línea de comandos (flask set-moderator, flask unsuspend-user).
     from app.interfaces.cli import register_cli
     register_cli(app)
