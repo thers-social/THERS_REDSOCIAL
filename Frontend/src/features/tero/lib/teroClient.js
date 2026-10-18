@@ -14,8 +14,8 @@ function authHeaders() {
 // el tiempo por defecto de axios (sin tope) no sirve para avisar de un fallo a tiempo.
 const CHAT_TIMEOUT_MS = 60000;
 
-export async function sendToTero(text, context, history, signal) {
-  const res = await api.post("/tero/chat", chatBody(text, context, history), {
+export async function sendToTero(text, context, history, signal, image = null) {
+  const res = await api.post("/tero/chat", chatBody(text, context, history, image), {
     headers: authHeaders(),
     timeout: CHAT_TIMEOUT_MS,
     signal,

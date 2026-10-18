@@ -155,6 +155,9 @@ export default function Topbar({
               <MenuLink to="/profile" icon="person" onSelect={() => setMenuOpen(false)}>
                 {t("nav.viewProfile")}
               </MenuLink>
+              <MenuLink to="/saved" icon="bookmark" onSelect={() => setMenuOpen(false)}>
+                {t("postActions.saved.menu")}
+              </MenuLink>
               <MenuLink to="/settings" icon="settings" onSelect={() => setMenuOpen(false)}>
                 {t("nav.settings")}
               </MenuLink>

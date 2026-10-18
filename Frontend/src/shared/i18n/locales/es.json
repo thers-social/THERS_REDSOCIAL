@@ -438,7 +438,8 @@
     "detail": {
       "back": "Volver a la lista",
       "notFound": "Este lugar no existe o ya no está disponible.",
-      "verifiedOn": "el {{date}}"
+      "verifiedOn": "el {{date}}",
+      "imageAlt": "Imagen de {{name}}"
     },
     "pulse": { "title": "Actividad reciente", "moving": "Con movimiento", "active": "Activo", "buzzing": "Muy activo", "hint": "Últimos 7 días, sin mostrar quién." },
     "report": {
@@ -591,6 +592,18 @@
       "removed": "Respuesta quitada"
     },
     "manage": {
+      "image": {
+        "title": "Imagen del lugar",
+        "current": "Imagen actual del lugar",
+        "none": "Sin imagen",
+        "add": "Subir imagen",
+        "change": "Cambiar imagen",
+        "remove": "Quitar imagen",
+        "working": "Subiendo…",
+        "saved": "Imagen guardada",
+        "removed": "Imagen quitada",
+        "hint": "Un logo o una foto que identifique tu negocio. JPG, PNG o WebP, hasta 5 MB. Se muestra en el mapa, las listas y la ficha."
+      },
       "title": "Panel del negocio",
       "save": "Guardar cambios",
       "saving": "Guardando…",
@@ -714,6 +727,65 @@
       }
     }
   },
+  "groups": {
+    "new": "Nuevo grupo",
+    "label": "Grupo",
+    "createTitle": "Crear un grupo",
+    "nameLabel": "Nombre del grupo",
+    "membersLabel": "Personas (de tus conversaciones)",
+    "noPeople": "Aún no tienes conversaciones. Escribe a alguien primero y podrás añadirle a un grupo.",
+    "create": "Crear grupo",
+    "creating": "Creando…",
+    "cancel": "Cancelar",
+    "created": "Grupo creado",
+    "members": "{{count}} personas",
+    "info": "Información del grupo",
+    "admin": "Administrador",
+    "you": "tú",
+    "save": "Guardar",
+    "addPeople": "Añadir personas",
+    "noOneToAdd": "Todas las personas con las que chateas ya están en el grupo.",
+    "add": "Añadir",
+    "remove": "Quitar",
+    "makeAdmin": "Hacer administrador",
+    "leave": "Salir del grupo",
+    "leaveConfirmTitle": "¿Salir de este grupo?",
+    "leaveConfirmText": "Dejarás de recibir sus mensajes. Para volver, un administrador tendrá que añadirte.",
+    "left": "Saliste del grupo",
+    "close": "Cerrar",
+    "openInfo": "Ver información del grupo",
+    "empty": "Todavía no hay mensajes en este grupo."
+  },
+  "postActions": {
+    "save": {
+      "add": "Guardar publicación",
+      "remove": "Quitar de guardados",
+      "added": "Publicación guardada",
+      "removed": "Quitada de guardados"
+    },
+    "saved": {
+      "menu": "Guardados",
+      "title": "Guardados",
+      "subtitle": "Solo tú ves lo que guardas. No se avisa a nadie.",
+      "empty": "Aún no has guardado publicaciones. Toca el marcador de una publicación para verla aquí."
+    },
+    "share": {
+      "open": "Compartir publicación",
+      "title": "Enviar la publicación de {{name}}",
+      "commentLabel": "Comentario (opcional)",
+      "people": "Personas",
+      "empty": "Aún no tienes conversaciones. Escribe a alguien primero y podrás enviarle publicaciones.",
+      "send": "Enviar",
+      "sending": "Enviando…",
+      "cancel": "Cancelar",
+      "done": "Publicación enviada a {{name}}"
+    },
+    "card": {
+      "unavailable": "Esta publicación ya no está disponible",
+      "sensitive": "Contenido marcado como sensible por su autor.",
+      "preview": "📝 Publicación"
+    }
+  },
   "tero": {
     "name": "Tero",
     "tagline": "Tu asistente en THERS",
@@ -760,7 +832,17 @@
       "empty": "Escribe una pregunta para Tero.",
       "tooLong": "Máximo {{max}} caracteres."
     },
+    "image": {
+      "attach": "Adjuntar una imagen para Tero",
+      "preview": "Imagen que vas a enviar a Tero",
+      "sent": "Imagen que enviaste a Tero",
+      "remove": "Quitar imagen",
+      "preparing": "Preparando la imagen…",
+      "privacy": "La imagen se envía a Anthropic, la IA de Tero, para que la vea. THERS no la guarda.",
+      "failed": "No se pudo preparar la imagen. Prueba con otra."
+    },
     "errors": {
+      "imagesDisabled": "Tero todavía no puede ver imágenes. Pregúntale con texto.",
       "offline": "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
       "rateLimited": "Estás enviando muchos mensajes. Espera un momento.",
       "disabled": "Tero no está disponible en este momento.",

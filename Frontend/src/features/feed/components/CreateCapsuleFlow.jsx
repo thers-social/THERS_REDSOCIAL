@@ -7,6 +7,9 @@ import { useToast } from "@shared/components/Toast";
 import { useLanguage } from "@shared/i18n";
 import ImageAttachmentPicker from "@shared/components/ImageAttachmentPicker";
 import useImageAttachments from "@shared/hooks/useImageAttachments";
+import VideoAttachmentPicker from "@shared/components/VideoAttachmentPicker";
+import useVideoAttachment from "@shared/hooks/useVideoAttachment";
+import { VIDEO_ENABLED } from "@shared/lib/videoAttachments";
 
 // POST /api/posts (ADR-004-posts-minimal-model.md) acepta `content`, desde
 // ADR-030 `is_sensitive` y, desde ADR-039, hasta 4 imágenes -- mood/ubicación
@@ -29,22 +32,25 @@ export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
   const { t } = useLanguage();
 
   const images = useImageAttachments({ max: MAX_IMAGES, maxSide: MAX_IMAGE_SIDE });
+  // Video corto (ADR-046): uno solo y excluyente con las imágenes (el servidor lo exige igual).
+  const video = useVideoAttachment();
 
   const trimmedLength = content.trim().length;
   // Con imágenes el texto es opcional (se puede publicar solo una foto).
-  const hasContent = trimmedLength > 0 || images.items.length > 0;
+  const hasContent = trimmedLength > 0 || images.items.length > 0 || video.file !== null;
   const canPublish =
     hasContent &&
     trimmedLength <= MAX_CONTENT_LENGTH &&
     !isSubmitting &&
-    !images.processing;
+    !images.processing &&
+    !video.processing;
 
   const handlePublish = async () => {
     if (!canPublish) return;
 
     setIsSubmitting(true);
     try {
-      await onSubmit(content.trim(), isSensitive, images.files);
+      await onSubmit(content.trim(), isSensitive, images.files, video.file);
     } catch (error) {
       toast.error(getErrorMessage(error, t));
     } finally {
@@ -95,11 +101,14 @@ export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
               items={images.items}
               max={MAX_IMAGES}
               processing={images.processing}
-              disabled={isSubmitting}
+              disabled={isSubmitting || video.file !== null}
               error={images.error}
               onAdd={images.add}
               onRemove={images.remove}
             />
+            {VIDEO_ENABLED && (
+              <VideoAttachmentPicker video={video} disabled={isSubmitting || images.items.length > 0} />
+            )}
           </div>
 
           <label className="flex items-start gap-2 mt-3 cursor-pointer select-none">
@@ -120,7 +129,7 @@ export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
 
           <div className="flex items-center justify-between mt-2">
             <p className="text-xs text-muted dark:text-muted-dark">
-              Video, música, mood y ubicación llegan pronto.
+              {VIDEO_ENABLED ? "Música, mood y ubicación llegan pronto." : "Video, música, mood y ubicación llegan pronto."}
             </p>
             <span
               className={`text-xs shrink-0 ml-3 ${

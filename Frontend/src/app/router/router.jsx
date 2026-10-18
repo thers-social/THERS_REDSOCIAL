@@ -57,6 +57,7 @@ const HelpArticlePage = named(loadHelp, "HelpArticlePage");
 const HelpSearchPage = named(loadHelp, "HelpSearchPage");
 
 const Home = named(loadFeed, "Home");
+const Saved = named(loadFeed, "Saved");
 const Search = named(loadFeed, "Search");
 const Videos = named(loadFeed, "Videos");
 const Capsules = named(loadFeed, "Capsules");
@@ -116,6 +117,7 @@ export default function AppRouter() {
             <Route path="/capsules" element={<Capsules />} />
             {/* "Ubicación" se retiró: THERS Places (/places) ocupa su lugar. Se redirige para no romper enlaces guardados. */}
             <Route path="/radar" element={<Navigate to="/places" replace />} />
+            <Route path="/saved" element={<Saved />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/profile" element={<Profile />} />

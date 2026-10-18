@@ -5,7 +5,10 @@ import Avatar from "@shared/components/Avatar";
 import Spinner from "@shared/components/Spinner";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
 import ImageGrid from "@shared/components/ImageGrid";
+import VideoPlayer from "@shared/components/VideoPlayer";
 import SharedPlaceCard from "@shared/components/SharedPlaceCard";
+import SharePostDialog from "./SharePostDialog";
+import { setPostSaved } from "../lib/savedPostsApi";
 import MentionText from "./MentionText";
 import { useToast } from "@shared/components/Toast";
 import { useLanguage } from "@shared/i18n";
@@ -53,9 +56,10 @@ import { formatRelativeTime } from "../lib/formatRelativeTime";
 //    (ADR-030). Quien activó el filtro de contenido sensible ni siquiera
 //    recibe la publicación; quien no, la ve con el texto oculto tras «Mostrar
 //    de todos modos». El autor siempre ve la suya.
-//  · Guardar (bookmark_add) y compartir (share): SIN ENDPOINT. Se dibujan
-//    como en la referencia pero deshabilitados y con explicación accesible;
-//    no se simula que funcionen.
+//  · Guardar (bookmark) y compartir (share): REALES — POST/DELETE
+//    /api/posts/<id>/save y mensaje directo con `post_id`, ADR-047. Guardar es
+//    privado (no notifica ni cuenta) y optimista con rollback; compartir abre
+//    un diálogo con las personas con las que ya hay conversación.
 //  · Distintivo «verified»: NO se reproduce. El contrato no expone
 //    verificación y el archivo maestro §8.4 prohíbe otorgarla por fixture.
 //  · Chip de ubicación: NO se reproduce. `post` no tiene campo de lugar
@@ -106,6 +110,10 @@ export default function CapsuleCard({
   // Contenido sensible (ADR-030): el texto de una publicación ajena marcada así
   // queda oculto hasta que la persona decide mostrarlo.
   const [revealed, setRevealed] = useState(false);
+  // Guardado (ADR-047). Estado local: nadie más lo ve, así que no hace falta subirlo al feed.
+  const [saved, setSaved] = useState(Boolean(capsule.saved_by_me));
+  const [savingPost, setSavingPost] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const isOwnCapsule = capsule.author.id === currentUserId;
   // `follow_status` (ADR-022): null | 'pending' | 'accepted'. Se lee tal cual
@@ -233,6 +241,23 @@ export default function CapsuleCard({
       toast.error(getErrorMessage(error, t));
     } finally {
       setApplyingRestriction(false);
+    }
+  };
+
+  // POST/DELETE /api/posts/<id>/save (ADR-047). Optimista con rollback; ambos son idempotentes.
+  const handleToggleSave = async () => {
+    if (savingPost) return;
+    const next = !saved;
+    setSaved(next);
+    setSavingPost(true);
+    try {
+      await setPostSaved(capsule.id, next);
+      toast.success(next ? t("postActions.save.added") : t("postActions.save.removed"));
+    } catch (error) {
+      setSaved(!next);
+      toast.error(getErrorMessage(error, t));
+    } finally {
+      setSavingPost(false);
     }
   };
 
@@ -531,6 +556,8 @@ export default function CapsuleCard({
             </p>
           )}
           <ImageGrid images={capsule.images} alt={`Imagen de ${capsule.author.name}`} />
+          {/* Video corto (ADR-046). */}
+          <VideoPlayer video={capsule.video} label={`Video de ${capsule.author.name}`} />
           {/* Lugar asociado (ADR-040 fase 4d). */}
           {capsule.place && <SharedPlaceCard place={capsule.place} />}
         </>
@@ -563,9 +590,26 @@ export default function CapsuleCard({
           {capsule.comments_count > 0 && <span>{capsule.comments_count}</span>}
         </button>
 
-        {/* Presentes en la referencia, sin endpoint que los respalde. */}
-        <PendingAction id={`save-${capsule.id}`} icon="bookmark_add" label="Guardar" />
-        <PendingAction id={`share-${capsule.id}`} icon="share" label="Compartir" />
+        <button
+          type="button"
+          onClick={handleToggleSave}
+          disabled={savingPost}
+          aria-pressed={saved}
+          aria-label={saved ? t("postActions.save.remove") : t("postActions.save.add")}
+          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-th-pill px-3 py-1.5 text-label-lg transition-colors th-focus-ring ${
+            saved ? "text-th-brand" : "text-th-fg-muted hover:bg-th-surface-subtle hover:text-th-brand"
+          }`}
+        >
+          <Icon name={saved ? "bookmark" : "bookmark_add"} size={20} fill={saved ? 1 : 0} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setSharing(true)}
+          aria-label={t("postActions.share.open")}
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-th-pill px-3 py-1.5 text-label-lg text-th-fg-muted transition-colors th-focus-ring hover:bg-th-surface-subtle hover:text-th-brand"
+        >
+          <Icon name="share" size={20} />
+        </button>
       </div>
 
       {isOpen && (
@@ -695,24 +739,19 @@ export default function CapsuleCard({
           </form>
         </div>
       )}
+
+      {sharing && (
+        <SharePostDialog
+          post={capsule}
+          onClose={() => setSharing(false)}
+          onShared={(person) => {
+            setSharing(false);
+            toast.success(t("postActions.share.done", { name: person.name }));
+          }}
+        />
+      )}
     </article>
   );
 }
 
-/** Acción dibujada en la referencia que todavía no tiene soporte de servidor. */
-function PendingAction({ id, icon, label }) {
-  return (
-    <button
-      type="button"
-      disabled
-      aria-describedby={`${id}-hint`}
-      className="inline-flex min-h-[44px] items-center gap-1.5 rounded-th-pill px-3 py-1.5 text-label-lg text-th-fg-subtle opacity-60"
-    >
-      <Icon name={icon} size={20} />
-      <span className="sr-only">{label}</span>
-      <span id={`${id}-hint`} className="sr-only">
-        {label}: todavía no disponible, falta soporte en el servidor
-      </span>
-    </button>
-  );
-}
+

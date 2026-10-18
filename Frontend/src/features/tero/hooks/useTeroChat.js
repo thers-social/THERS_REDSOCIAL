@@ -56,8 +56,9 @@ export default function useTeroChat({ context, onActionConfirmed }) {
   );
 
   const send = useCallback(
-    async (input, { retryId } = {}) => {
-      const check = checkMessage(input);
+    async (input, { retryId, image = null } = {}) => {
+      // Con imagen el texto es opcional (ADR-046): sin él, Tero la describe.
+      const check = image && !String(input || "").trim() ? { ok: true, text: "" } : checkMessage(input);
       if (!check.ok) {
         setInputError(check.error);
         return false;
@@ -70,6 +71,8 @@ export default function useTeroChat({ context, onActionConfirmed }) {
       let base = messagesRef.current;
       if (!userId) {
         const message = makeMessage("user", check.text);
+        // Se guarda la imagen en el mensaje para poder reintentar y para mostrar su miniatura.
+        if (image) message.image = image;
         userId = message.id;
         base = [...base, message];
       } else {
@@ -83,7 +86,8 @@ export default function useTeroChat({ context, onActionConfirmed }) {
       abortRef.current = controller;
       try {
         const history = historyForRequest(base, userId, cardStatesRef.current);
-        const reply = await sendToTero(check.text, contextRef.current, history, controller.signal);
+        const attached = image ?? base.find((item) => item.id === userId)?.image ?? null;
+        const reply = await sendToTero(check.text, contextRef.current, history, controller.signal, attached);
         const answer = makeMessage("tero", reply.text);
         if (reply.cards.length) answer.cards = reply.cards;
         setMessages((prev) => [...withStatus(prev, userId, "sent"), answer]);

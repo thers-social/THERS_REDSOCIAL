@@ -20,9 +20,22 @@ export default function PlaceCard({ place, selected, onSelect }) {
         }`}
       >
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-th-brand-soft text-th-brand-fg">
-            <Icon name="location_on" size={20} fill={selected ? 1 : 0} />
-          </span>
+          {place.cover_image_url ? (
+            // Imagen que identifica al lugar (ADR-046).
+            <img
+              src={place.cover_image_url}
+              alt=""
+              width={48}
+              height={48}
+              loading="lazy"
+              decoding="async"
+              className="h-12 w-12 shrink-0 rounded-xl border border-line object-cover dark:border-line-dark"
+            />
+          ) : (
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-th-brand-soft text-th-brand-fg">
+              <Icon name="location_on" size={20} fill={selected ? 1 : 0} />
+            </span>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <h3 className="truncate text-sm font-semibold text-ink dark:text-ink-dark">{place.name}</h3>

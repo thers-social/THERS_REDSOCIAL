@@ -91,6 +91,20 @@ export async function reportReview(reviewId, { reason, details }) {
   return data.report;
 }
 
+// Imagen que identifica al lugar (ADR-046): la sube quien lo gestiona. `file` ya viene reducida (<= 5 MB);
+// el servidor la vuelve a validar y re-codificar. Devuelve el lugar actualizado.
+export async function uploadPlaceImage(placeId, file) {
+  const form = new FormData();
+  form.append("image", file);
+  const { data } = await api.put(`/places/${placeId}/manage/image`, form, authConfig());
+  return data.place;
+}
+
+export async function removePlaceImage(placeId) {
+  const { data } = await api.delete(`/places/${placeId}/manage/image`, authConfig());
+  return data.place;
+}
+
 // Fotos de la reseña propia (ADR-040 fase 4b; API_CONTRACT.md §4.25). Hasta 3 por reseña.
 export async function uploadReviewImages(placeId, files) {
   const form = new FormData();

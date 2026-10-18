@@ -54,6 +54,9 @@ export default function AppShell() {
   // criterio que `capsules`/`notifications`: se carga una vez acá, no en
   // cada página que la necesita).
   const [conversations, setConversations] = useState([]);
+  // `groups` = chats grupales (GET /api/groups, ADR-048): viven junto a las conversaciones directas
+  // (misma lista de Messages.jsx, mismo badge de no leídos).
+  const [groups, setGroups] = useState([]);
   const [isComposerOpen, setComposerOpen] = useState(false);
   // El drawer de navegación móvil sustituye al buscador/menú desplegable que
   // antes vivían en el header: ahora el buscador es un formulario real del
@@ -98,6 +101,12 @@ export default function AppShell() {
       } catch (error) {
         if (!cancelled) toast.error(getErrorMessage(error, t));
       }
+      try {
+        const res = await api.get("/groups", { headers: authHeaders() });
+        if (!cancelled) setGroups(res.data.groups);
+      } catch {
+        // Los grupos son un añadido a la lista: si fallan, las conversaciones siguen.
+      }
     }
 
     loadPosts();
@@ -110,8 +119,10 @@ export default function AppShell() {
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
   const unreadMessages = useMemo(
-    () => conversations.reduce((sum, c) => sum + c.unread_count, 0),
-    [conversations]
+    () =>
+      conversations.reduce((sum, c) => sum + c.unread_count, 0) +
+      groups.reduce((sum, g) => sum + g.unread_count, 0),
+    [conversations, groups]
   );
 
   // Messages.jsx llama a esto después de mandar un mensaje o de abrir un
@@ -126,6 +137,12 @@ export default function AppShell() {
     } catch {
       // Silencioso: no es una acción disparada por el usuario, es una
       // resincronización de fondo -- un fallo puntual no amerita un Toast.
+    }
+    try {
+      const res = await api.get("/groups", { headers: authHeaders() });
+      setGroups(res.data.groups);
+    } catch {
+      // Igual que arriba.
     }
   };
 
@@ -215,13 +232,15 @@ export default function AppShell() {
   // `images` (ADR-039): sin imágenes se manda JSON, como siempre; con ellas,
   // multipart/form-data (el navegador pone el boundary solo, por eso no se fija
   // `Content-Type` a mano).
-  const handleCreateCapsule = async (content, isSensitive = false, images = []) => {
+  // `video` (ADR-046): un solo archivo en el campo `video`, excluyente con las imágenes.
+  const handleCreateCapsule = async (content, isSensitive = false, images = [], video = null) => {
     let body = { content, is_sensitive: isSensitive };
-    if (images.length > 0) {
+    if (images.length > 0 || video) {
       body = new FormData();
       body.append("content", content);
       body.append("is_sensitive", String(isSensitive));
       images.forEach((file) => body.append("images", file));
+      if (video) body.append("video", video);
     }
     const res = await api.post("/posts", body, { headers: authHeaders() });
     setCapsules((prev) => [res.data.post, ...prev]);
@@ -462,6 +481,7 @@ export default function AppShell() {
           followingIds,
           notifications,
           conversations,
+          groups,
           onReloadConversations: reloadConversations,
           theme,
           toggleTheme,

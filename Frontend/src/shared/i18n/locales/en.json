@@ -438,7 +438,8 @@
     "detail": {
       "back": "Back to the list",
       "notFound": "This place doesn't exist or is no longer available.",
-      "verifiedOn": "on {{date}}"
+      "verifiedOn": "on {{date}}",
+      "imageAlt": "Image of {{name}}"
     },
     "pulse": { "title": "Recent activity", "moving": "Some activity", "active": "Active", "buzzing": "Very active", "hint": "Last 7 days, without showing who." },
     "report": {
@@ -591,6 +592,18 @@
       "removed": "Reply removed"
     },
     "manage": {
+      "image": {
+        "title": "Place image",
+        "current": "Current place image",
+        "none": "No image",
+        "add": "Upload image",
+        "change": "Change image",
+        "remove": "Remove image",
+        "working": "Uploading…",
+        "saved": "Image saved",
+        "removed": "Image removed",
+        "hint": "A logo or a photo that identifies your business. JPG, PNG or WebP, up to 5 MB. It shows on the map, in lists and on the place page."
+      },
       "title": "Business panel",
       "save": "Save changes",
       "saving": "Saving…",
@@ -714,6 +727,65 @@
       }
     }
   },
+  "groups": {
+    "new": "New group",
+    "label": "Group",
+    "createTitle": "Create a group",
+    "nameLabel": "Group name",
+    "membersLabel": "People (from your conversations)",
+    "noPeople": "You have no conversations yet. Message someone first and you will be able to add them to a group.",
+    "create": "Create group",
+    "creating": "Creating…",
+    "cancel": "Cancel",
+    "created": "Group created",
+    "members": "{{count}} people",
+    "info": "Group info",
+    "admin": "Admin",
+    "you": "you",
+    "save": "Save",
+    "addPeople": "Add people",
+    "noOneToAdd": "Everyone you chat with is already in the group.",
+    "add": "Add",
+    "remove": "Remove",
+    "makeAdmin": "Make admin",
+    "leave": "Leave group",
+    "leaveConfirmTitle": "Leave this group?",
+    "leaveConfirmText": "You will stop receiving its messages. To come back, an admin will have to add you.",
+    "left": "You left the group",
+    "close": "Close",
+    "openInfo": "View group info",
+    "empty": "There are no messages in this group yet."
+  },
+  "postActions": {
+    "save": {
+      "add": "Save post",
+      "remove": "Remove from saved",
+      "added": "Post saved",
+      "removed": "Removed from saved"
+    },
+    "saved": {
+      "menu": "Saved",
+      "title": "Saved",
+      "subtitle": "Only you can see what you save. Nobody is notified.",
+      "empty": "You haven't saved any posts yet. Tap a post's bookmark to see it here."
+    },
+    "share": {
+      "open": "Share post",
+      "title": "Send {{name}}'s post",
+      "commentLabel": "Comment (optional)",
+      "people": "People",
+      "empty": "You have no conversations yet. Message someone first and you can send them posts.",
+      "send": "Send",
+      "sending": "Sending…",
+      "cancel": "Cancel",
+      "done": "Post sent to {{name}}"
+    },
+    "card": {
+      "unavailable": "This post is no longer available",
+      "sensitive": "Content marked as sensitive by its author.",
+      "preview": "📝 Post"
+    }
+  },
   "tero": {
     "name": "Tero",
     "tagline": "Your assistant on THERS",
@@ -760,7 +832,17 @@
       "empty": "Write a question for Tero.",
       "tooLong": "Maximum {{max}} characters."
     },
+    "image": {
+      "attach": "Attach an image for Tero",
+      "preview": "Image you are about to send to Tero",
+      "sent": "Image you sent to Tero",
+      "remove": "Remove image",
+      "preparing": "Preparing the image…",
+      "privacy": "The image is sent to Anthropic, Tero's AI, so it can see it. THERS does not store it.",
+      "failed": "The image could not be prepared. Try another one."
+    },
     "errors": {
+      "imagesDisabled": "Tero can't see images yet. Ask with text instead.",
       "offline": "No connection. Check your internet and try again.",
       "rateLimited": "You're sending a lot of messages. Wait a moment.",
       "disabled": "Tero is not available right now.",

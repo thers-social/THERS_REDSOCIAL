@@ -114,8 +114,10 @@ export function screenFor(pathname) {
 }
 
 /** Cuerpo de `POST /api/tero/chat`. El contexto va como dato sin verificar. */
-export function chatBody(text, context, history) {
+export function chatBody(text, context, history, image = null) {
   const body = { message: text, context: { screen: context?.screen ?? "home" } };
+  // Imagen adjunta (ADR-046): `{ media_type, data }`; con ella el texto puede ir vacío.
+  if (image) body.image = image;
   if (history.length) body.history = history;
   if (context?.entityType && context?.entityId) {
     body.context.entity_type = context.entityType;
@@ -247,6 +249,7 @@ export function chatErrorKind(error) {
   if (error?.isNetworkError === true) return "offline";
   if (status === 429) return "rateLimited";
   if (status === 503 && code === "tero_disabled") return "disabled";
+  if (status === 503 && code === "tero_images_disabled") return "imagesDisabled";
   if (status === 503) return "unavailable";
   if (status === 400) return "badRequest";
   return "generic";

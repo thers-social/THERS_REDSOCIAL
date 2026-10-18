@@ -1,10 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { IoClose, IoMic, IoRefresh, IoSend, IoTrashOutline, IoVolumeHigh, IoVolumeMute } from "react-icons/io5";
+import { IoClose, IoImageOutline, IoMic, IoRefresh, IoSend, IoTrashOutline, IoVolumeHigh, IoVolumeMute } from "react-icons/io5";
 import { useLanguage } from "@shared/i18n";
 import { TERO_VOICE_ENABLED } from "@shared/lib/voiceConfig";
 import useDictation from "../hooks/useDictation";
 import useTeroSpeech from "../hooks/useTeroSpeech";
+import { ImageSelectionError } from "@shared/lib/imageAttachments";
 import { MAX_MESSAGE_LENGTH } from "../lib/teroChat";
+import { TERO_IMAGES_ENABLED, imageToPayload, previewUrl } from "../lib/teroImage";
 import {
   VOICE_SAMPLES,
   readSpeakPreference,
@@ -30,6 +32,26 @@ export default function TeroChatPanel({ chat, onClose }) {
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const titleId = useId();
+
+  // Imagen adjunta a la pregunta (ADR-046): una sola, ya reducida y en base64.
+  const imageInputRef = useRef(null);
+  const [attached, setAttached] = useState(null);
+  const [imageError, setImageError] = useState("");
+  const [preparing, setPreparing] = useState(false);
+  const chooseImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImageError("");
+    setPreparing(true);
+    try {
+      setAttached(await imageToPayload(file));
+    } catch (error) {
+      setImageError(error instanceof ImageSelectionError ? error.message : t("tero.image.failed"));
+    } finally {
+      setPreparing(false);
+    }
+  };
 
   // La voz de Tero (ADR-045): lee sus respuestas con la síntesis del navegador, salvo que se silencie.
   const [voiceNames, setVoiceNames] = useState(() => {
@@ -103,8 +125,12 @@ export default function TeroChatPanel({ chat, onClose }) {
     stopSpeech();
     dictation.stop();
     const text = draft;
-    const ok = await send(text);
-    if (ok) setDraft("");
+    const image = attached;
+    const ok = await send(text, { image });
+    if (ok) {
+      setDraft("");
+      setAttached(null);
+    }
     inputRef.current?.focus();
   };
 
@@ -113,7 +139,7 @@ export default function TeroChatPanel({ chat, onClose }) {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) submit(event);
   };
 
-  const retry = (message) => send(message.text, { retryId: message.id });
+  const retry = (message) => send(message.text, { retryId: message.id, image: message.image ?? null });
 
   const suggest = async (key) => {
     if (pending) return;
@@ -200,6 +226,13 @@ export default function TeroChatPanel({ chat, onClose }) {
                     : "bg-th-surface-subtle text-th-fg"
                 } ${message.status === "failed" ? "opacity-70" : ""}`}
               >
+                {message.image && (
+                  <img
+                    src={previewUrl(message.image)}
+                    alt={t("tero.image.sent")}
+                    className="mb-2 max-h-40 w-auto rounded-xl"
+                  />
+                )}
                 {message.text}
               </div>
               {message.status === "failed" ? (
@@ -249,6 +282,29 @@ export default function TeroChatPanel({ chat, onClose }) {
             placeholder={t("tero.placeholder")}
             className="max-h-28 min-h-[2.5rem] flex-1 resize-none rounded-2xl border border-th-border-strong bg-th-bg px-3 py-2 text-sm text-th-fg placeholder:text-th-fg-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-th-brand"
           />
+          {TERO_IMAGES_ENABLED ? (
+            <>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={chooseImage}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={pending || preparing || attached !== null}
+                aria-label={t("tero.image.attach")}
+                title={t("tero.image.attach")}
+                className="flex h-10 w-10 flex-none items-center justify-center rounded-full border border-th-border-strong text-th-fg transition hover:bg-th-surface-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-th-brand disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <IoImageOutline aria-hidden="true" size={18} />
+              </button>
+            </>
+          ) : null}
           {dictationAvailable ? (
             <button
               type="button"
@@ -268,13 +324,34 @@ export default function TeroChatPanel({ chat, onClose }) {
           ) : null}
           <button
             type="submit"
-            disabled={pending || !draft.trim()}
+            disabled={pending || preparing || (!draft.trim() && !attached)}
             aria-label={t("tero.send")}
             className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-th-brand text-th-on-brand transition hover:bg-th-brand-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-th-brand disabled:cursor-not-allowed disabled:opacity-50"
           >
             <IoSend aria-hidden="true" size={18} />
           </button>
         </div>
+        {attached ? (
+          <div className="mt-2 flex items-center gap-2">
+            <img src={previewUrl(attached)} alt={t("tero.image.preview")} className="h-14 w-14 rounded-xl border border-th-border object-cover" />
+            <button
+              type="button"
+              onClick={() => setAttached(null)}
+              disabled={pending}
+              className="text-xs font-semibold text-th-danger-fg hover:underline disabled:opacity-50"
+            >
+              {t("tero.image.remove")}
+            </button>
+          </div>
+        ) : null}
+        {TERO_IMAGES_ENABLED && (attached || preparing) ? (
+          <p className="mt-1 text-[11px] text-th-fg-muted">{preparing ? t("tero.image.preparing") : t("tero.image.privacy")}</p>
+        ) : null}
+        {imageError ? (
+          <p role="alert" className="mt-1 text-xs text-th-danger-fg">
+            {imageError}
+          </p>
+        ) : null}
         {inputError ? (
           <p role="alert" className="mt-1 text-xs text-th-danger-fg">
             {t(`tero.input.${inputError}`, { max: MAX_MESSAGE_LENGTH })}
