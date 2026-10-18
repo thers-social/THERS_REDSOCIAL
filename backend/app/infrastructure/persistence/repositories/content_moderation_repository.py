@@ -24,7 +24,11 @@ from app.infrastructure.persistence.models import (
 _TABLES = {
     subjects.MEDIA_ATTACHMENT: ("media_attachments", "owner_id"),
     subjects.STORY: ("stories", "author_id"),
+    subjects.VIDEO: ("videos", "owner_id"),
 }
+
+#: Columna que identifica el archivo ante el clasificador (en un video, el asset de Mux).
+_KEY_COLUMN = {subjects.VIDEO: "mux_asset_id"}
 
 
 def _table(subject_type):
@@ -137,10 +141,11 @@ class SQLAlchemyContentModerationRepository(jobs.ModerationJobRepository):
     def subject_context(self, subject_type, subject_id):
         """Lo que el motor necesita saber de una imagen y de quien la subió. Nada del contenido."""
         table, owner = _table(subject_type)
+        key = _KEY_COLUMN.get(subject_type, "storage_key")
         row = db.session.execute(
             text(
                 f"""
-                SELECT m.id, m.storage_key, m.{owner} AS owner_id, m.moderation_status,
+                SELECT m.id, m.{key} AS storage_key, m.{owner} AS owner_id, m.moderation_status,
                        EXTRACT(EPOCH FROM (now() - u.created_at)) / 86400.0 AS account_age_days,
                        (SELECT count(*) FROM reports r
                          WHERE r.status = 'open' AND r.reported_user_id = m.{owner}) AS open_reports

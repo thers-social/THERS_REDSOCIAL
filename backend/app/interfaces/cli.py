@@ -107,6 +107,23 @@ def register_cli(app):
                 return
             time.sleep(interval)
 
+    @app.cli.command("videos-sweep")
+    def videos_sweep():
+        """Borra en Mux los assets pendientes y reprocesa webhooks que llegaron antes que su video."""
+        from datetime import datetime, timezone
+
+        from app.application.videos import video_use_cases
+        from app.infrastructure.persistence.repositories.video_repository import (
+            SQLAlchemyVideoRepository,
+        )
+
+        repository = SQLAlchemyVideoRepository()
+        counts = video_use_cases.sweep_external_deletions(
+            repository, app.extensions.get("mux_client"), datetime.now(timezone.utc)
+        )
+        resolved = video_use_cases.reprocess_deferred(repository)
+        click.echo(f"Borrados en Mux: {counts}. Eventos pendientes resueltos: {resolved}.")
+
     @app.cli.command("n8n-dispatch")
     @click.option("--once", is_flag=True, help="Despacha un lote y termina.")
     @click.option("--interval", default=10.0, show_default=True, help="Segundos entre lotes.")

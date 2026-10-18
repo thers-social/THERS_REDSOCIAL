@@ -41,7 +41,8 @@
         {
           "photosPermission": "THERS accede a tus fotos solo para que elijas la imagen de una historia."
         }
-      ]
+      ],
+      "expo-video"
     ]
   }
 }

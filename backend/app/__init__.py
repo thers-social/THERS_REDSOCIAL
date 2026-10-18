@@ -158,6 +158,14 @@ def create_app():
         "text_classifier": text_classifier(app),
     }
 
+    # Reels con Mux (ADR-043-A): apagado por defecto (VIDEOS_ENABLED). Sin credenciales no hay cliente.
+    from app.infrastructure.video.mux_client import build_mux_client, build_playback_signer
+
+    app.extensions["mux_client"] = build_mux_client(app.config)
+    app.extensions["video_playback_signer"] = build_playback_signer(app.config)
+    from app.interfaces.routes.video_routes import videos_bp
+    app.register_blueprint(videos_bp, url_prefix="/api")
+
     # Avisos y automatización (ADR-044 §2.8): aviso directo por correo y rutas internas para n8n.
     from app.application.automation.alerts import TeamAlerter
     from app.infrastructure.email.factory import create_email_sender

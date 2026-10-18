@@ -192,3 +192,7 @@ MODERATION_APPEAL = RateLimitRule("moderation_appeal", 10, _HOUR, clear_on_succe
 # Avisos pedidos por n8n a las rutas internas (ADR-044 §2.8): un tope global, sin identidad de
 # persona. Un secreto filtrado no puede convertirse en una avalancha de correos.
 INTERNAL_NOTICE = RateLimitRule("internal_notice", 20, _HOUR, clear_on_success=False)
+
+# Reservar una subida de video (ADR-043-A): 10 por día y cuenta. Cuenta cada intento, también los que
+# fallan en Mux (cada reserva puede crear una subida que cuesta).
+VIDEO_UPLOAD = RateLimitRule("video_upload", 10, 24 * _HOUR, clear_on_success=False)

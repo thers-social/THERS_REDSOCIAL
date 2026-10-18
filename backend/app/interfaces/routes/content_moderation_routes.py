@@ -111,6 +111,8 @@ def preview(attachment_id):
     item = _queue.get_item(attachment_id, subject)
     if item is None or (item["restricted"] and not roles.can_see_restricted(g.moderation_role)):
         return jsonify({"msg": "Recurso no encontrado"}), 404
+    if subject == subjects.VIDEO:
+        return jsonify({"msg": "Usa preview-url para un video"}), 409
     key, private = _queue.storage_ref(attachment_id, subject)
     if private:
         # Archivo del almacenamiento PRIVADO: no hay bytes que servir desde aquí; se entrega una
@@ -135,6 +137,15 @@ def preview_url(attachment_id):
     item = _queue.get_item(attachment_id, subject)
     if item is None or (item["restricted"] and not roles.can_see_restricted(g.moderation_role)):
         return jsonify({"msg": "Recurso no encontrado"}), 404
+    if subject == subjects.VIDEO:
+        # Un video se ve por HLS con un token firmado de vida corta, emitido tras comprobar el rol.
+        signer = current_app.extensions.get("video_playback_signer")
+        playback = _queue.playback_id(attachment_id)
+        if signer is None or not playback:
+            return jsonify({"msg": "Este video todavía no se puede reproducir"}), 404
+        token = signer.sign(playback, PREVIEW_URL_TTL_SECONDS)
+        return jsonify({"url": signer.hls_url(playback, token), "kind": "hls",
+                        "expires_in": PREVIEW_URL_TTL_SECONDS}), 200
     key, private = _queue.storage_ref(attachment_id, subject)
     storage = current_app.extensions.get("private_storage")
     if not private or storage is None:

@@ -57,10 +57,14 @@ def _iso(value):
     return value.isoformat() if value else None
 
 
+#: Tipo interno -> valor de `?type=` que ve el cliente.
+_TYPE_NAMES = {subjects.MEDIA_ATTACHMENT: "media", subjects.STORY: "story", subjects.VIDEO: "video"}
+
+
 def _present_item(row, subject_type=subjects.MEDIA_ATTACHMENT):
     return {
         "id": str(row["id"]),
-        "type": "story" if subject_type == subjects.STORY else "media",
+        "type": _TYPE_NAMES[subject_type],
         "status": row["status"],
         "parent_type": row["parent_type"],
         "owner": {"id": str(row["owner_id"]), "username": row["owner_username"]},
@@ -211,7 +215,7 @@ def my_appeals(user_id, queue):
     return {
         "appeals": [
             {"id": str(a["id"]), "attachment_id": str(a["attachment_id"]), "status": a["status"],
-             "type": "story" if a["subject_type"] == subjects.STORY else "media",
+             "type": _TYPE_NAMES.get(a["subject_type"], "media"),
              "resolution_note": a["resolution_note"], "created_at": _iso(a["created_at"]),
              "resolved_at": _iso(a["resolved_at"])}
             for a in queue.my_appeals(user_id)
@@ -228,7 +232,7 @@ def list_appeals(tab, limit_raw, offset_raw, role, queue):
     return {
         "items": [
             {"id": str(a["id"]), "attachment_id": str(a["attachment_id"]), "status": a["status"],
-             "type": "story" if a["subject_type"] == subjects.STORY else "media",
+             "type": _TYPE_NAMES.get(a["subject_type"], "media"),
              "reason": a["reason"], "appellant": a["appellant"], "overdue": bool(a["overdue"]),
              "due_at": _iso(a["due_at"]), "created_at": _iso(a["created_at"]),
              "resolved_at": _iso(a["resolved_at"]), "resolution_note": a["resolution_note"]}

@@ -127,6 +127,17 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
         # menciones, filtros, exportaciones...). La prueba de
         # tests/test_account_deletion.py recorre `information_schema` y falla si
         # alguna tabla nueva deja de cumplirlo.
+        # Los videos caen en cascada, pero su asset en Mux no: se encola su borrado en la misma
+        # transacción (ADR-043-A §3). Sin esto quedaría un video huérfano cobrando almacenamiento.
+        db.session.execute(
+            text(
+                "INSERT INTO pending_external_deletions (provider, external_id) "
+                "SELECT 'mux', mux_asset_id FROM videos "
+                "WHERE owner_id = :u AND mux_asset_id IS NOT NULL "
+                "ON CONFLICT (provider, external_id) DO NOTHING"
+            ),
+            {"u": str(user_id)},
+        )
         db.session.execute(delete(User).where(User.id == user_id))
         db.session.commit()
 

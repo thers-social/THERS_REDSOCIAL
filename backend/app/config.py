@@ -356,6 +356,22 @@ Config.N8N_TIMEOUT_SECONDS = _positive_float_env("N8N_TIMEOUT_SECONDS", 5.0)
 Config.MODERATION_ALERT_EMAIL = (os.environ.get("MODERATION_ALERT_EMAIL") or "").strip() or None
 Config.MODERATION_PANEL_URL = (os.environ.get("MODERATION_PANEL_URL") or "").strip() or None
 
+# Reels con Mux (ADR-043-A). `VIDEOS_ENABLED` apagado por defecto: todo responde 404. Aunque se
+# encienda, la subida PÚBLICA sigue bloqueada por D3 (`domain/videos/rules.PUBLIC_UPLOAD_ALLOWED` es
+# una constante de código, no una variable): solo suben las cuentas de VIDEO_UPLOAD_ALLOWLIST. Sin
+# credenciales de Mux no se inventa un proveedor: subir responde 503. Los secretos nunca van al repo.
+Config.VIDEOS_ENABLED = _flag_env("VIDEOS_ENABLED")
+Config.VIDEO_UPLOAD_ALLOWLIST = os.environ.get("VIDEO_UPLOAD_ALLOWLIST", "")
+Config.MUX_TOKEN_ID = (os.environ.get("MUX_TOKEN_ID") or "").strip() or None
+Config.MUX_TOKEN_SECRET = (os.environ.get("MUX_TOKEN_SECRET") or "").strip() or None
+Config.MUX_WEBHOOK_SECRET = (os.environ.get("MUX_WEBHOOK_SECRET") or "").strip() or None
+Config.MUX_SIGNING_KEY_ID = (os.environ.get("MUX_SIGNING_KEY_ID") or "").strip() or None
+Config.MUX_SIGNING_PRIVATE_KEY = (os.environ.get("MUX_SIGNING_PRIVATE_KEY") or "").strip() or None
+Config.MUX_CORS_ORIGIN = (os.environ.get("MUX_CORS_ORIGIN") or "").strip() or None
+Config.MUX_TIMEOUT_SECONDS = _positive_float_env("MUX_TIMEOUT_SECONDS", 10.0)
+# `fake` = Mux simulado, SOLO desarrollo y pruebas.
+Config.MUX_CLIENT = (os.environ.get("MUX_CLIENT") or "none").strip().lower()
+
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
 # Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
 # es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.

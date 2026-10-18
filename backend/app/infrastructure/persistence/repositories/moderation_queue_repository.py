@@ -34,6 +34,7 @@ _SPEC = {
         "ELSE 'review' END",
     ),
     subjects.STORY: ("stories", "author_id", "'story'"),
+    subjects.VIDEO: ("videos", "owner_id", "'reel'"),
 }
 
 
@@ -123,11 +124,18 @@ class SQLAlchemyModerationQueueRepository:
         """`(clave, es_privado)` del archivo, o `None`. Solo las historias pueden ser privadas."""
         table, _, _ = _spec(subject_type)
         private = "file_private" if subject_type == subjects.STORY else "FALSE"
+        key = "mux_asset_id" if subject_type == subjects.VIDEO else "storage_key"
         row = db.session.execute(
-            text(f"SELECT storage_key, {private} AS private FROM {table} WHERE id = :id"),
+            text(f"SELECT {key}, {private} AS private FROM {table} WHERE id = :id"),
             {"id": str(attachment_id)},
         ).first()
         return (row[0], bool(row[1])) if row else None
+
+    def playback_id(self, video_id):
+        """Id de reproducción de Mux de un video, o `None`."""
+        return db.session.execute(
+            text("SELECT mux_playback_id FROM videos WHERE id = :id"), {"id": str(video_id)}
+        ).scalar()
 
     def storage_key(self, attachment_id):
         ref = self.storage_ref(attachment_id)

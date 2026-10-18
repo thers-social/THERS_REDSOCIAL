@@ -2374,3 +2374,75 @@ class DomainEvent(db.Model):
             "status IN ('queued', 'sent', 'failed', 'dead')", name="ck_domain_events_status"
         ),
     )
+
+
+# --- Reels con Mux (ADR-043, ADR-043-A) ---
+
+
+class Video(db.Model):
+    __tablename__ = "videos"
+
+    # Un Reel: reserva de subida directa a Mux y su ciclo de vida. Nace `pending` en moderación y no
+    # se ve sin `ready` Y `approved` (ver `video_repository`).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    owner_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    caption = db.Column(db.String(200), nullable=True)
+    status = db.Column(db.String(12), nullable=False, server_default=text("'pending'"))
+    mux_upload_id = db.Column(db.String(80), nullable=True)
+    mux_asset_id = db.Column(db.String(80), nullable=True)
+    mux_playback_id = db.Column(db.String(80), nullable=True)
+    duration_ms = db.Column(db.Integer, nullable=True)
+    width = db.Column(db.Integer, nullable=True)
+    height = db.Column(db.Integer, nullable=True)
+    failure_reason = db.Column(db.String(40), nullable=True)
+    idempotency_key = db.Column(db.String(80), nullable=True)
+    moderation_status = db.Column(db.String(10), nullable=False, server_default=text("'pending'"))
+    moderation_decided_by = db.Column(db.String(40), nullable=True)
+    moderation_decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    ready_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+
+class MuxWebhookEvent(db.Model):
+    __tablename__ = "mux_webhook_events"
+
+    # Libro de eventos de Mux: un id de evento se procesa UNA vez. Guarda solo identificadores,
+    # duración y reproducción, no el evento completo.
+    event_id = db.Column(db.String(80), primary_key=True)
+    event_type = db.Column(db.String(60), nullable=False)
+    object_id = db.Column(db.String(80), nullable=True)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'processed'"))
+    data = db.Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    received_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class PendingExternalDeletion(db.Model):
+    __tablename__ = "pending_external_deletions"
+
+    # Borrados en proveedores externos con reintentos (ADR-043-A §3).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    provider = db.Column(db.String(20), nullable=False)
+    external_id = db.Column(db.String(80), nullable=False)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'queued'"))
+    attempts = db.Column(db.SmallInteger, nullable=False, server_default=text("0"))
+    next_attempt_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    last_error = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    done_at = db.Column(db.DateTime(timezone=True), nullable=True)

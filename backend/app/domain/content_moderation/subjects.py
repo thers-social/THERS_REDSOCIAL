@@ -6,11 +6,12 @@
 
 MEDIA_ATTACHMENT = "media_attachment"
 STORY = "story"
+VIDEO = "video"
 
-ALL = (MEDIA_ATTACHMENT, STORY)
+ALL = (MEDIA_ATTACHMENT, STORY, VIDEO)
 
 #: Valor de `?type=` en las rutas del panel -> tipo de contenido.
-FROM_QUERY = {"media": MEDIA_ATTACHMENT, "story": STORY}
+FROM_QUERY = {"media": MEDIA_ATTACHMENT, "story": STORY, "video": VIDEO}
 
 
 def parse(value, default=MEDIA_ATTACHMENT):
