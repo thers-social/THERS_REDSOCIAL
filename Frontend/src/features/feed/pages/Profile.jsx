@@ -6,7 +6,9 @@ import { useToast } from "@shared/components/Toast";
 import { useLanguage } from "@shared/i18n";
 import CapsuleCard from "../components/CapsuleCard";
 import EditProfileModal from "../components/EditProfileModal";
+import ConnectionsDialog from "../components/ConnectionsDialog";
 import ProfileCover from "../components/ProfileCover";
+import SuggestedBar from "../components/SuggestedBar";
 import ProfileIdentity from "../components/ProfileIdentity";
 import ProfileCollections from "../components/ProfileCollections";
 import ProfileRail from "../components/ProfileRail";
@@ -68,6 +70,8 @@ export default function Profile() {
   const [localProfile, setLocalProfile] = useState(() => loadProfile(currentUser.username));
   const migratedForRef = useRef(null);
   const [isEditing, setEditing] = useState(false);
+  const [connections, setConnections] = useState(null); // null | "followers" | "following"
+  const [suggesting, setSuggesting] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const tabParam = searchParams.get("tab");
@@ -268,8 +272,13 @@ export default function Profile() {
           stats={stats}
           onEdit={() => setEditing(true)}
           onShare={handleShare}
+          onOpenConnections={setConnections}
+          onToggleSuggestions={() => setSuggesting((open) => !open)}
+          suggestionsOpen={suggesting}
           editButtonRef={editButtonRef}
         />
+
+        {suggesting && <SuggestedBar onClose={() => setSuggesting(false)} />}
 
         {hasAbout && (
           <section className="rounded-th-card border border-th-border bg-th-surface p-5 shadow-th-card">
@@ -317,6 +326,15 @@ export default function Profile() {
       </div>
 
       <ProfileRail ownCapsules={ownCapsules} />
+
+      {connections && (
+        <ConnectionsDialog
+          userId={currentUser.id}
+          username={currentUser.username}
+          initialTab={connections}
+          onClose={() => setConnections(null)}
+        />
+      )}
 
       {isEditing && (
         <EditProfileModal

@@ -64,6 +64,8 @@ const Capsules = named(loadFeed, "Capsules");
 const Messages = named(loadFeed, "Messages");
 const Notifications = named(loadFeed, "Notifications");
 const Profile = named(loadFeed, "Profile");
+const UserProfile = named(loadFeed, "UserProfile");
+const Explore = named(loadFeed, "Explore");
 const SettingsLayout = named(loadFeed, "SettingsLayout");
 const SettingsSectionPage = named(loadFeed, "SettingsSectionPage");
 
@@ -121,6 +123,9 @@ export default function AppRouter() {
             <Route path="/messages" element={<Messages />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/profile" element={<Profile />} />
+            {/* Perfil de otra persona (ADR-049) y Explorar (ADR-050). */}
+            <Route path="/user/:userId" element={<UserProfile />} />
+            <Route path="/explore" element={<Explore />} />
             {/* Moderación (ADR-032 fase 3). Sin enlace en la navegación a propósito: la página
                 se oculta sola a quien no es moderador y el servidor rechaza sus peticiones. */}
             <Route path="/moderation" element={<Moderation />} />

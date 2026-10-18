@@ -621,6 +621,8 @@
       }
     },
     "reservations": {
+      "pdf": "Descargar PDF",
+      "defaultHours": "Este lugar no publicó su horario: te mostramos un horario de 10:00 a 21:00. Es una solicitud y el lugar la confirma o la rechaza.",
       "title": "Reservar",
       "unclaimed": "Este negocio aún no ha reclamado su lugar en THERS: tu solicitud puede no ser atendida.",
       "book": "Reservar",
@@ -686,6 +688,7 @@
       "seatsLeft": "{{count}} lugares"
     },
     "quotes": {
+      "empty": "Este lugar todavía no publicó su lista de precios, así que aún no se puede pedir una cotización. Cuando la cargue, aparecerá aquí el botón para pedirla.",
       "title": "Cotizar",
       "request": "Pedir cotización",
       "sending": "Calculando…",
@@ -825,6 +828,8 @@
   },
     "suggestions": {
       "whoToFollow": "¿A quién puedo seguir?",
+      "recommendPlace": "Recomiéndame un lugar",
+      "reservePlace": "Quiero reservar una mesa",
       "improveBio": "Ayúdame a mejorar mi biografía",
       "whatCanYouDo": "¿Qué puedes hacer?"
     },

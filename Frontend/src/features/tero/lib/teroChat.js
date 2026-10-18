@@ -15,7 +15,7 @@ export const MAX_HISTORY_TURNS = 10;
 export const MAX_MESSAGE_LENGTH = 1000;
 const MAX_NOTE_SUMMARY = 80;
 
-const ACTION_KINDS = ["follow_user", "unfollow_user", "update_profile"];
+const ACTION_KINDS = ["follow_user", "unfollow_user", "update_profile", "reserve_place"];
 const SOURCES = ["ai", "disabled", "budget", "refused"];
 
 function isRecord(value) {

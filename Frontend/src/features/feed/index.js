@@ -6,5 +6,7 @@ export { default as Saved } from "./pages/Saved";
 export { default as Messages } from "./pages/Messages";
 export { default as Notifications } from "./pages/Notifications";
 export { default as Profile } from "./pages/Profile";
+export { default as UserProfile } from "./pages/UserProfile";
+export { default as Explore } from "./pages/Explore";
 export { default as SettingsLayout } from "./pages/SettingsLayout";
 export { default as SettingsSectionPage } from "./pages/SettingsSectionPage";

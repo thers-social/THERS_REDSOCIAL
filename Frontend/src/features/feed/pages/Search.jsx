@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import Icon from "@shared/components/Icon";
 import Spinner from "@shared/components/Spinner";
 import CapsuleCard from "../components/CapsuleCard";
@@ -180,6 +180,13 @@ export default function Search() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-end lg:self-auto">
+            <Link
+              to="/explore"
+              className="inline-flex min-h-[40px] items-center gap-2 rounded-th-pill border border-th-brand bg-th-brand px-4 text-label-lg font-bold text-th-on-brand th-focus-ring hover:bg-th-brand-hover"
+            >
+              <Icon name="grid_view" size={18} />
+              Explorar contenido
+            </Link>
             <PendingChip id="save-search" icon="bookmark" label="Guardar búsqueda" />
           </div>
         </div>

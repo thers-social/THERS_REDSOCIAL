@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "@shared/hooks/useTheme";
 import { useLanguage } from "@shared/i18n";
@@ -43,6 +43,21 @@ export default function AppShell() {
   // -- "Cápsula" sigue siendo el nombre de producto para un post, ya usado en
   // toda la UI (Home.jsx, Profile.jsx); ya no es mockCapsules.
   const [capsules, setCapsules] = useState([]);
+  // Publicaciones que NO son del feed (perfil ajeno, Explorar; ADR-049/050). Viven en `capsules` para
+  // que me gusta, comentarios y seguir funcionen igual, pero no se exponen en la lista del feed.
+  const [extraIds, setExtraIds] = useState(() => new Set());
+  const extraIdsRef = useRef(extraIds);
+  extraIdsRef.current = extraIds;
+  const feedCapsules = useMemo(() => capsules.filter((c) => !extraIds.has(c.id)), [capsules, extraIds]);
+  const adoptCapsules = useCallback((extra) => {
+    setCapsules((current) => {
+      const known = new Set(current.map((c) => c.id));
+      const fresh = extra.filter((c) => !known.has(c.id));
+      if (fresh.length === 0) return current;
+      setExtraIds((ids) => new Set([...ids, ...fresh.map((c) => c.id)]));
+      return [...current, ...fresh];
+    });
+  }, []);
   const [capsulesLoading, setCapsulesLoading] = useState(true);
   const [followingIds, setFollowingIds] = useState(() => new Set());
   // `notifications` = notificaciones reales (GET /api/notifications,
@@ -70,7 +85,13 @@ export default function AppShell() {
       setCapsulesLoading(true);
       try {
         const res = await api.get("/posts", { headers: authHeaders() });
-        if (!cancelled) setCapsules(res.data.posts);
+        if (!cancelled) {
+          const fresh = res.data.posts;
+          setCapsules((current) => [
+            ...fresh,
+            ...current.filter((c) => extraIdsRef.current.has(c.id) && !fresh.some((f) => f.id === c.id)),
+          ]);
+        }
       } catch (error) {
         if (!cancelled) toast.error(getErrorMessage(error, t));
       } finally {
@@ -476,7 +497,9 @@ export default function AppShell() {
       <Outlet
         context={{
           currentUser,
-          capsules,
+          capsules: feedCapsules,
+          allCapsules: capsules,
+          adoptCapsules,
           capsulesLoading,
           followingIds,
           notifications,

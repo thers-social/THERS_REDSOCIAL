@@ -18,7 +18,7 @@ import { joinDictation, recognitionLang } from "../lib/teroVoice";
 import TeroAvatar from "./TeroAvatar";
 import TeroActionCard from "./TeroActionCard";
 
-const SUGGESTIONS = ["whoToFollow", "improveBio", "whatCanYouDo"];
+const SUGGESTIONS = ["whoToFollow", "recommendPlace", "reservePlace", "improveBio", "whatCanYouDo"];
 
 /**
  * Panel de conversación con Tero. Solo dibuja: el estado y las llamadas viven en

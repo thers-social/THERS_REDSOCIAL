@@ -42,7 +42,19 @@ export default function PlaceQuote({ placeId }) {
 
   if (!user) return null;
   if (state.status === "loading") return <Spinner className="mt-4" />;
-  if (state.status === "error" || state.items.length === 0) return null;
+  if (state.status === "error") return null;
+  // Sin lista de precios la sección sigue visible y lo explica (ADR-051): antes se ocultaba y parecía
+  // que la función no existía.
+  if (state.items.length === 0) {
+    return (
+      <section className="mt-6 border-t border-line pt-4 dark:border-line-dark" aria-labelledby="place-quotes-title">
+        <h2 id="place-quotes-title" className="text-base font-semibold text-ink dark:text-ink-dark">
+          {t("places.quotes.title")}
+        </h2>
+        <p className="mt-2 text-sm text-muted dark:text-muted-dark">{t("places.quotes.empty")}</p>
+      </section>
+    );
+  }
 
   const chosen = Object.entries(quantities).filter(([, quantity]) => quantity > 0);
 

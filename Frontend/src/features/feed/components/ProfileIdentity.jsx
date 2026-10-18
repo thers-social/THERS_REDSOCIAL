@@ -37,6 +37,9 @@ export default function ProfileIdentity({
   stats,
   onEdit,
   onShare,
+  onOpenConnections,
+  onToggleSuggestions,
+  suggestionsOpen = false,
   editButtonRef,
 }) {
   const href = websiteHref(profile.website);
@@ -115,6 +118,18 @@ export default function ProfileIdentity({
           >
             <Icon name="ios_share" size={18} />
             <span className="hidden 2xl:inline">Compartir perfil</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleSuggestions}
+            aria-label="Descubrir personas"
+            aria-expanded={suggestionsOpen}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-th-input border bg-th-surface text-th-fg-muted transition-colors th-focus-ring hover:bg-th-surface-subtle ${
+              suggestionsOpen ? "border-th-brand text-th-brand-fg" : "border-th-border"
+            }`}
+          >
+            <Icon name="person_add" size={20} />
           </button>
 
           <div className="relative shrink-0">
@@ -196,23 +211,39 @@ export default function ProfileIdentity({
 
         <dl className="mt-1 flex flex-wrap items-center gap-x-8 gap-y-3">
           <Stat value={stats.posts} label="Publicaciones" />
-          <Stat value={stats.followers} label="Seguidores" />
-          <Stat value={stats.following} label="Siguiendo" />
+          <Stat value={stats.followers} label="Seguidores" onClick={() => onOpenConnections?.("followers")} />
+          <Stat value={stats.following} label="Siguiendo" onClick={() => onOpenConnections?.("following")} />
         </dl>
       </div>
     </div>
   );
 }
 
-function Stat({ value, label }) {
+function Stat({ value, label, onClick }) {
+  const body = (
+    <>
+      <span className="text-headline-sm font-bold tabular-nums text-th-fg-strong">
+        {value.toLocaleString("es")}
+      </span>
+      <span className="text-body-sm text-th-fg-muted">{label}</span>
+    </>
+  );
   return (
     <div className="flex items-baseline gap-1.5">
       <dt className="sr-only">{label}</dt>
-      <dd className="flex items-baseline gap-1.5">
-        <span className="text-headline-sm font-bold tabular-nums text-th-fg-strong">
-          {value.toLocaleString("es")}
-        </span>
-        <span className="text-body-sm text-th-fg-muted">{label}</span>
+      <dd>
+        {onClick ? (
+          <button
+            type="button"
+            onClick={onClick}
+            aria-label={`Ver ${label.toLowerCase()}, ${value}`}
+            className="flex items-baseline gap-1.5 rounded-th-sm th-focus-ring hover:underline"
+          >
+            {body}
+          </button>
+        ) : (
+          <span className="flex items-baseline gap-1.5">{body}</span>
+        )}
       </dd>
     </div>
   );

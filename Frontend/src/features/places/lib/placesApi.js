@@ -349,6 +349,19 @@ export async function decideQuote(placeId, quoteId, decision) {
   return data.quote;
 }
 
+/** Comprobante en PDF de una reserva PROPIA (ADR-052). */
+export async function downloadReservationPdf(reservationId) {
+  const { data } = await api.get(`/reservations/${reservationId}/pdf`, { ...authConfig(), responseType: "blob" });
+  const url = URL.createObjectURL(data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `reserva-${reservationId.slice(0, 8)}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function downloadQuotePdf(quoteId) {
   const { data } = await api.get(`/quotes/${quoteId}/pdf`, { ...authConfig(), responseType: "blob" });
   const url = URL.createObjectURL(data);

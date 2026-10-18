@@ -301,13 +301,23 @@ export default function CapsuleCard({
   return (
     <article className="flex flex-col gap-4 rounded-th-card border border-th-border bg-th-surface p-6 shadow-th-card transition-colors hover:border-th-border-strong">
       <header className="flex items-start gap-3">
-        <Avatar name={capsule.author.name} photo={capsule.author.avatar_url} size="w-10 h-10" />
+        {/* Foto y nombre llevan al perfil de su autor (ADR-049); el propio, a /profile. */}
+        <Link
+          to={isOwnCapsule ? "/profile" : `/user/${capsule.author.id}`}
+          aria-label={`Ver el perfil de ${capsule.author.name}`}
+          className="shrink-0 rounded-th-pill th-focus-ring"
+        >
+          <Avatar name={capsule.author.name} photo={capsule.author.avatar_url} size="w-10 h-10" />
+        </Link>
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-label-lg font-bold text-th-fg-strong">
+            <Link
+              to={isOwnCapsule ? "/profile" : `/user/${capsule.author.id}`}
+              className="min-w-0 truncate text-label-lg font-bold text-th-fg-strong th-focus-ring hover:underline"
+            >
               {capsule.author.name}
-            </p>
+            </Link>
 
             {!isOwnCapsule && (
               // Tres estados (ADR-022): sin relación, solicitud pendiente

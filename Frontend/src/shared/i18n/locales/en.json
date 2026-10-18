@@ -621,6 +621,8 @@
       }
     },
     "reservations": {
+      "pdf": "Download PDF",
+      "defaultHours": "This place has not published its hours: we show 10:00 to 21:00. It is a request and the place confirms or declines it.",
       "title": "Book a table",
       "unclaimed": "This business has not claimed its place on THERS yet: your request may not be answered.",
       "book": "Book",
@@ -686,6 +688,7 @@
       "seatsLeft": "{{count}} seats"
     },
     "quotes": {
+      "empty": "This place has not published its price list yet, so you cannot request a quote. When it does, the button to request one will appear here.",
       "title": "Get a quote",
       "request": "Request a quote",
       "sending": "Calculating…",
@@ -825,6 +828,8 @@
   },
     "suggestions": {
       "whoToFollow": "Who can I follow?",
+      "recommendPlace": "Recommend me a place",
+      "reservePlace": "I want to book a table",
       "improveBio": "Help me improve my bio",
       "whatCanYouDo": "What can you do?"
     },
