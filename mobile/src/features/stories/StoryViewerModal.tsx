@@ -191,13 +191,20 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
 
         {story ? (
           <>
-            <Image
-              source={{ uri: story.image.url }}
-              style={styles.image}
-              resizeMode="cover"
-              accessibilityIgnoresInvertColors
-              accessibilityLabel={story.content || `Historia de ${strip.author.name}`}
-            />
+            {story.image.url ? (
+              <Image
+                source={{ uri: story.image.url }}
+                style={styles.image}
+                resizeMode="cover"
+                accessibilityIgnoresInvertColors
+                accessibilityLabel={story.content || `Historia de ${strip.author.name}`}
+              />
+            ) : (
+              // Moderación (ADR-044): sin URL = todavía no aprobada; solo la ve quien la publicó.
+              <View style={styles.center}>
+                <Text style={styles.message}>Tu historia está en revisión. Se publicará cuando se apruebe.</Text>
+              </View>
+            )}
             <View style={styles.shade} pointerEvents="none" />
 
             <View style={styles.tapRow}>

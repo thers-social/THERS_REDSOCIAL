@@ -47,6 +47,16 @@ def _not_found():
     return jsonify({"msg": "Historia no encontrada"}), 404
 
 
+def _private_storage():
+    return current_app.extensions.get("private_storage")
+
+
+def _private_files():
+    """`STORIES_PRIVATE_STORAGE` (apagado por defecto): las historias NUEVAS se guardan en el
+    almacenamiento privado. Las anteriores siguen siendo públicas."""
+    return bool(current_app.config.get("STORIES_PRIVATE_STORAGE"))
+
+
 @stories_bp.route("/stories", methods=["POST"])
 @jwt_required()
 @profile_completed_required
@@ -82,7 +92,11 @@ def create():
             prepared,
             _story_repository,
             current_app.extensions["media_storage"],
+            private_storage=_private_storage(),
+            private_files=_private_files(),
         )
+    except stories.PrivateStorageUnavailableError:
+        return jsonify({"msg": "El almacenamiento privado no está disponible"}), 503
     except StoryTextInvalidError:
         return jsonify({"msg": f"El texto puede tener como máximo {MAX_STORY_TEXT} caracteres"}), 400
     return jsonify({"story": story}), 201
@@ -91,13 +105,17 @@ def create():
 @stories_bp.route("/stories", methods=["GET"])
 @jwt_required()
 def strip():
-    return jsonify({"authors": stories.list_strip(get_jwt_identity(), _story_repository)}), 200
+    return jsonify({"authors": stories.list_strip(
+        get_jwt_identity(), _story_repository, private_storage=_private_storage()
+    )}), 200
 
 
 @stories_bp.route("/users/<uuid:user_id>/stories", methods=["GET"])
 @jwt_required()
 def for_user(user_id):
-    items = stories.list_for_author(user_id, get_jwt_identity(), _story_repository)
+    items = stories.list_for_author(
+        user_id, get_jwt_identity(), _story_repository, private_storage=_private_storage()
+    )
     return jsonify({"stories": items}), 200
 
 
@@ -128,6 +146,7 @@ def delete(story_id):
             get_jwt_identity(),
             _story_repository,
             current_app.extensions["media_storage"],
+            private_storage=_private_storage(),
         )
     except StoryNotFoundError:
         return _not_found()

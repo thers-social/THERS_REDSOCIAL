@@ -9,7 +9,7 @@
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.domain.content_moderation import jobs, status
+from app.domain.content_moderation import jobs, status, subjects
 from app.domain.content_moderation.policy import POLICY_VERSION
 from app.extensions import db
 from app.infrastructure.persistence.models import (
@@ -17,6 +17,21 @@ from app.infrastructure.persistence.models import (
     ModerationJob,
     ModerationResult,
 )
+
+
+#: Tabla y columna del dueño de cada tipo de contenido. Cerrado: el nombre de tabla que entra en
+#: el SQL sale de aquí, nunca de una entrada externa.
+_TABLES = {
+    subjects.MEDIA_ATTACHMENT: ("media_attachments", "owner_id"),
+    subjects.STORY: ("stories", "author_id"),
+}
+
+
+def _table(subject_type):
+    try:
+        return _TABLES[subject_type]
+    except KeyError:
+        raise ValueError("unknown_subject_type") from None
 
 
 class SQLAlchemyContentModerationRepository(jobs.ModerationJobRepository):
@@ -119,53 +134,60 @@ class SQLAlchemyContentModerationRepository(jobs.ModerationJobRepository):
 
     # --- Imágenes -----------------------------------------------------------------------------
 
-    def attachment_context(self, attachment_id):
+    def subject_context(self, subject_type, subject_id):
         """Lo que el motor necesita saber de una imagen y de quien la subió. Nada del contenido."""
+        table, owner = _table(subject_type)
         row = db.session.execute(
             text(
-                """
-                SELECT m.id, m.storage_key, m.owner_id, m.moderation_status,
+                f"""
+                SELECT m.id, m.storage_key, m.{owner} AS owner_id, m.moderation_status,
                        EXTRACT(EPOCH FROM (now() - u.created_at)) / 86400.0 AS account_age_days,
                        (SELECT count(*) FROM reports r
-                         WHERE r.status = 'open' AND r.reported_user_id = m.owner_id) AS open_reports
-                FROM media_attachments m JOIN users u ON u.id = m.owner_id
+                         WHERE r.status = 'open' AND r.reported_user_id = m.{owner}) AS open_reports
+                FROM {table} m JOIN users u ON u.id = m.{owner}
                 WHERE m.id = :id
                 """
             ),
-            {"id": str(attachment_id)},
+            {"id": str(subject_id)},
         ).mappings().first()
         return dict(row) if row else None
 
-    def set_status_automatic(self, attachment_id, new_status, now):
+    def attachment_context(self, attachment_id):
+        return self.subject_context(subjects.MEDIA_ATTACHMENT, attachment_id)
+
+    def set_status_automatic(self, subject_id, new_status, now, subject_type=subjects.MEDIA_ATTACHMENT):
         """Compare-and-set: solo si sigue `pending`. Devuelve si cambió algo."""
+        table, _ = _table(subject_type)
         result = db.session.execute(
             text(
-                """
-                UPDATE media_attachments
+                f"""
+                UPDATE {table}
                 SET moderation_status = :new, moderation_decided_by = :by,
                     moderation_decided_at = :now
                 WHERE id = :id AND moderation_status = 'pending'
                 """
             ),
-            {"id": str(attachment_id), "new": new_status, "by": status.ACTOR_AUTO, "now": now},
+            {"id": str(subject_id), "new": new_status, "by": status.ACTOR_AUTO, "now": now},
         )
         return result.rowcount == 1
 
-    def set_status_human(self, attachment_id, new_status, actor_id, now):
+    def set_status_human(self, subject_id, new_status, actor_id, now,
+                         subject_type=subjects.MEDIA_ATTACHMENT):
         """Una persona puede decidir desde cualquier estado. Devuelve el estado anterior o None
-        si la imagen no existe."""
+        si el contenido no existe."""
+        table, _ = _table(subject_type)
         row = db.session.execute(
-            text("SELECT moderation_status FROM media_attachments WHERE id = :id FOR UPDATE"),
-            {"id": str(attachment_id)},
+            text(f"SELECT moderation_status FROM {table} WHERE id = :id FOR UPDATE"),
+            {"id": str(subject_id)},
         ).first()
         if row is None:
             return None
         db.session.execute(
             text(
-                "UPDATE media_attachments SET moderation_status = :new, "
+                f"UPDATE {table} SET moderation_status = :new, "
                 "moderation_decided_by = :by, moderation_decided_at = :now WHERE id = :id"
             ),
-            {"id": str(attachment_id), "new": new_status, "by": str(actor_id), "now": now},
+            {"id": str(subject_id), "new": new_status, "by": str(actor_id), "now": now},
         )
         return row[0]
 
@@ -193,6 +215,8 @@ class SQLAlchemyContentModerationRepository(jobs.ModerationJobRepository):
         return db.session.execute(
             text(
                 "SELECT EXISTS (SELECT 1 FROM media_attachments "
+                "WHERE storage_key = :key AND moderation_status <> 'approved') "
+                "OR EXISTS (SELECT 1 FROM stories "
                 "WHERE storage_key = :key AND moderation_status <> 'approved')"
             ),
             {"key": storage_key},

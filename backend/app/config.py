@@ -339,6 +339,11 @@ Config.AI_MODERATION_TEXT_PRICE_OUTPUT_MICRO_PER_MTOK = int(
 # `fake` = clasificador de texto simulado, SOLO desarrollo y pruebas.
 Config.MODERATION_TEXT_CLASSIFIER = (os.environ.get("MODERATION_TEXT_CLASSIFIER") or "none").strip().lower()
 
+# Historias nuevas en el almacenamiento PRIVADO (ADR-042/ADR-044): el archivo solo se entrega con una
+# URL firmada de vida corta, tras comprobar permisos y moderación. Apagado por defecto; encendido sin
+# almacenamiento privado, publicar una historia responde 503 (nunca cae al bucket público).
+Config.STORIES_PRIVATE_STORAGE = _flag_env("STORIES_PRIVATE_STORAGE")
+
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
 # Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
 # es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.

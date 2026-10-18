@@ -62,16 +62,23 @@ export default function ReviewPhotos({ placeId, images, editable = false, onChan
       <ul className="flex flex-wrap gap-2" aria-label={t("places.reviews.photos.title")}>
         {images.map((image, index) => (
           <li key={image.id} className="relative">
-            <a href={image.url} target="_blank" rel="noopener noreferrer">
-              <img
-                src={image.url}
-                width={image.width}
-                height={image.height}
-                alt={t("places.reviews.photos.alt", { index: index + 1 })}
-                loading="lazy"
-                className="h-20 w-20 rounded-xl border border-line object-cover dark:border-line-dark"
-              />
-            </a>
+            {image.url ? (
+              <a href={image.url} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={image.url}
+                  width={image.width}
+                  height={image.height}
+                  alt={t("places.reviews.photos.alt", { index: index + 1 })}
+                  loading="lazy"
+                  className="h-20 w-20 rounded-xl border border-line object-cover dark:border-line-dark"
+                />
+              </a>
+            ) : (
+              // Moderación (ADR-044): sin URL = en revisión; solo la ve quien la subió.
+              <span className="flex h-20 w-20 items-center justify-center rounded-xl border border-line px-1 text-center text-[11px] text-muted dark:border-line-dark dark:text-muted-dark">
+                En revisión
+              </span>
+            )}
             {editable && (
               <button
                 type="button"

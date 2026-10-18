@@ -7,6 +7,7 @@ import { describe, it } from 'node:test';
 
 import {
   APPEAL_TABS,
+  CONTENT_KINDS,
   DECISIONS,
   MEDIA_TABS,
   OUTCOMES,
@@ -79,6 +80,41 @@ describe('contrato con el servidor', () => {
     assert.equal(isTwoFactorRequired({ response: { status: 403, data: {} } }), false);
     assert.equal(isTwoFactorRequired({ response: { status: 404 } }), false);
     assert.equal(isTwoFactorRequired(undefined), false);
+  });
+});
+
+describe('historias en el panel', () => {
+  it('ofrece imágenes e historias con los valores de ?type= del servidor', () => {
+    assert.deepEqual(CONTENT_KINDS.map((k) => k.value), ['media', 'story']);
+  });
+
+  it('manda el tipo en la cola, la decisión y la vista previa', () => {
+    assert.match(media, /params: \{ status: tab, type: kind, limit: PAGE_SIZE, offset \}/);
+    assert.match(media, /params: \{ type: kind \}/);
+    assert.match(media, /`\/moderation\/media\/\$\{id\}\/preview-url`/);
+  });
+
+  it('una historia privada se ve con la URL firmada y no se guarda en ningún sitio', () => {
+    assert.match(media, /res\.data\.url/);
+    assert.ok(!/localStorage|sessionStorage/.test(media));
+  });
+});
+
+describe('imágenes pendientes en el resto de la web', () => {
+  const grid = read('src/shared/components/ImageGrid.jsx');
+  const viewer = read('src/features/feed/components/StoryViewer.jsx');
+  const reviews = read('src/features/places/components/ReviewPhotos.jsx');
+
+  it('ninguna pantalla dibuja una imagen sin URL', () => {
+    assert.match(grid, /allImages\.filter\(\(image\) => image\.url\)/);
+    assert.match(viewer, /story\.image\.url \?/);
+    assert.match(reviews, /image\.url \?/);
+  });
+
+  it('avisa a quien la subió en lugar de dejar un hueco', () => {
+    assert.match(grid, /en revisión/);
+    assert.match(viewer, /está en revisión/);
+    assert.match(reviews, /En revisión/);
   });
 });
 

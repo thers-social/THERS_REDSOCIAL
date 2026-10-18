@@ -2307,7 +2307,22 @@ class Story(db.Model):
     )
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
 
+    # Moderación (ADR-044): mismo patrón que `media_attachments`. El valor por defecto de la BASE es
+    # 'pending' (falla cerrado); la aplicación lo fija siempre de forma explícita. Las historias
+    # anteriores a la migración son 'approved'.
+    moderation_status = db.Column(db.String(10), nullable=False, server_default=text("'pending'"))
+    moderation_decided_by = db.Column(db.String(40), nullable=True)
+    moderation_decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # `true` = el archivo vive en el almacenamiento PRIVADO y solo se sirve con una URL firmada de
+    # vida corta, emitida tras comprobar permisos. Las historias anteriores son públicas (false).
+    file_private = db.Column(db.Boolean, nullable=False, server_default=text("false"))
+
     __table_args__ = (
+        db.CheckConstraint(
+            "moderation_status IN ('pending', 'approved', 'held', 'rejected')",
+            name="ck_stories_moderation_status",
+        ),
+        db.Index("ix_stories_moderation_status", "moderation_status"),
         db.Index("ix_stories_author_expires", "author_id", "expires_at"),
         db.Index("ix_stories_expires_at", "expires_at"),
     )

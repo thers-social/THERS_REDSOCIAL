@@ -102,13 +102,16 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
         )
 
         # Imágenes de sus historias (ADR-042): igual, las filas caen en cascada y los archivos no.
-        media_keys += list(
-            db.session.execute(select(Story.storage_key).where(Story.author_id == user_id)).scalars()
-        )
+        # Las historias de almacenamiento PRIVADO se borran de su bucket, no del público.
+        story_files = db.session.execute(
+            select(Story.storage_key, Story.file_private).where(Story.author_id == user_id)
+        ).all()
+        media_keys += [key for key, private in story_files if not private]
+        private_story_keys = [key for key, private in story_files if private]
 
         # Documentos de reclamos pendientes (almacenamiento PRIVADO, ADR-040 fase 6): las
         # filas caen en cascada, los archivos no.
-        private_keys = list(
+        private_keys = private_story_keys + list(
             db.session.execute(
                 text(
                     "SELECT document_key FROM place_claims "

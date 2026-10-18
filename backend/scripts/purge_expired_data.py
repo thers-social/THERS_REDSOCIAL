@@ -34,7 +34,8 @@ def main():
         counts = purge_expired_data(SQLAlchemyRetentionRepository())
         # Historias vencidas (ADR-042): filas y archivos. Aparte porque necesita el almacenamiento.
         counts["stories"] = purge_expired_stories(
-            SQLAlchemyStoryRepository(), app.extensions["media_storage"]
+            SQLAlchemyStoryRepository(), app.extensions["media_storage"],
+            private_storage=app.extensions.get("private_storage"),
         )
     print(f"Plazo de conservación: {SESSION_RETENTION_DAYS} días. Filas borradas:")
     for table, count in counts.items():

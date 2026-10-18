@@ -9,13 +9,12 @@
 
 import logging
 
-from app.domain.content_moderation import jobs, policy, status
+from app.domain.content_moderation import jobs, policy, status, subjects
 from app.domain.content_moderation.signals import ClassifierError
 
 _logger = logging.getLogger(__name__)
 
 AUDIT_ACTION = "moderation_auto_decision"
-AUDIT_RESOURCE = "media_attachment"
 
 
 def process_next(repository, image_classifier, settings, worker_id, now):
@@ -37,10 +36,10 @@ def process_next(repository, image_classifier, settings, worker_id, now):
 
 
 def _process(repository, image_classifier, settings, job, now):
-    if job["kind"] != jobs.KIND_IMAGE or job["subject_type"] != jobs.SUBJECT_MEDIA_ATTACHMENT:
+    if job["kind"] != jobs.KIND_IMAGE or not subjects.is_known(job["subject_type"]):
         raise ValueError("unsupported_job")  # un tipo desconocido no se aprueba ni se descarta
 
-    context = repository.attachment_context(job["subject_id"])
+    context = repository.subject_context(job["subject_type"], job["subject_id"])
     if context is None:
         # El contenido ya no existe (se borró): no hay nada que moderar.
         repository.mark_succeeded(job["id"], now)
@@ -62,10 +61,12 @@ def _process(repository, image_classifier, settings, job, now):
     )
 
     repository.save_result(job["id"], signal, decision)
-    changed = repository.set_status_automatic(job["subject_id"], decision.status, now)
+    changed = repository.set_status_automatic(
+        job["subject_id"], decision.status, now, subject_type=job["subject_type"]
+    )
     if changed:
         repository.audit(
-            None, status.ACTOR_KIND_SYSTEM, AUDIT_ACTION, AUDIT_RESOURCE, job["subject_id"],
+            None, status.ACTOR_KIND_SYSTEM, AUDIT_ACTION, job["subject_type"], job["subject_id"],
             {"from": status.PENDING, "to": decision.status, "priority": decision.priority,
              "reason": decision.reason, "policy": policy.POLICY_VERSION},
         )

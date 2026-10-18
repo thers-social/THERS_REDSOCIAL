@@ -204,12 +204,21 @@ export default function StoryViewer({ authors, startIndex, onClose, onChanged })
 
         {story && (
           <>
-            <img
-              src={story.image.url}
-              alt={story.content || `Historia de ${author.author.name}`}
-              className="absolute inset-0 h-full w-full object-cover"
-              draggable={false}
-            />
+            {story.image.url ? (
+              <img
+                src={story.image.url}
+                alt={story.content || `Historia de ${author.author.name}`}
+                className="absolute inset-0 h-full w-full object-cover"
+                draggable={false}
+              />
+            ) : (
+              // Moderación (ADR-044): sin URL = todavía no aprobada; solo la ve quien la publicó.
+              <div className="absolute inset-0 flex items-center justify-center bg-black px-8 text-center text-white">
+                <p className="text-label-lg font-bold">
+                  Tu historia está en revisión. Se publicará cuando se apruebe.
+                </p>
+              </div>
+            )}
             <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/60" />
 
             <div className="absolute inset-x-0 top-0 flex gap-1 p-4">

@@ -6,6 +6,7 @@ import { useLanguage } from "@shared/i18n";
 import Spinner from "@shared/components/Spinner";
 import { formatRelativeTime } from "@features/feed/lib/formatRelativeTime";
 import {
+  CONTENT_KINDS,
   DECISIONS,
   MEDIA_TABS,
   isTwoFactorRequired,
@@ -23,26 +24,43 @@ import { moderationErrorMessage } from "../lib/reportLabels";
 const PAGE_SIZE = 20;
 const authHeaders = () => ({ Authorization: `Bearer ${getStoredToken()}` });
 
-function Preview({ id }) {
+function Preview({ id, kind }) {
   const [src, setSrc] = useState(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let revoked = null;
     let cancelled = false;
-    api
-      .get(`/moderation/media/${id}/file`, { responseType: "blob", headers: authHeaders() })
-      .then((res) => {
-        if (cancelled) return;
-        revoked = URL.createObjectURL(res.data);
-        setSrc(revoked);
-      })
-      .catch(() => !cancelled && setFailed(true));
+    const params = { type: kind };
+
+    // Las historias en el almacenamiento PRIVADO se ven con una URL firmada de 5 minutos; el resto
+    // (y las historias públicas) se piden como archivo con la sesión.
+    async function load() {
+      if (kind === "story") {
+        try {
+          const res = await api.get(`/moderation/media/${id}/preview-url`, { params, headers: authHeaders() });
+          if (!cancelled) setSrc(res.data.url);
+          return;
+        } catch {
+          /* no es privada: se pide como archivo */
+        }
+      }
+      const res = await api.get(`/moderation/media/${id}/file`, {
+        params,
+        responseType: "blob",
+        headers: authHeaders(),
+      });
+      if (cancelled) return;
+      revoked = URL.createObjectURL(res.data);
+      setSrc(revoked);
+    }
+
+    load().catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
       if (revoked) URL.revokeObjectURL(revoked);
     };
-  }, [id]);
+  }, [id, kind]);
 
   if (failed) {
     return (
@@ -53,7 +71,7 @@ function Preview({ id }) {
   return <img src={src} alt="Imagen retenida" className="max-h-72 rounded-2xl border border-line dark:border-line-dark" />;
 }
 
-function ItemCard({ item, busy, onDecide }) {
+function ItemCard({ item, kind, busy, onDecide }) {
   const [note, setNote] = useState("");
   const scores = topScores(item.scores);
   return (
@@ -76,7 +94,7 @@ function ItemCard({ item, busy, onDecide }) {
         <span className="ml-auto text-muted dark:text-muted-dark">{formatRelativeTime(item.created_at)}</span>
       </header>
 
-      <Preview id={item.id} />
+      <Preview id={item.id} kind={kind} />
 
       <p className="text-sm text-ink dark:text-ink-dark">
         <span className="text-muted dark:text-muted-dark">Motivo: </span>
@@ -131,6 +149,7 @@ export default function MediaQueue({ onTwoFactorRequired }) {
   const toast = useToast();
   const { t } = useLanguage();
   const [tab, setTab] = useState("held");
+  const [kind, setKind] = useState("media");
   const [items, setItems] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -140,7 +159,7 @@ export default function MediaQueue({ onTwoFactorRequired }) {
     async (offset = 0) => {
       try {
         const res = await api.get("/moderation/media", {
-          params: { status: tab, limit: PAGE_SIZE, offset },
+          params: { status: tab, type: kind, limit: PAGE_SIZE, offset },
           headers: authHeaders(),
         });
         setItems((current) => (offset ? [...current, ...res.data.items] : res.data.items));
@@ -153,7 +172,7 @@ export default function MediaQueue({ onTwoFactorRequired }) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tab],
+    [tab, kind],
   );
 
   useEffect(() => {
@@ -167,7 +186,10 @@ export default function MediaQueue({ onTwoFactorRequired }) {
     try {
       const body = { decision };
       if (note.trim()) body.note = note.trim();
-      await api.post(`/moderation/media/${item.id}/decision`, body, { headers: authHeaders() });
+      await api.post(`/moderation/media/${item.id}/decision`, body, {
+        params: { type: kind },
+        headers: authHeaders(),
+      });
       toast.success(DECISIONS[decision].success);
       // Sale de la lista actual salvo que la decisión la deje en la misma pestaña.
       setItems((current) =>
@@ -182,6 +204,24 @@ export default function MediaQueue({ onTwoFactorRequired }) {
 
   return (
     <div className="space-y-4">
+      <div role="tablist" aria-label="Tipo de contenido" className="flex gap-2">
+        {CONTENT_KINDS.map((entry) => (
+          <button
+            key={entry.value}
+            type="button"
+            role="tab"
+            aria-selected={kind === entry.value}
+            onClick={() => setKind(entry.value)}
+            className={`text-xs font-semibold px-3 py-1 rounded-full border transition ${
+              kind === entry.value
+                ? "bg-ink dark:bg-ink-dark text-canvas dark:text-canvas-dark border-transparent"
+                : "border-line dark:border-line-dark text-ink dark:text-ink-dark"
+            }`}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
       <div role="tablist" aria-label="Estado del contenido" className="flex gap-2">
         {MEDIA_TABS.map((entry) => (
           <button
@@ -208,7 +248,7 @@ export default function MediaQueue({ onTwoFactorRequired }) {
       ) : (
         <div className="space-y-4">
           {items.map((item) => (
-            <ItemCard key={item.id} item={item} busy={busy} onDecide={decide} />
+            <ItemCard key={item.id} item={item} kind={kind} busy={busy} onDecide={decide} />
           ))}
           {hasMore && (
             <div className="flex justify-center">

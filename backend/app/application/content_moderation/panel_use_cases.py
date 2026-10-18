@@ -2,7 +2,7 @@
 # Sin Flask: la ruta pasa el rol ya resuelto y la hora.
 
 from app.application.content_moderation import human_decision
-from app.domain.content_moderation import roles, status
+from app.domain.content_moderation import roles, status, subjects
 
 APPEAL_TARGET_HOURS = 72
 MAX_OPEN_APPEALS = 5
@@ -57,9 +57,10 @@ def _iso(value):
     return value.isoformat() if value else None
 
 
-def _present_item(row):
+def _present_item(row, subject_type=subjects.MEDIA_ATTACHMENT):
     return {
         "id": str(row["id"]),
+        "type": "story" if subject_type == subjects.STORY else "media",
         "status": row["status"],
         "parent_type": row["parent_type"],
         "owner": {"id": str(row["owner_id"]), "username": row["owner_username"]},
@@ -74,22 +75,24 @@ def _present_item(row):
     }
 
 
-def list_queue(tab, limit_raw, offset_raw, role, queue):
+def list_queue(tab, limit_raw, offset_raw, role, queue, subject_type=subjects.MEDIA_ATTACHMENT):
     statuses = STATUS_TABS.get(tab or "held")
     if statuses is None:
         raise InvalidRequestError("status inválido")
     limit, offset = _page(limit_raw, offset_raw)
-    items, has_more = queue.list_items(statuses, limit, offset, roles.can_see_restricted(role))
-    return {"items": [_present_item(i) for i in items], "has_more": has_more}
+    items, has_more = queue.list_items(
+        statuses, limit, offset, roles.can_see_restricted(role), subject_type=subject_type
+    )
+    return {"items": [_present_item(i, subject_type) for i in items], "has_more": has_more}
 
 
-def get_detail(attachment_id, role, queue):
-    item = queue.get_item(attachment_id)
+def get_detail(attachment_id, role, queue, subject_type=subjects.MEDIA_ATTACHMENT):
+    item = queue.get_item(attachment_id, subject_type)
     # Lo restringido es, para un reviewer, indistinguible de lo inexistente.
     if item is None or (item["restricted"] and not roles.can_see_restricted(role)):
         raise NotFoundError()
     return {
-        **_present_item(item),
+        **_present_item(item, subject_type),
         "results": [
             {"provider": r["provider"], "model_version": r["model_version"],
              "categories": r["categories"], "scores": r["scores"], "decision": r["decision"],
@@ -100,20 +103,22 @@ def get_detail(attachment_id, role, queue):
         "trail": [
             {"action": t["action"], "actor_kind": t["actor_kind"],
              "actor": t["actor_username"], "changes": t["changes"], "at": _iso(t["created_at"])}
-            for t in queue.trail_for(attachment_id)
+            for t in queue.trail_for(attachment_id, subject_type)
         ],
     }
 
 
-def decide(attachment_id, actor_id, new_status, note, role, queue, repository, user_repository, now):
-    item = queue.get_item(attachment_id)
+def decide(attachment_id, actor_id, new_status, note, role, queue, repository, user_repository, now,
+           subject_type=subjects.MEDIA_ATTACHMENT):
+    item = queue.get_item(attachment_id, subject_type)
     if item is not None and item["restricted"] and not roles.can_see_restricted(role):
         raise NotFoundError()
     if note is not None and (not isinstance(note, str) or len(note) > MAX_NOTE):
         raise InvalidRequestError(f"La nota no puede superar {MAX_NOTE} caracteres")
     try:
         return human_decision.decide_attachment(
-            attachment_id, actor_id, new_status, note, repository, user_repository, now
+            attachment_id, actor_id, new_status, note, repository, user_repository, now,
+            subject_type=subject_type,
         )
     except human_decision.NotAllowedError:
         raise NotFoundError()
@@ -173,10 +178,11 @@ def stats(role, queue):
 # --- Apelaciones -------------------------------------------------------------------------------
 
 
-def create_appeal(user_id, attachment_id, reason, queue, repository):
+def create_appeal(user_id, attachment_id, reason, queue, repository,
+                  subject_type=subjects.MEDIA_ATTACHMENT):
     if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= MAX_REASON:
         raise InvalidRequestError(f"El motivo debe tener entre 1 y {MAX_REASON} caracteres")
-    attachment = queue.attachment_for_appeal(attachment_id)
+    attachment = queue.attachment_for_appeal(attachment_id, subject_type)
     # Solo se apela lo propio y lo que está retenido o rechazado; todo lo demás es un 404
     # indistinguible, para no revelar si el contenido de otra persona existe.
     if attachment is None or str(attachment["owner_id"]) != str(user_id) \
@@ -185,13 +191,14 @@ def create_appeal(user_id, attachment_id, reason, queue, repository):
     if queue.count_open_appeals(user_id) >= MAX_OPEN_APPEALS:
         raise TooManyAppealsError()
     created = queue.create_appeal(
-        user_id, attachment_id, reason.strip(), attachment["moderation_decided_by"]
+        user_id, attachment_id, reason.strip(), attachment["moderation_decided_by"],
+        subject_type=subject_type,
     )
     if created is None:
         repository.rollback()
         raise ConflictError("Ya tienes una apelación abierta para este contenido")
     repository.audit(user_id, status.ACTOR_KIND_HUMAN, "moderation_appeal_opened",
-                     "media_attachment", attachment_id, {"appeal_id": str(created["id"])})
+                     subject_type, attachment_id, {"appeal_id": str(created["id"])})
     repository.commit()
     return {"id": str(created["id"]), "status": "open", "target_hours": APPEAL_TARGET_HOURS}
 
@@ -200,6 +207,7 @@ def my_appeals(user_id, queue):
     return {
         "appeals": [
             {"id": str(a["id"]), "attachment_id": str(a["attachment_id"]), "status": a["status"],
+             "type": "story" if a["subject_type"] == subjects.STORY else "media",
              "resolution_note": a["resolution_note"], "created_at": _iso(a["created_at"]),
              "resolved_at": _iso(a["resolved_at"])}
             for a in queue.my_appeals(user_id)
@@ -216,6 +224,7 @@ def list_appeals(tab, limit_raw, offset_raw, role, queue):
     return {
         "items": [
             {"id": str(a["id"]), "attachment_id": str(a["attachment_id"]), "status": a["status"],
+             "type": "story" if a["subject_type"] == subjects.STORY else "media",
              "reason": a["reason"], "appellant": a["appellant"], "overdue": bool(a["overdue"]),
              "due_at": _iso(a["due_at"]), "created_at": _iso(a["created_at"]),
              "resolved_at": _iso(a["resolved_at"]), "resolution_note": a["resolution_note"]}
@@ -236,7 +245,8 @@ def resolve_appeal(appeal_id, reviewer_id, outcome, note, role, queue, repositor
     if appeal is None:
         repository.rollback()
         raise NotFoundError()
-    item = queue.get_item(appeal["subject_id"])
+    appeal_type = appeal["subject_type"]
+    item = queue.get_item(appeal["subject_id"], appeal_type)
     if item is not None and item["restricted"] and not roles.can_see_restricted(role):
         repository.rollback()
         raise NotFoundError()
@@ -254,14 +264,14 @@ def resolve_appeal(appeal_id, reviewer_id, outcome, note, role, queue, repositor
 
     if outcome == "overturned":
         queue_previous = repository.set_status_human(
-            appeal["subject_id"], status.APPROVED, reviewer_id, now
+            appeal["subject_id"], status.APPROVED, reviewer_id, now, subject_type=appeal_type
         )
         if queue_previous is None:
             repository.rollback()
             raise NotFoundError()
     queue.resolve_appeal(appeal_id, outcome, reviewer_id, (note or "").strip() or None, now)
     repository.audit(
-        reviewer_id, status.ACTOR_KIND_HUMAN, "moderation_appeal_resolved", "media_attachment",
+        reviewer_id, status.ACTOR_KIND_HUMAN, "moderation_appeal_resolved", appeal_type,
         appeal["subject_id"], {"appeal_id": str(appeal_id), "outcome": outcome,
                                "note": (note or "").strip()[:300] or None},
     )

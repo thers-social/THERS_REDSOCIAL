@@ -15,6 +15,12 @@ export const MEDIA_TABS = [
   { value: "rejected", label: "Rechazados" },
 ];
 
+// Tipos de contenido que pasan por la moderación (`?type=` del servidor).
+export const CONTENT_KINDS = [
+  { value: "media", label: "Imágenes" },
+  { value: "story", label: "Historias" },
+];
+
 export const APPEAL_TABS = [
   { value: "open", label: "Abiertas" },
   { value: "upheld", label: "Mantenidas" },
