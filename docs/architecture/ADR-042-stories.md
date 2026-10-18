@@ -1,8 +1,8 @@
 # ADR-042 — Historias (contenido efímero de 24 horas)
 
 - **Estado:** **`PROPUESTO` — aprobado por el propietario del proyecto el 2026-10-17 para su
-  implementación; pendiente de revisión del equipo** (`HB-001` §11–12). Backend implementado en la rama
-  `feature/stories` (§10); clientes pendientes.
+  implementación; pendiente de revisión del equipo** (`HB-001` §11–12). Implementado en las ramas
+  `feature/stories`, `feature/stories-web` y `feature/stories-mobile` (§10).
 - **Fecha:** 2026-10-17
 - **Autor del borrador:** Claude Code, a pedido del propietario del proyecto.
 - **Relacionado:** `ADR-039-images-in-posts-and-messages.md` (imágenes y almacenamiento),
@@ -182,4 +182,7 @@ Decisiones tomadas al implementar, que el equipo puede cambiar:
 - `GET /api/users/<id>/stories` devuelve lista vacía, no 404, para no revelar cuentas privadas.
 - Ver la propia historia no cuenta como vista.
 - **No se hizo (D3):** el tipo de reporte `story` en `ADR-032`.
-- **Todavía sin clientes:** ni la web ni la app muestran historias.
+- **Clientes (2026-10-17):** la web reemplaza la fila de «Momentos» de ejemplo por historias reales
+  (tira, visor, subida con reducción en el navegador, borrado y lista de vistas). La app reemplaza el
+  «Próximamente» de «Tu historia» por la tira real, el visor y la subida con `expo-image-picker`
+  (dependencia nativa nueva: **hace falta recompilar la app**). Sin probar en pantalla todavía.

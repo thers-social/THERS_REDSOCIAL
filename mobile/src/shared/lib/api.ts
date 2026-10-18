@@ -100,6 +100,9 @@ function networkError(): ApiError {
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** Cuerpo `multipart/form-data` (subida de archivos). Excluyente con `body`. React Native fija el
+   * `Content-Type` con su boundary: no se escribe a mano. */
+  form?: FormData;
   /** Adjunta el `Authorization: Bearer <token>` de SecureStore. */
   authenticated?: boolean;
   timeoutMs?: number;
@@ -116,7 +119,7 @@ type RequestOptions = {
  */
 async function fetchWithTimeout(
   path: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
+  init: { method: string; headers: Record<string, string>; body?: string | FormData },
   timeoutMs: number,
   externalSignal?: AbortSignal,
 ): Promise<Response> {
@@ -261,6 +264,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const {
     method = 'GET',
     body,
+    form,
     authenticated = false,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     signal,
@@ -269,7 +273,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   const baseHeaders: Record<string, string> = { Accept: binary ? 'application/pdf, application/json' : 'application/json' };
   if (body !== undefined) baseHeaders['Content-Type'] = 'application/json';
-  const serializedBody = body === undefined ? undefined : JSON.stringify(body);
+  const serializedBody = form ?? (body === undefined ? undefined : JSON.stringify(body));
 
   const send = (accessToken: string | null) =>
     fetchWithTimeout(
