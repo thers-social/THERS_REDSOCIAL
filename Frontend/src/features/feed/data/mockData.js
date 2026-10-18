@@ -8,7 +8,6 @@
 
 const photo = (seed, size = 300) => `https://picsum.photos/seed/thers-${seed}/${size}/${size}`;
 const scene = (seed, w = 900, h = 700) => `https://picsum.photos/seed/thers-${seed}/${w}/${h}`;
-const portrait = (seed, w = 360, h = 540) => `https://picsum.photos/seed/thers-${seed}/${w}/${h}`;
 
 export const MOODS = {
   inspired: { label: "Inspirado", color: "#6C4DF6" },
