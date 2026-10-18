@@ -369,3 +369,9 @@ if Config.TERO_ENABLED and Config.TERO_AI_ENABLED and not Config.ANTHROPIC_API_K
         "definida; POST /api/tero/chat responderá 503. Definirla en backend/.env.",
         file=sys.stderr,
     )
+
+# --- Historias de 24 horas (ADR-042) ---
+# APAGADO por defecto. Apagado, todas las rutas de historias responden 404 como una URL que no
+# existe (sin sesión también), así que nada se publica ni se muestra. Encenderlo es una decisión
+# aparte: el bucket de imágenes es público y no hay `moderation_status` (ADR-042 §4, ADR-044).
+Config.STORIES_ENABLED = _flag_env("STORIES_ENABLED")

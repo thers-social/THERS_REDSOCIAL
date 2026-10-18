@@ -11,7 +11,7 @@ from app.domain.account_deletion.repositories import (
     AccountDeletionCodeRepository,
 )
 from app.extensions import db
-from app.infrastructure.persistence.models import AccountDeletionCode, MediaAttachment, User
+from app.infrastructure.persistence.models import AccountDeletionCode, MediaAttachment, Story, User
 
 # Mismo razonamiento que password_reset_repository: dos "pedir código"
 # simultáneos pueden chocar con el índice único parcial; se reintenta.
@@ -99,6 +99,11 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
             db.session.execute(
                 select(MediaAttachment.storage_key).where(MediaAttachment.owner_id == user_id)
             ).scalars()
+        )
+
+        # Imágenes de sus historias (ADR-042): igual, las filas caen en cascada y los archivos no.
+        media_keys += list(
+            db.session.execute(select(Story.storage_key).where(Story.author_id == user_id)).scalars()
         )
 
         # Documentos de reclamos pendientes (almacenamiento PRIVADO, ADR-040 fase 6): las

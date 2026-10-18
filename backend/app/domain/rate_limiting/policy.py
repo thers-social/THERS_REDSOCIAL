@@ -138,6 +138,10 @@ PLACE_REVIEW = RateLimitRule("place_review", 20, _HOUR, clear_on_success=False)
 # (fase 5): por cuenta.
 PLAN_WRITE = RateLimitRule("plan_write", 30, _HOUR, clear_on_success=False)
 
+#: `POST /api/stories` (ADR-042): 20 historias al día y por cuenta. Cuenta cada intento, no solo
+#: los aciertos (decodificar una imagen cuesta CPU), igual que `IMAGE_UPLOAD`.
+STORY_CREATE = RateLimitRule("story_create", 20, 24 * _HOUR, clear_on_success=False)
+
 # Reclamos de negocio (ADR-040 fase 6): crear y retirar. Incluye subir un documento.
 CLAIM_WRITE = RateLimitRule("claim_write", 5, 24 * _HOUR, clear_on_success=False)
 

@@ -55,7 +55,7 @@ def process_image(raw, kind):
 # Imágenes de publicaciones y mensajes (ADR-039): se conserva la proporción
 # (sin recortar) y solo se reduce si el lado mayor pasa de este máximo. Se
 # re-codifica a WebP, así se descartan EXIF/GPS y cualquier carga escondida.
-ATTACHMENT_MAX_SIDE = {"post": 1600, "message": 1280, "review": 1280}
+ATTACHMENT_MAX_SIDE = {"post": 1600, "message": 1280, "review": 1280, "story": 1920}
 
 
 def process_attachment(raw, kind):

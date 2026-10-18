@@ -49,6 +49,8 @@
 > **v0.62 — panel de moderación de contenido y apelaciones (`ADR-044` §2.6–§2.7, **PROPUESTO**, tras `MODERATION_ENABLED`):** 14 rutas nuevas (§4.39). Con el flag apagado todas responden `404`. `GET /api/users/me` añade `moderation_role` (`null` si no tiene). Una imagen no aprobada que llega a quien la subió incluye ahora su `id`, para poder apelar. Variable nueva: `MODERATION_REQUIRE_2FA` (apagada por defecto; encendida, las rutas de moderación —también las de reportes— responden `403 {"code": "two_factor_required"}` a una cuenta moderadora sin 2FA). Comando nuevo: `flask set-moderation-role <correo> reviewer|child_safety|admin|none`.
 >
 > **v0.61 — moderación de contenido, base (`ADR-044`, **PROPUESTO**, `MODERATION_ENABLED` apagado por defecto):** **sin endpoints nuevos.** Con el flag **apagado** ninguna respuesta cambia. Con él **encendido** cambia la forma de `images[]` (publicaciones, mensajes y fotos de reseñas de lugares), de forma aditiva: (1) un tercero solo recibe las imágenes `approved`; (2) quien subió la imagen la recibe siempre, pero mientras no esté aprobada con `url: null` y `moderation_status` (`pending`/`held`/`rejected`); (3) `GET /api/media/<clave>` responde `404` para el archivo de una imagen no aprobada. Los clientes deben tolerar `url: null` antes de encender el flag. `has_image` de la lista de conversaciones cuenta solo las imágenes visibles para quien consulta. Variables nuevas, solo del servidor: `MODERATION_ENABLED`, `MODERATION_CLASSIFIER` (`none`/`fake`), `MODERATION_NEW_ACCOUNT_DAYS`, `MODERATION_HOLD_ALL_NEW_ACCOUNTS`, y los umbrales y reintentos de `backend/.env.example`. Comando nuevo: `flask moderation-worker`.
+
+> **v0.60 — Historias de 24 horas (`ADR-042-stories.md`, **PROPUESTO**, implementado en el backend):** nuevos `POST /api/stories`, `GET /api/stories`, `GET /api/users/<id>/stories`, `POST /api/stories/<id>/view`, `GET /api/stories/<id>/views` y `DELETE /api/stories/<id>` (§4.38). Aditivo: ningún endpoint existente cambia. Migración `d1e5b8f2a640` (`stories`, `story_views`). La exportación de datos suma `stories.json` y `story_views.json` (`ADR-028`) y la eliminación de cuenta recoge los archivos (`ADR-031`). **Variable nueva, solo del servidor: `STORIES_ENABLED`, APAGADA por defecto:** apagada, las seis rutas responden `404 {"msg": "Recurso no encontrado"}` igual que una URL inexistente, con o sin sesión. La migración `c8dcd63b24d4` une las cabezas de Tero e Historias (sin cambios de esquema).
 >
 > **v0.59 — Tero, fase 6, acciones con confirmación (`ADR-041` §6.2, **ACEPTADO**):** nuevos `POST /api/tero/actions/<id>/confirm` y `POST /api/tero/actions/<id>/cancel` (§4.37), y el chat devuelve siempre `confirmation_cards` (cambio aditivo: lista vacía si no hay). Variable nueva, solo del servidor: `TERO_ACTIONS_ENABLED` (apagada por defecto; exige `TERO_TOOLS_ENABLED`). Una migración (`c4f8a2d6e913`, tabla `tero_pending_actions`).
 >
@@ -2590,3 +2592,24 @@ Roles (`users.moderation_role`; `is_moderator` equivale a `reviewer`): `reviewer
 | `GET /api/appeals` | persona autenticada | Sus apelaciones |
 
 Errores: `400` parámetro inválido, `401` sin sesión, `403` (resolver la propia decisión o `two_factor_required`), `404`, `409`, `429`.
+
+## 4.38 Historias de 24 horas (`ADR-042`) — v0.60
+
+> **Interruptor `STORIES_ENABLED` (apagado por defecto).** Mientras esté apagado, **todas** las rutas de esta sección responden `404 {"msg": "Recurso no encontrado"}` —el mismo cuerpo que cualquier URL inexistente— tanto con sesión como sin ella, antes de autenticar y de leer o escribir nada. Activarlo es una decisión aparte: el bucket de imágenes es público y no existe `moderation_status` (ver `ADR-042` §4 y `ADR-044`). Los clientes deben tratar ese `404` como «no hay historias» y ocultar la tira, sin mostrar un error.
+
+Todas exigen `Authorization: Bearer <token>`. Una historia dura **24 horas** (`expires_at` se guarda al crearla) y solo la ven **quien la publicó** y quienes lo siguen con seguimiento **aceptado** (una solicitud pendiente no cuenta, `ADR-022`) sin bloqueo en ningún sentido (`ADR-029`).
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/stories` | `multipart/form-data` con `image` (JPEG/PNG/WebP, 5 MB máx.) y `content` opcional (≤ 200 caracteres). La imagen se decodifica por contenido, se reduce (lado mayor 1920 px) y se re-codifica a WebP sin EXIF. `201 {"story": {...}}`. `400` sin imagen, con JSON en vez de multipart, con archivo inválido o con texto largo; `413` si pesa más de 5 MB; `429` + `Retry-After` pasadas **20 historias al día** por cuenta (`ADR-027`). |
+| `GET /api/stories` | La tira. `{"authors": [{"author": {id, username, name, avatar_url}, "stories_count", "has_unseen", "latest_at", "latest_image_url", "is_me"}]}`: tú primero, luego quienes tienen historias sin ver, luego por la más reciente. Solo autores con historias vigentes. |
+| `GET /api/users/<id>/stories` | `{"stories": [...]}` en orden cronológico, cada una con `seen_by_me`. **Lista vacía** (nunca 404) si la persona no existe, no tiene historias vigentes o no puedes verlas: no se distingue, para no revelar que una cuenta privada existe. |
+| `POST /api/stories/<id>/view` | Registra la vista. **Idempotente**. `200 {"viewed": true}`. Ver tu propia historia no cuenta. `404` si no existe, venció o no puedes verla (mismo mensaje en los tres casos). |
+| `GET /api/stories/<id>/views` | **Solo quien la publicó.** `{"views_count", "views": [{id, username, name, avatar_url, viewed_at}]}` (hasta 200, la más reciente primero). `404` para cualquier otra persona. |
+| `DELETE /api/stories/<id>` | Solo quien la publicó; borra la fila, las vistas y el archivo. `200 {"deleted": true}`; `404` indistinguible si no existe o es de otra persona (`ADR-019`). |
+
+**Forma de una historia:** `{id, author: {id, username, name, avatar_url}, content, image: {url, width, height}, created_at, expires_at}`. La clave de almacenamiento **nunca** sale.
+
+**Caducidad.** Toda lectura filtra `expires_at > ahora`; eso, no la purga, es lo que garantiza que no se vea una historia vencida. `scripts/purge_expired_data.py` borra después filas y archivos (con 6 horas de margen) y los cuenta como `stories`.
+
+**Pendiente (`ADR-042` §8):** el bucket es público, así que quien tenga la URL de la imagen la abre sin sesión mientras el archivo exista (D1); sin moderación automática de imágenes, solo reportes (`ADR-032`/`ADR-038`), y el tipo de reporte `story` (D3) no existe aún.
