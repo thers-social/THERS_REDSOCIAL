@@ -186,3 +186,31 @@ Decisiones tomadas al implementar, que el equipo puede cambiar:
   (tira, visor, subida con reducción en el navegador, borrado y lista de vistas). La app reemplaza el
   «Próximamente» de «Tu historia» por la tira real, el visor y la subida con `expo-image-picker`
   (dependencia nativa nueva: **hace falta recompilar la app**). Sin probar en pantalla todavía.
+
+## 11. Integración con `develop` y flag (2026-10-17)
+
+Las tres ramas (`feature/stories`, `-web`, `-mobile`) se integraron sobre `develop` (que ya incluía
+Tero, PR #99) en `feature/stories-integration`, **sin reescribir sus commits**.
+
+- **Conflictos resueltos conservando ambos lados:** `models.py` (Tero e Historias añadieron clases
+  al mismo punto), `conftest.py` (lista de `TRUNCATE`) y `API_CONTRACT.md`. Tero ya usaba las
+  versiones 0.57–0.59 y la sección §4.37, así que **Historias pasó a v0.60 y §4.38**.
+- **Alembic:** `develop` terminaba en `c4f8a2d6e913` e Historias colgaba de `c9d4a1e7b362`: dos
+  cabezas. Se añadió la revisión de unión `c8dcd63b24d4`, vacía; no se editó ninguna migración.
+- **Flag `STORIES_ENABLED`, apagado por defecto.** Apagado, las seis rutas responden `404` (igual que
+  una URL inexistente, con o sin sesión) antes de autenticar. La purga de historias vencidas sigue
+  corriendo aunque el flag esté apagado: borra datos, no publica.
+
+### Riesgos que siguen abiertos (no se resolvieron aquí a propósito)
+
+1. **Bucket público.** Quien tenga la URL de la imagen la abre sin sesión, también de una cuenta
+   privada y también ya vencida mientras el archivo exista (hasta 6 h más). La defensa es el nombre
+   aleatorio de 128 bits. La alternativa (bucket privado con URL firmada, como
+   `domain/media/private_storage.py`) exige un diseño y una migración de claves que **no están
+   autorizados**.
+2. **Sin `moderation_status`.** Lo publicado se ve sin revisión previa. Lo propone `ADR-044`
+   (borrador); no se implementó un motor de moderación improvisado.
+3. **Sin tipo de reporte `story`** (ADR-032, decisión D3 de este ADR).
+
+**Por eso el flag debe seguir apagado en cualquier entorno público** hasta resolver, como mínimo, los
+puntos 1 y 2.
