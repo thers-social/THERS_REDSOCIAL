@@ -40,6 +40,12 @@ export type TeroPreferences = {
   animations: boolean;
   /** Reservado: Tero aún no reproduce sonidos. */
   sounds: boolean;
+  /** Tero lee en voz alta sus respuestas (ADR-045). Se apaga con el botón de la conversación. */
+  speakReplies: boolean;
+  /** Voz del sistema elegida para Tero; `null` = la mejor disponible (automática). */
+  voiceId: string | null;
+  /** Igual, para las respuestas en inglés. */
+  voiceIdEn: string | null;
   /** Solo español por ahora: la app móvil no tiene i18n todavía. */
   language: 'es';
   /** ISO 8601 de la última modificación local. */

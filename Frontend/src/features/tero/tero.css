@@ -1,0 +1,172 @@
+/* Movimiento de Tero (solo transform/opacity: barato y sin reflujo). Tero se mueve
+   cuando hay un motivo (aparecer, un cambio de estado) y no más: sin animaciones
+   infinitas que gasten batería. Parpadea de vez en cuando y habla moviendo la boca. */
+
+.tero-avatar {
+  display: inline-block;
+  line-height: 0;
+  flex: none;
+}
+
+.tero-avatar svg {
+  display: block;
+  overflow: visible;
+}
+
+.tero-body,
+.tero-eyes,
+.tero-mouth,
+.tero-dots {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* --- Solo con animaciones permitidas ------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  /* Al cambiar de cara, la nueva entra con un fundido corto. */
+  .tero-animated .tero-eyes {
+    animation: tero-face-in 200ms ease-out both;
+  }
+
+  /* Flota unos ciclos y se asienta: no es infinita. */
+  .tero-animated.tero-mood-idle .tero-body,
+  .tero-animated.tero-mood-attention .tero-body,
+  .tero-animated.tero-mood-speaking .tero-body,
+  .tero-animated.tero-mood-happy .tero-body {
+    animation: tero-float 3200ms ease-in-out 3;
+  }
+  .tero-animated.tero-mood-thinking .tero-body {
+    animation: tero-float 4800ms ease-in-out 2;
+  }
+  .tero-animated.tero-mood-attention .tero-body {
+    rotate: -8deg;
+  }
+  .tero-animated.tero-mood-listening .tero-body {
+    rotate: 5deg;
+  }
+
+  /* Parpadeo: cada 5 s aprox., unos ciclos y se asienta. */
+  .tero-animated .tero-blinks {
+    animation:
+      tero-face-in 200ms ease-out both,
+      tero-blink 5200ms ease-in-out 1s 4;
+  }
+
+  /* Habla: la boca se abre y se cierra a ritmo de sílabas, hasta 6 s. */
+  .tero-animated.tero-mood-speaking .tero-mouth {
+    animation: tero-talk 340ms ease-in-out 0s 17;
+  }
+
+  .tero-animated .tero-dots circle {
+    animation: tero-dot 1200ms ease-in-out infinite;
+  }
+  .tero-animated .tero-dots circle:nth-child(2) {
+    animation-delay: 150ms;
+  }
+  .tero-animated .tero-dots circle:nth-child(3) {
+    animation-delay: 300ms;
+  }
+
+  /* Un feliz celebra un instante; un error se encoge con calma (nunca sacude). */
+  .tero-animated.tero-mood-happy .tero-body {
+    animation: tero-float 3200ms ease-in-out 3, tero-pop 600ms ease-out;
+  }
+  .tero-animated.tero-mood-error .tero-body {
+    animation: tero-droop 500ms ease-out both;
+  }
+}
+
+@keyframes tero-face-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes tero-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3%) scale(1.025);
+  }
+}
+@keyframes tero-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.08);
+  }
+}
+@keyframes tero-talk {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+@keyframes tero-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes tero-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes tero-droop {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(0.94) translateY(2%);
+  }
+}
+
+/* --- Panel de chat: entrada y mensajes ---------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  .tero-panel-enter {
+    animation: tero-panel-in 180ms ease-out both;
+  }
+  .tero-msg-enter {
+    animation: tero-msg-in 160ms ease-out both;
+  }
+}
+@keyframes tero-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tero-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

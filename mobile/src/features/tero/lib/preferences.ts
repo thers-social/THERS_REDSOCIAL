@@ -19,6 +19,9 @@ export function defaultPreferences(now: Date = new Date()): TeroPreferences {
     verticalRatio: 1,
     animations: true,
     sounds: false,
+    speakReplies: true,
+    voiceId: null,
+    voiceIdEn: null,
     language: 'es',
     updatedAt: now.toISOString(),
   };
@@ -27,6 +30,10 @@ export function defaultPreferences(now: Date = new Date()): TeroPreferences {
 export function clampRatio(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.min(1, Math.max(0, value));
+}
+
+function validVoiceId(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 && value.length <= 200 ? value : null;
 }
 
 /** Convierte lo leído del almacenamiento en preferencias válidas. Nunca lanza. */
@@ -51,6 +58,9 @@ export function parsePreferences(raw: string | null, now: Date = new Date()): Te
       typeof value.verticalRatio === 'number' ? clampRatio(value.verticalRatio) : defaults.verticalRatio,
     animations: typeof value.animations === 'boolean' ? value.animations : defaults.animations,
     sounds: typeof value.sounds === 'boolean' ? value.sounds : defaults.sounds,
+    speakReplies: typeof value.speakReplies === 'boolean' ? value.speakReplies : defaults.speakReplies,
+    voiceId: validVoiceId(value.voiceId) ?? defaults.voiceId,
+    voiceIdEn: validVoiceId(value.voiceIdEn) ?? defaults.voiceIdEn,
     language: 'es',
     updatedAt:
       typeof value.updatedAt === 'string' && !Number.isNaN(Date.parse(value.updatedAt))

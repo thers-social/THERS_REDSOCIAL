@@ -15,6 +15,14 @@ from app.infrastructure.ai.anthropic_provider import AnthropicProvider
 # --- Validación de la petición ------------------------------------------------------------
 
 
+def test_the_prompt_asks_tero_to_answer_in_the_language_of_the_person():
+    from app.application.tero.prompt import SYSTEM_PROMPT
+
+    assert "en el idioma en que te escriba la persona" in SYSTEM_PROMPT
+    assert "si escribe en inglés, en inglés" in SYSTEM_PROMPT
+    assert "Responde en español," not in SYSTEM_PROMPT
+
+
 def test_a_plain_message_is_accepted_and_trimmed():
     request = chat.parse_chat_request({"message": "  hola Tero  "})
     assert request.message == "hola Tero"

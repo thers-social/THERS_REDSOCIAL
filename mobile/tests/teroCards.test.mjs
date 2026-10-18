@@ -359,9 +359,9 @@ describe('reglas del cliente que no deben romperse', () => {
     assert.equal(/confirmAction\(actionId, signal\) \{[\s\S]*?\n  \},/.exec(confirm)[0].includes('body'), false);
   });
 
-  it('el interruptor del servidor real está apagado por defecto', () => {
+  it('el interruptor del servidor real está encendido por defecto', () => {
     const config = readFileSync(new URL('../src/features/tero/config.ts', import.meta.url), 'utf8');
-    assert.match(config, /EXPO_PUBLIC_TERO_LIVE === 'true'/);
+    assert.match(config, /EXPO_PUBLIC_TERO_LIVE !== 'false'/);
     assert.match(clientSource, /TERO_LIVE \? liveTeroClient : mockTeroClient/);
   });
 

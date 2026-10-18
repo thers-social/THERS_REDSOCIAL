@@ -19,7 +19,9 @@ import { TeroAvatar } from '@features/tero/components/TeroAvatar';
 import { TeroDots } from '@features/tero/components/TeroDots';
 import { TeroGate } from '@features/tero/components/TeroGate';
 import { TeroPreviewNotice } from '@features/tero/components/TeroPreviewNotice';
+import { TeroDictationButton } from '@features/tero/components/TeroDictationButton';
 import { TERO_LIVE } from '@features/tero/config';
+import { useTero } from '@features/tero/context/TeroContext';
 import { teroColors } from '@features/tero/design/teroColors';
 import {
   cardStateFromError,
@@ -36,6 +38,9 @@ import {
   withStatus,
 } from '@features/tero/lib/teroChat';
 import { teroClient } from '@features/tero/lib/teroClient';
+import { useTeroSpeech } from '@features/tero/lib/useTeroSpeech';
+import { DICTATION_PRIVACY } from '@features/tero/lib/teroVoice';
+import { TERO_VOICE_ENABLED } from '@features/messages/voiceConfig';
 import type {
   TeroActionCard,
   TeroCardState,
@@ -77,12 +82,20 @@ function TeroChatContent() {
   const { refreshUser } = useAuth();
   const insets = useSafeAreaInsets();
   const animate = useTeroMotionAllowed();
+  // La voz de Tero (ADR-045): lee sus respuestas si la persona lo tiene encendido.
+  const { preferences, update } = useTero();
+  const { speaking, speak, stop } = useTeroSpeech({ es: preferences.voiceId, en: preferences.voiceIdEn });
+  const speakRepliesRef = useRef(preferences.speakReplies);
+  speakRepliesRef.current = preferences.speakReplies;
 
   const [messages, setMessages] = useState<TeroMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Dictado (ADR-042 §1.2): mensaje propio (escuchando / error) y si está escuchando ahora.
+  const [dictationMessage, setDictationMessage] = useState<string | null>(null);
+  const [dictating, setDictating] = useState(false);
   const [replyMood, setReplyMood] = useState<TeroMood>('idle');
   // Reacción breve de Tero al desenlace de una tarjeta (celebrar / encogerse).
   const [reaction, setReaction] = useState<ReactionRequest | null>(null);
@@ -153,6 +166,7 @@ function TeroChatContent() {
           { ...makeMessage('tero', reply.text, new Date(), reply.isMock), cards },
         ]);
         setReplyMood(reply.mood);
+        if (speakRepliesRef.current) void speak(reply.text);
       } catch (caught) {
         if (controller.signal.aborted) return;
         setMessages((current) => withStatus(current, message.id, 'failed'));
@@ -162,7 +176,7 @@ function TeroChatContent() {
         if (!controller.signal.aborted) setPending(false);
       }
     },
-    [posts],
+    [posts, speak],
   );
 
   const send = useCallback(
@@ -172,12 +186,13 @@ function TeroChatContent() {
         setError(check.error);
         return;
       }
+      stop();
       const message: TeroMessage = { ...makeMessage('user', check.text), status: 'sending' };
       contexts.current.set(message.id, context);
       setMessages((current) => [...current, message]);
       void deliver(message, context);
     },
-    [deliver],
+    [deliver, stop],
   );
 
   function retry(message: TeroMessage) {
@@ -249,9 +264,11 @@ function TeroChatContent() {
   // este campo (no hay ninguna otra "atención": nada de vigilancia).
   const mood: TeroMood = pending
     ? 'thinking'
-    : inputFocused && draft.trim()
+    : (inputFocused && draft.trim()) || dictating
       ? 'listening'
-      : replyMood;
+      : speaking
+        ? 'speaking'
+        : replyMood;
 
   const heroText = pending
     ? 'Tero está pensando…'
@@ -274,6 +291,22 @@ function TeroChatContent() {
         <Text style={styles.heroText} accessibilityLiveRegion="polite">
           {heroText}
         </Text>
+        <Pressable
+          onPress={() => {
+            stop();
+            update({ speakReplies: !preferences.speakReplies });
+          }}
+          style={[styles.voiceToggle, preferences.speakReplies && styles.voiceToggleOn]}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: preferences.speakReplies }}
+          accessibilityLabel="Tero habla"
+          accessibilityHint="Activa o apaga la lectura en voz alta de las respuestas de Tero"
+          hitSlop={8}
+        >
+          <Text style={[styles.voiceToggleText, preferences.speakReplies && styles.voiceToggleTextOn]}>
+            {preferences.speakReplies ? 'Voz: sí' : 'Voz: no'}
+          </Text>
+        </Pressable>
       </View>
       <FlatList
         ref={listRef}
@@ -326,6 +359,16 @@ function TeroChatContent() {
           {error}
         </Text>
       ) : null}
+      {TERO_VOICE_ENABLED && dictationMessage ? (
+        <Text style={styles.error} accessibilityLiveRegion="polite">
+          {dictationMessage}
+        </Text>
+      ) : null}
+      {TERO_VOICE_ENABLED && dictating ? (
+        <Text style={styles.dictationHint} accessibilityLiveRegion="polite">
+          Escuchando… habla ahora
+        </Text>
+      ) : null}
 
       <View style={[styles.composer, { paddingBottom: insets.bottom + space[2] }]}>
         <TextInput
@@ -340,6 +383,18 @@ function TeroChatContent() {
           maxLength={MAX_TERO_MESSAGE_LENGTH}
           accessibilityLabel="Pregunta para Tero"
         />
+        {TERO_VOICE_ENABLED ? (
+          <TeroDictationButton
+            draft={draft}
+            onDraft={setDraft}
+            onMessage={setDictationMessage}
+            onListening={(listening) => {
+              if (listening) stop();
+              setDictating(listening);
+            }}
+            disabled={pending}
+          />
+        ) : null}
         <Pressable
           onPress={submit}
           disabled={!draft.trim() || pending}
@@ -351,6 +406,9 @@ function TeroChatContent() {
           <Text style={styles.sendText}>Enviar</Text>
         </Pressable>
       </View>
+      {TERO_VOICE_ENABLED ? (
+        <Text style={[styles.dictationHint, { paddingBottom: insets.bottom + space[2] }]}>{DICTATION_PRIVACY}</Text>
+      ) : null}
     </Screen>
   );
 }
@@ -434,6 +492,16 @@ const styles = themedStyles(() => ({
     borderBottomColor: colors.borderSubtle,
   },
   heroText: { flex: 1, fontSize: fontSize.bodyMd, color: colors.fgSecondary },
+  voiceToggle: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: space[3],
+    paddingVertical: space[1],
+  },
+  voiceToggleOn: { borderColor: teroColors.blue },
+  voiceToggleText: { fontSize: fontSize.labelMd, color: colors.fgMuted },
+  voiceToggleTextOn: { color: teroColors.blue },
   liveHint: {
     fontSize: fontSize.bodySm,
     color: colors.fgMuted,
@@ -471,6 +539,7 @@ const styles = themedStyles(() => ({
   statusFailed: { color: colors.dangerFg },
   retry: { fontSize: fontSize.labelMd, fontWeight: '700', color: colors.brandText },
   error: { fontSize: fontSize.bodySm, color: colors.dangerFg, paddingHorizontal: space[4], paddingBottom: space[2] },
+  dictationHint: { fontSize: fontSize.labelMd, color: colors.fgMuted, paddingHorizontal: space[4], paddingTop: space[1] },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
