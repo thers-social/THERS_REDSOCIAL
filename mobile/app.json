@@ -52,7 +52,15 @@
           ]
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "THERS usa tu galería solo cuando eliges una foto o un video para tu foto de perfil, una publicación, un mensaje, una pregunta a Tero o la imagen de tu negocio.",
+          "cameraPermission": false
+        }
+      ],
+      "expo-video"
     ]
   }
 }

@@ -1,16 +1,19 @@
 import { useRouter } from 'expo-router';
 import { memo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 
 import { SharedPlaceCard } from '@features/places/SharedPlaceCard';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
-import { comingSoon } from '@shared/lib/comingSoon';
 import { formatRelativeTime } from '@shared/lib/time';
 import { Avatar } from '@shared/ui/Avatar';
 import { Icon } from '@shared/ui/Icon';
+import { ImageGridView } from '@shared/media/ImageGridView';
+import { VideoPlayerView } from '@shared/media/VideoPlayerView';
 import { MentionText } from '@shared/ui/MentionText';
 
+import { messageOf, usePosts } from './PostsContext';
+import { SharePostSheet } from './SharePostSheet';
 import type { Post } from './types';
 
 type Props = {
@@ -25,13 +28,15 @@ type Props = {
 };
 
 /**
- * Tarjeta de una publicación (solo texto). Las publicaciones marcadas como
+ * Tarjeta de una publicación (texto, fotos o video corto). Las publicaciones marcadas como
  * sensibles por su autor se muestran ocultas a las demás personas hasta que
  * toquen «Mostrar» (ADR-030).
  */
 function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: Props) {
   const router = useRouter();
   const [revealed, setRevealed] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const { toggleSave } = usePosts();
   const isMine = post.author.id === myId;
   const hidden = post.is_sensitive && !isMine && !revealed;
 
@@ -48,19 +53,32 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
     if (!detail) router.push({ pathname: '/post/[id]', params: { id: post.id } });
   }
 
+  function openAuthor() {
+    if (isMine) router.push('/profile');
+    else router.push({ pathname: '/user/[userId]', params: { userId: post.author.id } });
+  }
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Avatar name={post.author.name} uri={post.author.avatar_url} size={44} />
-        <View style={styles.headerText}>
-          <Text style={styles.name} numberOfLines={1}>
-            {post.author.name}
-          </Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            @{post.author.username} · {formatRelativeTime(post.created_at)}
-            {post.edited ? ' · editado' : ''}
-          </Text>
-        </View>
+        {/* Foto y nombre llevan al perfil de su autor (ADR-049); el propio, a la pestaña Perfil. */}
+        <Pressable
+          onPress={openAuthor}
+          style={styles.author}
+          accessibilityRole="button"
+          accessibilityLabel={`Ver el perfil de ${post.author.name}`}
+        >
+          <Avatar name={post.author.name} uri={post.author.avatar_url} size={44} />
+          <View style={styles.headerText}>
+            <Text style={styles.name} numberOfLines={1}>
+              {post.author.name}
+            </Text>
+            <Text style={styles.meta} numberOfLines={1}>
+              @{post.author.username} · {formatRelativeTime(post.created_at)}
+              {post.edited ? ' · editado' : ''}
+            </Text>
+          </View>
+        </Pressable>
         {!isMine ? (
           <Pressable
             onPress={() => onFollow(post)}
@@ -104,6 +122,15 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           />
         </Pressable>
       )}
+      {/* Fotos y video corto (ADR-039, ADR-046). Ocultos igual que el texto si es contenido sensible. */}
+      {!hidden ? (
+        <>
+          <ImageGridView images={post.images} label={`Foto de ${post.author.name}`} />
+          {post.video ? (
+            <VideoPlayerView video={post.video} accessibilityLabel={`Video de ${post.author.name}`} />
+          ) : null}
+        </>
+      ) : null}
       {/* Lugar asociado (ADR-040 fase 4d). */}
       {post.place && !hidden ? (
         <SharedPlaceCard place={post.place} mine={false} />
@@ -135,23 +162,37 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           <Text style={styles.actionText}>{post.comments_count}</Text>
         </Pressable>
         <Pressable
-          onPress={() => comingSoon('Compartir')}
+          onPress={() => setSharing(true)}
           style={styles.action}
           accessibilityRole="button"
-          accessibilityLabel="Compartir (próximamente)"
+          accessibilityLabel="Compartir publicación"
         >
           <Icon name="share" size={22} color={colors.fgSecondary} />
         </Pressable>
         <View style={styles.spacer} />
         <Pressable
-          onPress={() => comingSoon('Guardar publicaciones')}
+          onPress={() => toggleSave(post.id).catch((e) => Alert.alert('No se pudo guardar', messageOf(e)))}
           style={styles.action}
           accessibilityRole="button"
-          accessibilityLabel="Guardar (próximamente)"
+          accessibilityState={{ selected: Boolean(post.saved_by_me) }}
+          accessibilityLabel={post.saved_by_me ? 'Quitar de guardados' : 'Guardar publicación'}
         >
-          <Icon name="bookmark" size={22} color={colors.fgSecondary} />
+          <Icon
+            name="bookmark"
+            size={22}
+            filled={Boolean(post.saved_by_me)}
+            color={post.saved_by_me ? colors.brandText : colors.fgSecondary}
+          />
         </Pressable>
       </View>
+      <SharePostSheet
+        post={sharing ? post : null}
+        onClose={() => setSharing(false)}
+        onShared={(name) => {
+          setSharing(false);
+          Alert.alert('Publicación enviada', `Se la enviaste a ${name}.`);
+        }}
+      />
     </View>
   );
 }
@@ -168,6 +209,7 @@ const styles = themedStyles(() => ({
     marginBottom: space[3],
   },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: space[3] },
+  author: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   headerText: { flex: 1, marginHorizontal: space[3] },
   name: { fontSize: fontSize.bodyMd, fontWeight: '700', color: colors.fg },
   meta: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginTop: 2 },

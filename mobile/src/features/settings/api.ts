@@ -6,6 +6,8 @@
  */
 
 import { request } from '@shared/lib/api';
+import { appendMedia, MEDIA_UPLOAD_TIMEOUT_MS } from '@shared/media/mediaForm';
+import type { PickedMedia } from '@shared/media/mediaRules';
 import type { User } from '@features/auth/types';
 
 // --- Privacidad -------------------------------------------------------------------
@@ -132,6 +134,30 @@ export function closeOtherSessions(): Promise<unknown> {
 // --- Perfil -------------------------------------------------------------------------
 
 export type ProfilePatch = Partial<Pick<User, 'name' | 'bio' | 'location' | 'website'>>;
+
+/**
+ * Foto de perfil (`ADR-015`): `POST /api/users/me/avatar` con el archivo en el campo `file`. El servidor
+ * la decodifica por su contenido, la reduce y la guarda sin metadatos; devuelve la cuenta actualizada.
+ */
+export async function uploadAvatar(media: PickedMedia): Promise<User> {
+  const form = new FormData();
+  appendMedia(form, 'file', media);
+  const { user } = await request<{ user: User }>('/users/me/avatar', {
+    method: 'POST',
+    authenticated: true,
+    body: form,
+    timeoutMs: MEDIA_UPLOAD_TIMEOUT_MS,
+  });
+  return user;
+}
+
+export async function removeAvatar(): Promise<User> {
+  const { user } = await request<{ user: User }>('/users/me/avatar', {
+    method: 'DELETE',
+    authenticated: true,
+  });
+  return user;
+}
 
 export async function patchProfile(patch: ProfilePatch): Promise<User> {
   const { user } = await request<{ user: User }>('/users/me', {

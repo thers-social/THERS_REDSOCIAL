@@ -1,4 +1,4 @@
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
@@ -19,9 +19,14 @@ export function PlaceCard({ place, selected = false, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${place.name}, ${place.category.name}${distance ? `, a ${distance}` : ''}`}
     >
-      <View style={styles.iconBox}>
-        <Icon name="pin" size={20} color={colors.brandText} />
-      </View>
+      {place.cover_image_url ? (
+        // Imagen que identifica al lugar (ADR-046).
+        <Image source={{ uri: place.cover_image_url }} style={styles.thumb} accessibilityIgnoresInvertColors />
+      ) : (
+        <View style={styles.iconBox}>
+          <Icon name="pin" size={20} color={colors.brandText} />
+        </View>
+      )}
       <View style={styles.body}>
         <View style={styles.titleRow}>
           <Text style={styles.name} numberOfLines={1}>
@@ -76,5 +81,6 @@ const styles = themedStyles(() => ({
   meta: { flexDirection: 'row', gap: space[3], marginTop: space[1] },
   distance: { fontSize: fontSize.labelMd, fontWeight: '700', color: colors.fg },
   verified: { fontSize: fontSize.labelMd, color: colors.successFg },
+  thumb: { width: 48, height: 48, borderRadius: radius.input, backgroundColor: colors.bgSubtle },
   unverified: { fontSize: fontSize.labelMd, color: colors.fgMuted },
 }));

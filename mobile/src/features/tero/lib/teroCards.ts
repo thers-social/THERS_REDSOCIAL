@@ -98,12 +98,22 @@ export function historyForRequest(
 }
 
 /** Cuerpo de `POST /api/tero/chat`. El contexto va como dato sin verificar. */
-export function chatBody(text: string, context: TeroContext, history: ChatTurn[]) {
+export type ChatImage = { media_type: string; data: string };
+
+export function chatBody(
+  text: string,
+  context: TeroContext,
+  history: ChatTurn[],
+  image: ChatImage | null = null,
+) {
   const body: {
+    image?: ChatImage;
     message: string;
     history?: ChatTurn[];
     context: { screen: string; entity_type?: string; entity_id?: string };
   } = { message: text, context: { screen: context.screen } };
+  // Imagen adjunta (ADR-046): con ella el texto puede ir vacío y el servidor pregunta qué se ve.
+  if (image) body.image = image;
   if (history.length) body.history = history;
   if (context.entityType && context.entityId) {
     body.context.entity_type = context.entityType;
@@ -245,6 +255,7 @@ export function chatErrorMessage(error: unknown): string {
   if (e.isNetworkError === true) return 'Sin conexión. Revisa tu internet e inténtalo de nuevo.';
   if (status === 429) return 'Estás enviando muchos mensajes. Espera un momento.';
   if (status === 503 && code === 'tero_disabled') return 'Tero no está disponible en este momento.';
+  if (status === 503 && code === 'tero_images_disabled') return 'Tero todavía no puede ver imágenes. Pregúntale con texto.';
   if (status === 503) return 'Tero no está disponible ahora. Inténtalo más tarde.';
   if (status === 400) return 'Tero no pudo entender el mensaje. Prueba con otro texto.';
   return 'Tero no pudo responder. Puedes reintentar.';

@@ -5,11 +5,12 @@ import { AppState, FlatList, Pressable, RefreshControl, Text, TextInput, View } 
 import { useAuth } from '@features/auth/context/AuthContext';
 import { fetchConversations } from '@features/messages/api';
 import type { ConversationSummary } from '@features/messages/api';
+import { fetchGroups } from '@features/messages/groups';
+import type { GroupSummary } from '@features/messages/groups';
 import { VOICE_PREVIEW } from '@features/messages/voice';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
-import { comingSoon } from '@shared/lib/comingSoon';
 import { formatRelativeTime } from '@shared/lib/time';
 import { Avatar } from '@shared/ui/Avatar';
 import { Icon } from '@shared/ui/Icon';
@@ -20,7 +21,30 @@ const REFRESH_MS = 15000;
 /** Una persona cuenta «en línea» si estuvo activa en los últimos 5 minutos (y permite mostrarlo). */
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 
-type Filter = 'all' | 'unread';
+type Filter = 'all' | 'unread' | 'groups';
+
+/** Una fila de la lista: una conversación directa o un grupo (`ADR-048`), ordenadas por actividad. */
+type Row =
+  | { kind: 'dm'; key: string; at: string; item: ConversationSummary }
+  | { kind: 'group'; key: string; at: string; item: GroupSummary };
+
+function preview(last: {
+  content: string;
+  has_audio?: boolean;
+  has_image?: boolean;
+  has_video?: boolean;
+  has_place?: boolean;
+  has_post?: boolean;
+}): string {
+  return (
+    last.content ||
+    (last.has_audio ? VOICE_PREVIEW : '') ||
+    (last.has_image ? '📷 Foto' : '') ||
+    (last.has_video ? '🎬 Video' : '') ||
+    (last.has_place ? '📍 Lugar' : '') ||
+    (last.has_post ? '📝 Publicación' : '')
+  );
+}
 
 /**
  * Lista de conversaciones (`GET /api/conversations`). Se actualiza por consulta
@@ -34,29 +58,50 @@ export default function Messages() {
   const router = useRouter();
 
   const [items, setItems] = useState<ConversationSummary[] | null>(null);
+  const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const focused = useRef(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
 
-  const visible = useMemo(() => {
+  const rows = useMemo<Row[]>(() => {
     const q = query.trim().toLowerCase();
-    return (items ?? []).filter(
-      (item) =>
-        (filter === 'all' || item.unread_count > 0) &&
-        (!q || item.user.name.toLowerCase().includes(q) || item.user.username.toLowerCase().includes(q)),
-    );
-  }, [items, query, filter]);
+    const direct: Row[] =
+      filter === 'groups'
+        ? []
+        : (items ?? [])
+            .filter(
+              (item) =>
+                (filter === 'all' || item.unread_count > 0) &&
+                (!q || item.user.name.toLowerCase().includes(q) || item.user.username.toLowerCase().includes(q)),
+            )
+            .map((item) => ({ kind: 'dm', key: `dm-${item.user.id}`, at: item.last_message.created_at, item }));
+    const grouped: Row[] = groups
+      .filter((item) => (filter !== 'unread' || item.unread_count > 0) && (!q || item.name.toLowerCase().includes(q)))
+      .map((item) => ({
+        kind: 'group',
+        key: `group-${item.id}`,
+        at: item.last_message?.created_at ?? item.created_at,
+        item,
+      }));
+    return [...direct, ...grouped].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  }, [items, groups, query, filter]);
   const unreadTotal = useMemo(
-    () => (items ?? []).reduce((sum, item) => sum + item.unread_count, 0),
-    [items],
+    () =>
+      (items ?? []).reduce((sum, item) => sum + item.unread_count, 0) +
+      groups.reduce((sum, item) => sum + item.unread_count, 0),
+    [items, groups],
   );
 
   const load = useCallback(async () => {
     try {
       setItems(await fetchConversations());
       setError(null);
+      // Los grupos son un añadido: si fallan, las conversaciones directas siguen mostrándose.
+      fetchGroups()
+        .then(setGroups)
+        .catch(() => undefined);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'No pudimos cargar tus mensajes.');
     }
@@ -94,18 +139,18 @@ export default function Messages() {
       headerRight={
         <View style={styles.headerActions}>
           <Pressable
-            onPress={() => comingSoon('Los chats de grupo')}
+            onPress={() => router.push('/group/new')}
             style={styles.headerBtn}
             accessibilityRole="button"
-            accessibilityLabel="Grupos (próximamente)"
+            accessibilityLabel="Nuevo grupo"
           >
             <Icon name="group" size={20} color={colors.fg} />
           </Pressable>
           <Pressable
-            onPress={() => comingSoon('Más opciones de mensajes')}
+            onPress={() => router.push('/settings')}
             style={styles.headerBtn}
             accessibilityRole="button"
-            accessibilityLabel="Más opciones (próximamente)"
+            accessibilityLabel="Ajustes"
           >
             <Icon name="more" size={20} color={colors.fg} />
           </Pressable>
@@ -113,8 +158,8 @@ export default function Messages() {
       }
     >
       <FlatList
-        data={visible}
-        keyExtractor={(item) => item.user.id}
+        data={rows}
+        keyExtractor={(row) => row.key}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
@@ -147,6 +192,7 @@ export default function Messages() {
                 [
                   ['all', 'Todos'],
                   ['unread', unreadTotal > 0 ? `Sin leer · ${unreadTotal}` : 'Sin leer'],
+                  ['groups', 'Grupos'],
                 ] as const
               ).map(([id, label]) => (
                 <Pressable
@@ -159,14 +205,6 @@ export default function Messages() {
                   <Text style={[styles.chipText, filter === id && styles.chipTextOn]}>{label}</Text>
                 </Pressable>
               ))}
-              <Pressable
-                onPress={() => comingSoon('Los chats de grupo')}
-                style={styles.chip}
-                accessibilityRole="button"
-                accessibilityHint="Próximamente"
-              >
-                <Text style={styles.chipText}>Grupos</Text>
-              </Pressable>
             </View>
             <Text style={styles.note}>
               Chat privado de texto. Los mensajes no están cifrados de extremo a extremo.
@@ -184,7 +222,7 @@ export default function Messages() {
               actionLabel="Reintentar"
               onAction={load}
             />
-          ) : (items?.length ?? 0) > 0 ? (
+          ) : (items?.length ?? 0) + groups.length > 0 ? (
             <StateMessage
               kind="empty"
               title="Sin resultados"
@@ -198,62 +236,107 @@ export default function Messages() {
             />
           )
         }
-        renderItem={({ item }) => (
+        renderItem={({ item: row }) =>
+          row.kind === 'group' ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.row,
+                row.item.unread_count > 0 && styles.rowUnread,
+                pressed && styles.rowPressed,
+              ]}
+              onPress={() =>
+                router.push({
+                  pathname: '/group/[groupId]',
+                  params: { groupId: row.item.id, name: row.item.name },
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={`Grupo ${row.item.name}${
+                row.item.unread_count > 0 ? `, ${row.item.unread_count} sin leer` : ''
+              }`}
+            >
+              <View style={styles.groupAvatar}>
+                <Icon name="group" size={24} color={colors.onBrand} />
+              </View>
+              <View style={styles.rowText}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {row.item.name}
+                  </Text>
+                </View>
+                <Text
+                  style={[styles.preview, row.item.unread_count > 0 && styles.previewUnread]}
+                  numberOfLines={1}
+                >
+                  {row.item.last_message
+                    ? `${row.item.last_message.sender_id === user.id ? 'Tú' : row.item.last_message.sender_name}: ${preview(row.item.last_message)}`
+                    : `${row.item.member_count} personas · aún sin mensajes`}
+                </Text>
+              </View>
+              <View style={styles.rowEnd}>
+                <Text style={styles.time}>{formatRelativeTime(row.at)}</Text>
+                {row.item.unread_count > 0 ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{row.item.unread_count > 99 ? '99+' : row.item.unread_count}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </Pressable>
+          ) : (
           <Pressable
             style={({ pressed }) => [
               styles.row,
-              item.unread_count > 0 && styles.rowUnread,
+              row.item.unread_count > 0 && styles.rowUnread,
               pressed && styles.rowPressed,
             ]}
             onPress={() =>
               router.push({
                 pathname: '/chat/[userId]',
                 params: {
-                  userId: item.user.id,
-                  name: item.user.name,
-                  username: item.user.username,
-                  avatar: item.user.avatar_url ?? '',
+                  userId: row.item.user.id,
+                  name: row.item.user.name,
+                  username: row.item.user.username,
+                  avatar: row.item.user.avatar_url ?? '',
                 },
               })
             }
             accessibilityRole="button"
-            accessibilityLabel={`Conversación con ${item.user.name}${
-              item.unread_count > 0 ? `, ${item.unread_count} sin leer` : ''
+            accessibilityLabel={`Conversación con ${row.item.user.name}${
+              row.item.unread_count > 0 ? `, ${row.item.unread_count} sin leer` : ''
             }`}
           >
             <View>
-              <Avatar name={item.user.name} uri={item.user.avatar_url} size={48} />
-              {item.user.last_seen_at &&
-              Date.now() - new Date(item.user.last_seen_at).getTime() < ONLINE_WINDOW_MS ? (
+              <Avatar name={row.item.user.name} uri={row.item.user.avatar_url} size={48} />
+              {row.item.user.last_seen_at &&
+              Date.now() - new Date(row.item.user.last_seen_at).getTime() < ONLINE_WINDOW_MS ? (
                 <View style={styles.online} accessibilityLabel="En línea" />
               ) : null}
             </View>
             <View style={styles.rowText}>
               <View style={styles.rowTop}>
                 <Text style={styles.name} numberOfLines={1}>
-                  {item.user.name}
+                  {row.item.user.name}
                 </Text>
               </View>
               <Text
-                style={[styles.preview, item.unread_count > 0 && styles.previewUnread]}
+                style={[styles.preview, row.item.unread_count > 0 && styles.previewUnread]}
                 numberOfLines={1}
               >
-                {item.last_message.sender_id === user.id ? 'Tú: ' : ''}
-                {item.last_message.content ||
-                  (item.last_message.has_audio ? VOICE_PREVIEW : '') ||
-                  (item.last_message.has_place ? '📍 Lugar' : '')}
+                {row.item.last_message.sender_id === user.id ? 'Tú: ' : ''}
+                {preview(row.item.last_message)}
               </Text>
             </View>
             <View style={styles.rowEnd}>
-              <Text style={styles.time}>{formatRelativeTime(item.last_message.created_at)}</Text>
-              {item.unread_count > 0 ? (
+              <Text style={styles.time}>{formatRelativeTime(row.item.last_message.created_at)}</Text>
+              {row.item.unread_count > 0 ? (
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{item.unread_count > 99 ? '99+' : item.unread_count}</Text>
+                  <Text style={styles.badgeText}>{row.item.unread_count > 99 ? '99+' : row.item.unread_count}</Text>
                 </View>
               ) : null}
             </View>
           </Pressable>
-        )}
+        )
+        }
       />
     </Screen>
   );
@@ -305,6 +388,14 @@ const styles = themedStyles(() => ({
     padding: space[3],
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
+  },
+  groupAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowEnd: { alignItems: 'flex-end', gap: space[1] },
   headerActions: { flexDirection: 'row', gap: space[2] },

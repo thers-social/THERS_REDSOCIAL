@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, Text, View } from 'react-native';
+import { Alert, Image, Linking, Pressable, Text, View } from 'react-native';
 
 import { savePlace, unsavePlace } from '@features/places/api';
 import { PlacePlans } from '@features/places/PlacePlans';
@@ -96,6 +96,14 @@ export default function PlaceDetailScreen() {
 
   return (
     <Screen title="Lugar" back>
+      {place.cover_image_url ? (
+        // Imagen que identifica al lugar (ADR-046).
+        <Image
+          source={{ uri: place.cover_image_url }}
+          style={styles.cover}
+          accessibilityLabel={`Imagen de ${place.name}`}
+        />
+      ) : null}
       <View style={styles.header}>
         <Text style={styles.name} accessibilityRole="header">
           {place.name}
@@ -219,6 +227,7 @@ const styles = themedStyles(() => ({
   name: { fontSize: fontSize.headlineSm, fontWeight: '700', color: colors.fg },
   category: { fontSize: fontSize.bodyMd, color: colors.fgMuted },
   verified: { fontSize: fontSize.labelLg, fontWeight: '700', color: colors.successFg },
+  cover: { width: '100%', height: 180, borderRadius: radius.card, marginBottom: space[3], backgroundColor: colors.bgSubtle },
   unverified: { fontSize: fontSize.labelMd, color: colors.fgMuted },
   actions: { flexDirection: 'row', gap: space[2], marginBottom: space[4] },
   flex: { flex: 1 },

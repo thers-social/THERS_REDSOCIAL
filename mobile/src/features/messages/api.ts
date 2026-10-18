@@ -9,16 +9,26 @@
  */
 
 import type { SharedPlace } from '@features/places/types';
+import type { SharedPost } from '@features/posts/types';
 import { File } from 'expo-file-system';
 
 import { request } from '@shared/lib/api';
+import type { PublicImage } from '@shared/media/ImageGridView';
+import { appendMedia, MEDIA_UPLOAD_TIMEOUT_MS } from '@shared/media/mediaForm';
+import type { PickedMedia } from '@shared/media/mediaRules';
+import type { PublicVideo } from '@shared/media/VideoPlayerView';
 
 import type { VoiceRecording } from './voice';
 
 export type ChatMessage = {
   id: string;
   sender_id: string;
-  recipient_id: string;
+  /** `null` en un mensaje de grupo (`ADR-048`): no tiene un destinatario único. */
+  recipient_id: string | null;
+  /** Grupo al que pertenece (`ADR-048`); `null` o ausente en un mensaje directo. */
+  group_id?: string | null;
+  /** Quién lo escribió. Solo viene en los mensajes de grupo, para pintar su nombre. */
+  sender?: { id: string; name: string; username: string; avatar_url: string | null } | null;
   content: string;
   read: boolean;
   created_at: string;
@@ -31,11 +41,17 @@ export type ChatMessage = {
   client_id: string | null;
   /** Lugar compartido (ADR-040 fase 4c); `null` o ausente en un mensaje normal. */
   place?: SharedPlace | null;
+  /** Publicación compartida (`ADR-047`); `null` o ausente en un mensaje normal. */
+  post?: SharedPost | null;
   /**
    * Nota de voz (ADR-042); `null` o ausente en un mensaje normal. `duration_ms` la calcula el
    * servidor. En un mensaje local aún sin confirmar, `url` es el archivo del teléfono.
    */
   audio?: { url: string; duration_ms: number } | null;
+  /** Fotos adjuntas (`ADR-039`); `[]` o ausente si no tiene. */
+  images?: PublicImage[];
+  /** Video corto (`ADR-046`); `null` o ausente si no tiene. */
+  video?: PublicVideo | null;
 };
 
 export type ThreadPage = {
@@ -55,13 +71,27 @@ export type ConversationSummary = {
   last_message: {
     content: string;
     has_place?: boolean;
+    has_post?: boolean;
     /** Nota de voz (ADR-042): un mensaje solo de audio trae `content: ""`. */
     has_audio?: boolean;
+    has_image?: boolean;
+    has_video?: boolean;
     sender_id: string;
     created_at: string;
   };
   unread_count: number;
 };
+
+/**
+ * A quién va un chat: una persona (mensaje directo) o un grupo (`ADR-048`). Los mensajes de ambos
+ * tienen el mismo formato y los mismos adjuntos; solo cambia la ruta del hilo.
+ */
+export type ChatTarget = { kind: 'user' | 'group'; id: string };
+
+function threadUrl(target: string | ChatTarget): string {
+  const { kind, id } = typeof target === 'string' ? { kind: 'user', id: target } : target;
+  return kind === 'group' ? `/groups/${id}/messages` : `/users/${id}/messages`;
+}
 
 export const PAGE_SIZE = 30;
 export const MAX_MESSAGE_LENGTH = 2000;
@@ -83,7 +113,7 @@ type ThreadQuery = {
 };
 
 export function fetchThread(
-  otherUserId: string,
+  otherUserId: string | ChatTarget,
   query: ThreadQuery = {},
   signal?: AbortSignal,
 ): Promise<ThreadPage> {
@@ -92,7 +122,7 @@ export function fetchThread(
   if (query.after) params.push(`after=${encodeURIComponent(query.after)}`);
   params.push(`limit=${query.limit ?? PAGE_SIZE}`);
 
-  return request<ThreadPage>(`/users/${otherUserId}/messages?${params.join('&')}`, {
+  return request<ThreadPage>(`${threadUrl(otherUserId)}?${params.join('&')}`, {
     authenticated: true,
     signal,
   });
@@ -103,14 +133,29 @@ export function fetchThread(
  * el mismo `clientId` devuelve el mensaje ya creado (200) en vez de duplicarlo.
  */
 export async function sendMessage(
-  otherUserId: string,
+  otherUserId: string | ChatTarget,
   content: string,
   clientId: string,
 ): Promise<ChatMessage> {
-  const { message } = await request<{ message: ChatMessage }>(`/users/${otherUserId}/messages`, {
+  const { message } = await request<{ message: ChatMessage }>(threadUrl(otherUserId), {
     method: 'POST',
     authenticated: true,
     body: { content, client_id: clientId },
+  });
+  return message;
+}
+
+/** Comparte una publicación (`ADR-047`). El texto es opcional; `clientId` hace el envío idempotente. */
+export async function sendPostMessage(
+  otherUserId: string | ChatTarget,
+  postId: string,
+  clientId: string,
+  content = '',
+): Promise<ChatMessage> {
+  const { message } = await request<{ message: ChatMessage }>(threadUrl(otherUserId), {
+    method: 'POST',
+    authenticated: true,
+    body: { post_id: postId, content, client_id: clientId },
   });
   return message;
 }
@@ -124,7 +169,7 @@ const VOICE_UPLOAD_TIMEOUT_MS = 60000;
  * un mensaje de texto: reintentar con el mismo devuelve el mensaje ya creado.
  */
 export async function sendVoiceMessage(
-  otherUserId: string,
+  otherUserId: string | ChatTarget,
   recording: VoiceRecording,
   clientId: string,
   content = '',
@@ -137,11 +182,34 @@ export async function sendVoiceMessage(
   // archivo se sube como un `File` de expo-file-system, que es un Blob de verdad.
   form.append('audio', new File(recording.uri) as unknown as Blob, recording.name);
 
-  const { message } = await request<{ message: ChatMessage }>(`/users/${otherUserId}/messages`, {
+  const { message } = await request<{ message: ChatMessage }>(threadUrl(otherUserId), {
     method: 'POST',
     authenticated: true,
     body: form,
     timeoutMs: VOICE_UPLOAD_TIMEOUT_MS,
+  });
+  return message;
+}
+
+/**
+ * Envía una foto o un video (`ADR-039`, `ADR-046`): multipart con el campo `images` (una foto) o `video`.
+ * El texto puede ir vacío. `clientId` hace el envío idempotente igual que en un mensaje de texto.
+ */
+export async function sendMediaMessage(
+  otherUserId: string | ChatTarget,
+  media: PickedMedia,
+  clientId: string,
+  content = '',
+): Promise<ChatMessage> {
+  const form = new FormData();
+  form.append('content', content);
+  form.append('client_id', clientId);
+  appendMedia(form, media.kind === 'video' ? 'video' : 'images', media);
+  const { message } = await request<{ message: ChatMessage }>(threadUrl(otherUserId), {
+    method: 'POST',
+    authenticated: true,
+    body: form,
+    timeoutMs: MEDIA_UPLOAD_TIMEOUT_MS,
   });
   return message;
 }

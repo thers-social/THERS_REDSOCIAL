@@ -73,6 +73,12 @@ export type TeroMessage = {
   cards?: TeroActionCard[];
   /** Solo en los mensajes de la persona: en camino, entregado o fallido. */
   status?: TeroMessageStatus;
+  /**
+   * Solo en los mensajes de la persona (ADR-046): la imagen que adjuntó. `payload` es lo que viaja al
+   * servidor (base64, ya reducida) y sirve para reintentar; `uri` es el archivo del teléfono para mostrarla.
+   * No se guarda en ninguna parte: vive mientras la pantalla está abierta, igual que la conversación.
+   */
+  image?: { uri: string; payload: { media_type: string; data: string } };
 };
 
 export type TeroMessageStatus = 'sending' | 'sent' | 'failed';

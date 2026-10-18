@@ -28,7 +28,12 @@ const SECTIONS: { title: string; rows: Row[] }[] = [
   {
     title: 'Cómo usas THERS',
     rows: [
-      { label: 'Guardado', description: 'Colecciones de publicaciones.', icon: 'bookmark' },
+      {
+        label: 'Guardado',
+        description: 'Las publicaciones que guardaste. Solo tú las ves.',
+        icon: 'bookmark',
+        route: '/settings/saved',
+      },
       { label: 'Archivo', description: 'Historias pasadas y publicaciones archivadas.', icon: 'archive' },
       { label: 'Tu actividad', description: 'Tiempo en la app e interacciones.', icon: 'activity' },
       { label: 'Notificaciones', description: 'Push, correo y frecuencia.', icon: 'bell' },

@@ -4,6 +4,7 @@ import { Text } from 'react-native';
 
 import { fetchManage } from '@features/places/api';
 import { ManageAnalytics } from '@features/places/manage/ManageAnalytics';
+import { ManageImage } from '@features/places/manage/ManageImage';
 import { ManageOverview } from '@features/places/manage/ManageOverview';
 import { ManageQuotes } from '@features/places/manage/ManageQuotes';
 import { ManageReservations } from '@features/places/manage/ManageReservations';
@@ -91,6 +92,8 @@ export default function ManagePlaceScreen() {
         {place.name}
       </Text>
       <Text style={styles.category}>{place.category.name}</Text>
+
+      <ManageImage place={place} onChanged={(updated) => setState({ status: 'ready', place: updated, stats })} />
 
       <ManageOverview
         key={place.address ?? 'x'}
