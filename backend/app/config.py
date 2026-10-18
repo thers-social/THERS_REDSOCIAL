@@ -299,6 +299,25 @@ def _positive_float_env(name, default):
     return value
 
 
+# Moderación de contenido (ADR-044). Apagada por defecto: con ella apagada todo se publica como
+# siempre. Encendida, lo nuevo espera revisión y solo se ve `approved`. NO encender para el público
+# sin cola atendida (ADR-044, decisión D5 de la matriz de aprobación).
+Config.MODERATION_ENABLED = _flag_env("MODERATION_ENABLED")
+# `none` (por defecto): no hay clasificador, todo lo nuevo queda retenido para una persona.
+# `fake`: clasificador simulado, SOLO para desarrollo y pruebas. Nunca aprueba por sí solo en
+# producción porque no existe ahí. Los adaptadores reales se añaden tras su aprobación.
+Config.MODERATION_CLASSIFIER = (os.environ.get("MODERATION_CLASSIFIER") or "none").strip().lower()
+Config.MODERATION_NEW_ACCOUNT_DAYS = int(_positive_float_env("MODERATION_NEW_ACCOUNT_DAYS", 7))
+Config.MODERATION_HOLD_ALL_NEW_ACCOUNTS = _flag_env("MODERATION_HOLD_ALL_NEW_ACCOUNTS")
+Config.MODERATION_DOUBT_THRESHOLD = _positive_float_env("MODERATION_DOUBT_THRESHOLD", 0.40)
+Config.MODERATION_SEVERE_THRESHOLD = _positive_float_env("MODERATION_SEVERE_THRESHOLD", 0.85)
+Config.MODERATION_NEW_ACCOUNT_DOUBT_THRESHOLD = _positive_float_env(
+    "MODERATION_NEW_ACCOUNT_DOUBT_THRESHOLD", 0.10
+)
+Config.MODERATION_MAX_ATTEMPTS = int(_positive_float_env("MODERATION_MAX_ATTEMPTS", 5))
+Config.MODERATION_BACKOFF_SECONDS = int(_positive_float_env("MODERATION_BACKOFF_SECONDS", 30))
+Config.MODERATION_LEASE_SECONDS = int(_positive_float_env("MODERATION_LEASE_SECONDS", 300))
+
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
 # Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
 # es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.

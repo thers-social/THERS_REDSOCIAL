@@ -6,6 +6,7 @@
 
 from app.application.auth.user_presenter import to_author_summary
 from app.application.media.attachments import to_public_images
+from app.application.media.image_visibility import visible_images
 from app.application.places.place_card import to_place_card
 
 
@@ -16,20 +17,20 @@ def _place_card(message, place_cards):
     return to_place_card(message.place_id, place_cards)
 
 
-def to_public_messages(messages, message_repository):
+def to_public_messages(messages, message_repository, viewer_id=None):
     """Varios mensajes con las tarjetas de lugar resueltas en UNA consulta."""
     cards = message_repository.place_cards([m.place_id for m in messages if m.place_id])
-    return [to_public_message(message, cards) for message in messages]
+    return [to_public_message(message, cards, viewer_id) for message in messages]
 
 
-def to_public_message(message, place_cards=None):
+def to_public_message(message, place_cards=None, viewer_id=None):
     return {
         "id": str(message.id),
         "sender_id": str(message.sender_id),
         "recipient_id": str(message.recipient_id),
         "content": message.content,
         # Imagen adjunta (ADR-039): `[]` si no tiene.
-        "images": to_public_images(message.images),
+        "images": to_public_images(message.images, viewer_id),
         # Se expone como booleano, nunca como el timestamp `read_at` crudo
         # -- mismo criterio que `notifications.read` (ADR-008).
         "read": message.read_at is not None,
@@ -44,7 +45,7 @@ def to_public_message(message, place_cards=None):
     }
 
 
-def to_public_conversation(conversation):
+def to_public_conversation(conversation, viewer_id=None):
     other_user = conversation["other_user"]
     last_message = conversation["last_message"]
     return {
@@ -70,7 +71,7 @@ def to_public_conversation(conversation):
             "content": last_message.content,
             # Un mensaje de solo imagen tiene `content` vacío: la lista de
             # conversaciones necesita saberlo para mostrar "Foto" (ADR-039).
-            "has_image": bool(last_message.images),
+            "has_image": bool(visible_images(last_message.images, viewer_id)),
             # Un mensaje que comparte un lugar puede no llevar texto (ADR-040 fase 4c).
             "has_place": last_message.place_id is not None,
             "sender_id": str(last_message.sender_id),

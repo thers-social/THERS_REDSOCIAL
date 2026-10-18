@@ -136,7 +136,7 @@ def write_review(user_id, place_id, rating, body, repository):
     if repository.get_public_place(place_id) is None:
         raise PlaceNotFoundError()
     row, created = repository.upsert_review(user_id, place_id, rating, body)
-    images = repository.review_images([row["id"]]).get(str(row["id"]), [])
+    images = repository.review_images([row["id"]], viewer_id=user_id).get(str(row["id"]), [])
     return place_presenter.present_own_review(row, images), created
 
 
@@ -190,7 +190,7 @@ def list_reviews(place_id, limit_raw, offset_raw, repository, viewer_id=None):
     offset = validators.parse_offset(offset_raw)
     # Se pide una fila de más para saber si hay otra página.
     rows = repository.list_reviews(place_id, viewer_id, limit + 1, offset)[:limit + 1]
-    images = repository.review_images([r["id"] for r in rows[:limit]])
+    images = repository.review_images([r["id"] for r in rows[:limit]], viewer_id=viewer_id)
     rows = [{**r, "images": images.get(str(r["id"]), [])} for r in rows]
     summary = repository.review_summary(place_id)
     return {

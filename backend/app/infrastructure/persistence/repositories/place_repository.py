@@ -12,9 +12,12 @@
 import json
 import secrets
 
+from flask import current_app
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from app.domain.content_moderation import jobs as moderation_jobs
+from app.domain.content_moderation.status import initial_status
 from app.domain.places import kinds
 from app.domain.places.repositories import PlaceRepository
 from app.extensions import db
@@ -404,16 +407,24 @@ class SQLAlchemyPlaceRepository(PlaceRepository):
         db.session.commit()
         return keys
 
-    def review_images(self, review_ids):
+    def review_images(self, review_ids, viewer_id=None):
         ids = [str(i) for i in review_ids]
         if not ids:
             return {}
+        # Moderación (ADR-044): con ella encendida, un tercero solo ve lo `approved`. Quien subió
+        # la foto la ve siempre, con su estado, pero sin URL (ver `present_images`).
+        moderated = bool(current_app.config.get("MODERATION_ENABLED"))
         rows = db.session.execute(
             text(
-                "SELECT id, review_id, storage_key, width, height FROM media_attachments "
-                "WHERE review_id = ANY(CAST(:ids AS uuid[])) ORDER BY position, created_at, id"
+                "SELECT id, review_id, storage_key, width, height, moderation_status "
+                "FROM media_attachments "
+                "WHERE review_id = ANY(CAST(:ids AS uuid[])) "
+                "AND (NOT :moderated OR moderation_status = 'approved' "
+                "     OR owner_id = CAST(:viewer AS uuid)) "
+                "ORDER BY position, created_at, id"
             ),
-            {"ids": ids},
+            {"ids": ids, "moderated": moderated,
+             "viewer": str(viewer_id) if viewer_id else None},
         ).mappings()
         grouped = {}
         for row in rows:
@@ -437,20 +448,32 @@ class SQLAlchemyPlaceRepository(PlaceRepository):
         if current + len(items) > limit:
             db.session.rollback()
             return "too_many"
+        moderated = bool(current_app.config.get("MODERATION_ENABLED"))
         for offset, item in enumerate(items):
-            db.session.execute(
+            # El estado se fija SIEMPRE de forma explícita (ADR-044 §2.1).
+            attachment_id = db.session.execute(
                 text(
                     "INSERT INTO media_attachments "
-                    "(owner_id, review_id, storage_key, width, height, position) "
-                    "VALUES (:u, :r, :key, :w, :h, :pos)"
+                    "(owner_id, review_id, storage_key, width, height, position, moderation_status) "
+                    "VALUES (:u, :r, :key, :w, :h, :pos, :st) RETURNING id"
                 ),
                 {
                     "u": str(user_id), "r": str(review_id), "key": item["key"],
                     "w": item["width"], "h": item["height"], "pos": current + offset,
+                    "st": initial_status(moderated),
                 },
-            )
+            ).scalar_one()
+            if moderated:
+                from app.infrastructure.persistence.repositories.content_moderation_repository import (
+                    SQLAlchemyContentModerationRepository,
+                )
+
+                SQLAlchemyContentModerationRepository().enqueue(
+                    moderation_jobs.KIND_IMAGE, moderation_jobs.SUBJECT_MEDIA_ATTACHMENT,
+                    attachment_id,
+                )
         db.session.commit()
-        return self.review_images([review_id])[str(review_id)]
+        return self.review_images([review_id], viewer_id=user_id)[str(review_id)]
 
     def delete_review_image(self, user_id, place_id, image_id):
         row = db.session.execute(

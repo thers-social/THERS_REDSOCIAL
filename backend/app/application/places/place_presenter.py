@@ -135,9 +135,20 @@ def present_images(images):
     """Fotos públicas: URL, dimensiones e id (para que su dueño pueda quitarlas). Nunca la
     clave interna ni quién la subió."""
     return [
-        {"id": str(i["id"]), "url": media_url(i["storage_key"]), "width": i["width"], "height": i["height"]}
+        {
+            "id": str(i["id"]),
+            # Moderación (ADR-044): una foto que aún no está `approved` no tiene URL; su dueño ve
+            # solo el estado. Sin `moderation_status` en la fila (flujo anterior) = aprobada.
+            "url": media_url(i["storage_key"]) if _approved(i) else None,
+            "width": i["width"], "height": i["height"],
+            **({} if _approved(i) else {"moderation_status": i["moderation_status"]}),
+        }
         for i in (images or [])
     ]
+
+
+def _approved(image):
+    return image.get("moderation_status", "approved") == "approved"
 
 
 def present_review(row):

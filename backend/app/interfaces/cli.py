@@ -47,6 +47,38 @@ def register_cli(app):
                 "Se recomienda activarla antes de moderar."
             )
 
+    @app.cli.command("moderation-worker")
+    @click.option("--once", is_flag=True, help="Procesa los trabajos listos y termina.")
+    @click.option("--interval", default=5.0, show_default=True, help="Segundos entre ciclos.")
+    def moderation_worker(once, interval):
+        """Procesa la cola de moderación de contenido (ADR-044). Requiere MODERATION_ENABLED."""
+        import time
+        import uuid
+        from datetime import datetime, timezone
+
+        from app.application.content_moderation.process_jobs import process_next
+        from app.application.content_moderation.settings import settings_from_config
+        from app.infrastructure.persistence.repositories.content_moderation_repository import (
+            SQLAlchemyContentModerationRepository,
+        )
+
+        settings = settings_from_config(app.config)
+        if not settings.enabled:
+            raise click.ClickException("MODERATION_ENABLED está apagado; no hay nada que procesar.")
+        classifier = app.extensions["thers_content_moderation"]["image_classifier"]
+        repository = SQLAlchemyContentModerationRepository()
+        worker_id = f"worker-{uuid.uuid4().hex[:8]}"
+        while True:
+            processed = 0
+            while process_next(
+                repository, classifier, settings, worker_id, datetime.now(timezone.utc)
+            ) is not None:
+                processed += 1
+            if once:
+                click.echo(f"Trabajos procesados: {processed}")
+                return
+            time.sleep(interval)
+
     @app.cli.command("unsuspend-user")
     @click.argument("email")
     def unsuspend_user(email):
