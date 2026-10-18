@@ -35,7 +35,13 @@
           "locationWhenInUsePermission": "THERS usa tu ubicación aproximada solo cuando pulsás «Usar mi ubicación», para mostrarte lugares cercanos. No se guarda."
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "THERS accede a tus fotos solo para que elijas la imagen de una historia."
+        }
+      ]
     ]
   }
 }
