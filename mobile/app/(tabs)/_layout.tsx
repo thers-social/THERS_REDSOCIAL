@@ -34,6 +34,8 @@ export default function TabsLayout() {
     );
   }
   if (!user) return <Redirect href="/login" />;
+  // Cuenta creada con Google: antes de usar la app faltan teléfono, país y fecha de nacimiento (ADR-012).
+  if (!user.profile_completed) return <Redirect href="/complete-profile" />;
 
   const tabBarHeight = 56 + insets.bottom;
 

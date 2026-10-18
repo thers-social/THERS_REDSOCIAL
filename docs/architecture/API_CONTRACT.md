@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.71 (Propuesta) |
+| Versión | 0.72 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -43,6 +43,8 @@
 > **v0.16 — verificación obligatoria de email al registrarse (`ADR-011-mandatory-email-verification.md`, reemplaza `send-verification-email`/`verify-email` de v0.14):** `POST /api/register` (§4.1) sigue devolviendo `201` con el usuario creado, pero ahora `email_verified` nace en `false` y de inmediato se envía un código de 6 dígitos — la cuenta no puede iniciar sesión todavía. Registrar de nuevo con un email que existe pero nunca se verificó **actualiza esa misma cuenta** (incluida la contraseña) y reenvía un código, en vez de un `409` — el `409` real solo ocurre si el email ya pertenece a una cuenta verificada. `POST /api/login` (§4.1) gana un caso nuevo: credenciales correctas pero cuenta sin verificar responde `403` con `{"msg": "...", "email_verified": false}`, sin emitir ningún JWT. Se agregan `POST /api/verify-registration-code` y `POST /api/resend-registration-code` (§4.8) — mismo patrón que `verify-reset-code`/`forgot-password` (`ADR-010`): 6 dígitos, hash scrypt, máximo 5 intentos, cooldown de 60s, índice único parcial (a lo sumo un código activo por usuario). Un código de registro nunca sirve para verificar una recuperación de contraseña ni viceversa — viven en tablas/repositorios completamente separados, no un discriminador de tipo sobre una tabla compartida. **Se retiran** `POST /api/send-verification-email` y `POST /api/verify-email` (`ADR-009`, flujo de enlace) — con el login ya bloqueado para cuentas sin verificar, una cuenta sin verificar nunca puede obtener el JWT que el primero exigía, dejando ambos permanentemente inalcanzables. El Frontend queda conectado de punta a punta: `Register.jsx` navega a la nueva pantalla `VerifyRegistrationCode.jsx` en vez de a `/login`; `Login.jsx` distingue el `403` de cuenta sin verificar y redirige a la misma pantalla. Verificado con 36 pruebas nuevas (`test_registration.py`, reemplaza a `test_email_verification.py`) + la suite completa (212/212, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`).
 >
 > **v0.14 — recuperación de contraseña y verificación de email vía Resend (`ADR-009-password-reset-and-email-verification.md`):** se agregan `POST /api/forgot-password`, `POST /api/reset-password`, `POST /api/send-verification-email` y `POST /api/verify-email` (§4.8) — séptima y octava entidad del alcance objetivo del producto (`DATABASE_ARCHITECTURE.md` §4.B, candidata "Verificación de correo, Recuperación de contraseña") en pasar a implementadas. Rutas planas bajo `/api`, sin prefijo `/auth/` — mismo criterio que `/api/register`/`/api/login`. `forgot-password` nunca revela si un email está registrado (mismo mensaje `200` siempre); `reset-password`/`verify-email` usan tokens de un solo uso, expirables, con hash SHA-256 persistido (nunca el valor crudo). `GET`/`PATCH /api/users/me` y `register`/`login` se extienden de forma aditiva con `email_verified` (§4.2, §5) — no rompe el contrato existente. Nuevo servicio de correo centralizado (Resend, SDK oficial) detrás de un `EmailSender` abstracto — ningún endpoint llama a Resend directamente. Verificado con 30 pruebas nuevas + la suite completa (175/175, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`), más una prueba manual end-to-end contra el backend real (los cuatro endpoints, con `NullEmailSender` en desarrollo sin `RESEND_API_KEY`).
+>
+> **v0.72 — Tero con Places y Personas, y notificaciones push (`ADR-053`, **PROPUESTO**):** nuevos `POST`/`DELETE /api/push/devices` (§4.45) y `GET /api/places/top` (§4.46). Tero gana tres herramientas de lectura (`people_suggestions`, `places_recommend`, `place_read`) y una propuesta con confirmación (`propose_reserve_place`, tarjeta `kind: "reserve_place"`). Una migración (`a1c4e8f2b903`): `push_devices`.
 >
 > **v0.71 — PDF de reserva y sugerencias (`ADR-052`, **PROPUESTO**):** nuevo `GET /api/reservations/<id>/pdf` (comprobante en PDF de una reserva propia; `404` a cualquier otra persona, también a quien gestiona el lugar). `GET /api/users/suggestions` gana `avatar_url` y `?limit=` (1–20, `400` si no es número). Aditivo.
 >
@@ -2220,6 +2222,23 @@ Este documento **no modifica** el backend ni el Frontend: define el contrato de 
 | `GET /api/posts?author_id=<uuid>` | Igual que el feed (`§4.3`), pero solo las publicaciones de esa persona. Las reglas de visibilidad (cuentas privadas, bloqueos, contenido sensible, temas y términos silenciados) aplican igual: una cuenta privada no seguida devuelve `{posts: []}`. `400` si `author_id` no es un UUID. |
 
 ---
+
+## 4.45 Notificaciones push (`ADR-053`) — v0.72
+
+Exigen sesión (`401`). La identidad sale del JWT. El token nunca se devuelve.
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/push/devices` | Cuerpo `{token, platform?}`: `token` es el de Firebase del teléfono (20–4096 caracteres, sin espacios; `400` si no); `platform` `android` (por defecto) o `ios`. UPSERT por token: si el token ya era de otra cuenta pasa a esta. Máximo 10 dispositivos por persona (se conservan los más recientes). `200 {"registered": true}` |
+| `DELETE /api/push/devices` | Cuerpo `{token}`. Solo borra un dispositivo propio; idempotente. `200 {"registered": false}` |
+
+**Qué se envía** (solo con `PUSH_ENABLED` y credenciales de Firebase; si no, nada y sin errores): seguir / solicitud / solicitud aceptada, me gusta, comentario y mención (tipos de `§4.7`), y un mensaje directo o de grupo nuevo. `data` (todo texto): `type` (`like`, `comment`, `follow`, `follow_request`, `follow_accepted`, `mention`, `message`, `group_message`) más `post_id`, `actor_id`, `sender_id` o `group_id` según el caso. Un reintento idempotente de un mensaje no vuelve a avisar; en un grupo no se avisa a quien escribe ni a cuentas bloqueadas con quien escribe. Un fallo de Firebase nunca rompe la acción que lo originó.
+
+## 4.46 Lugares mejor valorados (`ADR-053`) — v0.72
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/places/top?category=&limit=` | Igual que el listado de lugares (§4.30) pero ordenado por promedio de reseñas visibles, luego cantidad de reseñas, luego los que tienen imagen, luego nombre. `400` con categoría inexistente o `limit` inválido. No usa la ubicación de nadie. |
 
 ## 4.42 Explorar y seguidores/seguidos (`ADR-050`) — v0.69
 

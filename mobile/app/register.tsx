@@ -2,6 +2,8 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 
+import { GoogleSignInButton } from '@features/auth/components/GoogleSignInButton';
+import { AUTH_BUTTON_MIN_HEIGHT, AUTH_BUTTON_RADIUS } from '@features/auth/lib/authButtonStyle';
 import {
   MIN_AGE_MESSAGE,
   isValidISODate,
@@ -205,7 +207,16 @@ export default function Register() {
         privacidad se publicarán en la web de THERS antes del lanzamiento.
       </Text>
 
-      <Button label="Crear cuenta" onPress={handleSubmit} loading={submitting} />
+      {/* Misma forma que «Continuar con Google» (authButtonStyle.ts); el borde es el morado del botón. */}
+      <Button
+        label="Crear cuenta"
+        onPress={handleSubmit}
+        loading={submitting}
+        style={{ borderRadius: AUTH_BUTTON_RADIUS, minHeight: AUTH_BUTTON_MIN_HEIGHT }}
+      />
+
+      {/* Crear la cuenta con Google: el servidor la crea y luego se completan teléfono y fecha. */}
+      <GoogleSignInButton onError={setFormError} disabled={submitting} />
     </Screen>
   );
 }

@@ -4,13 +4,15 @@
 |---|---|
 | Documento | `docs/architecture/DATABASE_ARCHITECTURE.md` |
 | Identificador propuesto | `DB-001` (sigue el patrón `HB-001`/`ARC-001`/`DS-001`/`WF-001`/`PV-001`/`FAS-001`) — **pendiente de ratificación formal** |
-| Versión | 0.49 |
+| Versión | 0.50 |
 | Estado | **Borrador / Contrato técnico — pendiente de aprobación del equipo** |
 | Depende de | `HB-001` (organización, gobernanza, git flow, seguridad), `REPOSITORY_STRUCTURE.md` (ubicación del backend y carpeta futura `database/`) |
 | Motivo | El `CLAUDE.md` maestro (§4, §14) identificó que la arquitectura de Base de Datos no estaba formalmente documentada |
 | Idioma | Español (documentación oficial), identificadores/código en inglés |
 
 > ⚠️ **Nota de alcance y honestidad de fuentes.** Este documento es un **contrato técnico previo a la implementación**, no una descripción de un esquema ya existente. Al momento de escribirlo (v0.1), el backend **no tenía base de datos, ni ORM, ni driver de PostgreSQL instalado**: la autenticación funcionaba contra credenciales hardcodeadas (ver §4). Todo lo que aquí se define como "decidido" se limita a lo que la documentación oficial ya respalda o a lo que el estado real del código justifica de forma evidente. Todo lo demás está marcado explícitamente como **PENDIENTE DE APROBACIÓN** (§14). No se inventan entidades, columnas, índices ni políticas que el proyecto no necesite hoy.
+>
+> **v0.50 — dispositivos para notificaciones push (`ADR-053`, **PROPUESTO**):** una migración (`a1c4e8f2b903`, cuelga de `f0719aad83a2`) y una tabla, `push_devices`: `id`, `user_id` (→ `users`, `CASCADE`), `token` (token de Firebase del teléfono, **`UNIQUE`**: si alguien inicia sesión en un teléfono de otra cuenta, el token pasa a la nueva), `platform` (`android`/`ios`, `CHECK`), `created_at`, `last_seen_at`. Índice por `user_id`. El token se borra con la cuenta y cuando Firebase responde que ya no existe.
 >
 > **v0.48 — Reels con Mux (`ADR-043-A`, **PROPUESTO**, tras `VIDEOS_ENABLED`):** una migración aditiva (`e1f7c3b9a526`, cuelga de `d8a4b2e6f517`) y tres tablas.
 >
