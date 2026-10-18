@@ -37,6 +37,12 @@
       ],
       "expo-sharing",
       [
+        "expo-notifications",
+        {
+          "color": "#a855f7"
+        }
+      ],
+      [
         "expo-audio",
         {
           "microphonePermission": "THERS usa el micrófono solo cuando pulsás el botón de grabar una nota de voz o de dictarle a Tero. El audio de las notas de voz se envía a la persona que elegís."

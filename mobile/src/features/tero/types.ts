@@ -84,7 +84,7 @@ export type TeroMessage = {
 export type TeroMessageStatus = 'sending' | 'sent' | 'failed';
 
 /** Acciones que Tero puede PREPARAR (ADR-041 §6.2). Nunca las ejecuta: las confirma la persona. */
-export type TeroActionKind = 'follow_user' | 'unfollow_user' | 'update_profile';
+export type TeroActionKind = 'follow_user' | 'unfollow_user' | 'update_profile' | 'reserve_place';
 
 /**
  * Una acción que Tero preparó y que NO se ha hecho. `summary` lo redacta el servidor a partir de

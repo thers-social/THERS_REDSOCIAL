@@ -26,7 +26,12 @@ import type {
 export const MAX_HISTORY_TURNS = 10;
 const MAX_TURN_LENGTH = 1000;
 
-const ACTION_KINDS: readonly TeroActionKind[] = ['follow_user', 'unfollow_user', 'update_profile'];
+const ACTION_KINDS: readonly TeroActionKind[] = [
+  'follow_user',
+  'unfollow_user',
+  'update_profile',
+  'reserve_place',
+];
 const SOURCES: readonly TeroReplySource[] = ['ai', 'disabled', 'budget', 'refused'];
 
 // --- Lo que se envía ------------------------------------------------------

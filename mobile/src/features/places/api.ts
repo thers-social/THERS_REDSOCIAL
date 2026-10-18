@@ -56,6 +56,15 @@ export async function fetchCategories(signal?: AbortSignal): Promise<PlaceCatego
   return categories;
 }
 
+/** Los mejor valorados (`GET /api/places/top`, ADR-053), opcionalmente de una categoría. Sin ubicación. */
+export async function fetchTopPlaces(category?: string, signal?: AbortSignal): Promise<PlaceSummary[]> {
+  const { places } = await request<{ places: PlaceSummary[] }>(
+    withQuery('/places/top', { category, limit: 8 }),
+    { authenticated: true, signal },
+  );
+  return places;
+}
+
 export async function fetchNearby(
   params: { origin: LatLng; radius: number; category?: string; limit: number },
   signal?: AbortSignal,

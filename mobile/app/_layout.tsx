@@ -10,6 +10,7 @@ import { useColorScheme, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@features/auth/context/AuthContext';
+import { PushBridge } from '@features/push/usePushNotifications';
 import { PostsProvider } from '@features/posts/PostsContext';
 import { TeroProvider } from '@features/tero/context/TeroContext';
 import { colors, setColorScheme } from '@shared/design/tokens';
@@ -47,6 +48,8 @@ export default function RootLayout() {
           {/* Preferencias de Tero: las leen la burbuja (pestañas) y app/tero/*. */}
           <TeroProvider>
             <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+            {/* Notificaciones push (ADR-053): registra el teléfono y atiende los toques. */}
+            <PushBridge />
             <Stack
               key={scheme}
               screenOptions={{

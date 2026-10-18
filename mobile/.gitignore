@@ -45,3 +45,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Configuración de Firebase del entorno (ADR-053): la genera la consola de Firebase, no se versiona.
+google-services.json
