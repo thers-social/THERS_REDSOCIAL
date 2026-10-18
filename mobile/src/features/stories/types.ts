@@ -21,7 +21,9 @@ export type Story = {
   id: string;
   author: StoryAuthor;
   content: string | null;
-  image: { url: string; width: number; height: number };
+  // `url` es null mientras la moderación (ADR-044) no la aprueba; solo la ve quien la publicó.
+  image: { url: string | null; width: number; height: number };
+  moderation_status?: "pending" | "held" | "rejected";
   created_at: string;
   expires_at: string;
   seen_by_me?: boolean;

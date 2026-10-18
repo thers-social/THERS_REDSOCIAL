@@ -31,6 +31,8 @@ def create_app():
 
     app.extensions["media_storage"] = build_media_storage(app.config)
     configure_media_url(app.config["MEDIA_PUBLIC_BASE_URL"])
+    from app.application.media.image_visibility import configure_moderation
+    configure_moderation(app.config.get("MODERATION_ENABLED"))
 
     # Documentos privados de reclamos (ADR-040 fase 6): almacenamiento aparte, nunca público.
     from app.infrastructure.media.private_storage import build_private_storage
@@ -127,6 +129,10 @@ def create_app():
     from app.interfaces.routes.moderation_routes import moderation_bp
     app.register_blueprint(moderation_bp, url_prefix="/api")
 
+    # Panel de moderación de contenido y apelaciones (ADR-044): apagado con MODERATION_ENABLED.
+    from app.interfaces.routes.content_moderation_routes import content_moderation_bp
+    app.register_blueprint(content_moderation_bp, url_prefix="/api")
+
     # THERS Places (ADR-040): catálogo público de lugares, solo lectura en la fase 1.
     from app.interfaces.routes.place_routes import places_bp
     app.register_blueprint(places_bp, url_prefix="/api")
@@ -142,6 +148,38 @@ def create_app():
     # Tero, asistente con IA (ADR-041, fase 4): chat. Apagado por defecto (TERO_ENABLED).
     from app.interfaces.routes.tero_routes import tero_bp
     app.register_blueprint(tero_bp, url_prefix="/api")
+
+    # Moderación de contenido (ADR-044): clasificador de imágenes. Solo existe el simulado y solo si
+    # se pide explícitamente; sin él, el worker deja todo retenido (falla cerrado).
+    from app.infrastructure.content_moderation.factory import image_classifier
+    from app.infrastructure.content_moderation.factory import text_classifier
+    app.extensions["thers_content_moderation"] = {
+        "image_classifier": image_classifier(app),
+        "text_classifier": text_classifier(app),
+    }
+
+    # Reels con Mux (ADR-043-A): apagado por defecto (VIDEOS_ENABLED). Sin credenciales no hay cliente.
+    from app.infrastructure.video.mux_client import build_mux_client, build_playback_signer
+
+    app.extensions["mux_client"] = build_mux_client(app.config)
+    app.extensions["video_playback_signer"] = build_playback_signer(app.config)
+    from app.interfaces.routes.video_routes import videos_bp
+    app.register_blueprint(videos_bp, url_prefix="/api")
+
+    # Avisos y automatización (ADR-044 §2.8): aviso directo por correo y rutas internas para n8n.
+    from app.application.automation.alerts import TeamAlerter
+    from app.infrastructure.email.factory import create_email_sender
+
+    app.extensions["team_alerter"] = TeamAlerter(
+        create_email_sender(
+            app.config.get("RESEND_API_KEY"), app.config.get("EMAIL_FROM"),
+            app.config.get("EMAIL_REPLY_TO"),
+        ),
+        app.config.get("MODERATION_ALERT_EMAIL"),
+        app.config.get("MODERATION_PANEL_URL"),
+    )
+    from app.interfaces.routes.internal_routes import internal_bp
+    app.register_blueprint(internal_bp, url_prefix="/api")
 
     # Comandos de línea de comandos (flask set-moderator, flask unsuspend-user).
     from app.interfaces.cli import register_cli

@@ -2,9 +2,12 @@
 # `expires_at > now`: es lo que garantiza que una historia vencida no se vea, aunque su fila o
 # su archivo sigan ahí hasta la purga (ADR-042 §3.4).
 
+from flask import current_app
 from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError
 
+from app.domain.content_moderation import jobs as moderation_jobs
+from app.domain.content_moderation import subjects
 from app.domain.restrictions.kinds import BLOCK
 from app.domain.stories.rules import StoryRepository
 from app.extensions import db
@@ -34,6 +37,17 @@ _VISIBLE_AUTHOR = """
 """
 
 
+# Moderación (ADR-044): con ella encendida, un tercero solo ve lo `approved`; quien publicó ve lo suyo
+# con su estado. Apagada no filtra nada. `:moderated` lo fija quien consulta desde la configuración.
+_MODERATION_OK = """
+    (NOT :moderated OR s.moderation_status = 'approved' OR s.author_id = CAST(:viewer AS uuid))
+"""
+
+
+def _moderated():
+    return bool(current_app.config.get("MODERATION_ENABLED"))
+
+
 def _story_row(story, author):
     return {
         "id": story.id,
@@ -44,6 +58,8 @@ def _story_row(story, author):
         "height": story.height,
         "created_at": story.created_at,
         "expires_at": story.expires_at,
+        "moderation_status": story.moderation_status,
+        "file_private": story.file_private,
         "author_username": author.username,
         "author_name": author.name,
         "author_avatar_path": author.avatar_path,
@@ -51,7 +67,8 @@ def _story_row(story, author):
 
 
 class SQLAlchemyStoryRepository(StoryRepository):
-    def create(self, author_id, content, storage_key, width, height, expires_at):
+    def create(self, author_id, content, storage_key, width, height, expires_at,
+               moderation_status="approved", file_private=False):
         story = Story(
             author_id=author_id,
             content=content,
@@ -59,8 +76,20 @@ class SQLAlchemyStoryRepository(StoryRepository):
             width=width,
             height=height,
             expires_at=expires_at,
+            moderation_status=moderation_status,
+            file_private=file_private,
         )
         db.session.add(story)
+        if moderation_status == "pending":
+            # El trabajo de revisión va en la MISMA transacción que la historia.
+            from app.infrastructure.persistence.repositories.content_moderation_repository import (
+                SQLAlchemyContentModerationRepository,
+            )
+
+            db.session.flush()
+            SQLAlchemyContentModerationRepository().enqueue(
+                moderation_jobs.KIND_IMAGE, subjects.STORY, story.id
+            )
         db.session.commit()
         author = db.session.get(User, author_id)
         return _story_row(story, author)
@@ -92,13 +121,16 @@ class SQLAlchemyStoryRepository(StoryRepository):
                        count(*) AS stories_count,
                        max(s.created_at) AS latest_at,
                        (array_agg(s.storage_key ORDER BY s.created_at DESC))[1] AS latest_key,
+                       (array_agg(s.file_private ORDER BY s.created_at DESC))[1] AS latest_private,
+                       (array_agg(s.moderation_status ORDER BY s.created_at DESC))[1]
+                           AS latest_status,
                        bool_or(v.viewer_id IS NULL AND s.author_id <> CAST(:viewer AS uuid))
                            AS has_unseen
                 FROM stories s
                 JOIN users u ON u.id = s.author_id
                 LEFT JOIN story_views v
                        ON v.story_id = s.id AND v.viewer_id = CAST(:viewer AS uuid)
-                WHERE s.expires_at > :now AND {_VISIBLE_AUTHOR}
+                WHERE s.expires_at > :now AND {_VISIBLE_AUTHOR} AND {_MODERATION_OK}
                 GROUP BY u.id, u.username, u.name, u.avatar_path
                 ORDER BY (u.id = CAST(:viewer AS uuid)) DESC,
                          bool_or(v.viewer_id IS NULL AND s.author_id <> CAST(:viewer AS uuid))
@@ -106,7 +138,7 @@ class SQLAlchemyStoryRepository(StoryRepository):
                          max(s.created_at) DESC
                 """
             ),
-            {"viewer": str(viewer_id), "now": now, "block": BLOCK},
+            {"viewer": str(viewer_id), "now": now, "block": BLOCK, "moderated": _moderated()},
         ).mappings()
         return [dict(row) for row in rows]
 
@@ -115,7 +147,7 @@ class SQLAlchemyStoryRepository(StoryRepository):
             text(
                 f"""
                 SELECT s.id, s.author_id, s.content, s.storage_key, s.width, s.height,
-                       s.created_at, s.expires_at,
+                       s.created_at, s.expires_at, s.moderation_status, s.file_private,
                        u.username AS author_username, u.name AS author_name,
                        u.avatar_path AS author_avatar_path,
                        (v.viewer_id IS NOT NULL) AS seen_by_me
@@ -124,11 +156,12 @@ class SQLAlchemyStoryRepository(StoryRepository):
                 LEFT JOIN story_views v
                        ON v.story_id = s.id AND v.viewer_id = CAST(:viewer AS uuid)
                 WHERE s.author_id = CAST(:author AS uuid) AND s.expires_at > :now
-                  AND {_VISIBLE_AUTHOR}
+                  AND {_VISIBLE_AUTHOR} AND {_MODERATION_OK}
                 ORDER BY s.created_at ASC
                 """
             ),
-            {"viewer": str(viewer_id), "author": str(author_id), "now": now, "block": BLOCK},
+            {"viewer": str(viewer_id), "author": str(author_id), "now": now, "block": BLOCK,
+             "moderated": _moderated()},
         ).mappings()
         return [dict(row) for row in rows]
 
@@ -171,25 +204,30 @@ class SQLAlchemyStoryRepository(StoryRepository):
         ).scalar_one()
 
     def delete(self, story_id, author_id):
-        key = db.session.execute(
-            select(Story.storage_key).where(Story.id == story_id, Story.author_id == author_id)
-        ).scalar_one_or_none()
-        if key is None:
+        """`(clave, es_privado)` del archivo borrado, o `None` si no existe o no es de esa persona."""
+        row = db.session.execute(
+            select(Story.storage_key, Story.file_private).where(
+                Story.id == story_id, Story.author_id == author_id
+            )
+        ).first()
+        if row is None:
             return None
         db.session.execute(delete(Story).where(Story.id == story_id, Story.author_id == author_id))
         db.session.commit()
-        return key
+        return row[0], bool(row[1])
 
     def purge_expired(self, cutoff):
-        keys = list(
-            db.session.execute(
-                select(Story.storage_key).where(Story.expires_at < cutoff)
-            ).scalars()
-        )
-        if keys:
+        """Lista de `(clave, es_privado)` de lo borrado."""
+        files = [
+            (r[0], bool(r[1]))
+            for r in db.session.execute(
+                select(Story.storage_key, Story.file_private).where(Story.expires_at < cutoff)
+            ).all()
+        ]
+        if files:
             db.session.execute(delete(Story).where(Story.expires_at < cutoff))
             db.session.commit()
-        return keys
+        return files
 
     def keys_for_owner(self, owner_id):
         return list(

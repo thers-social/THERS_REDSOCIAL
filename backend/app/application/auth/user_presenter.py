@@ -55,6 +55,9 @@ def to_public_user(user, followers_count=0, following_count=0):
         # ADR-032 fase 2: solo para que el cliente decida si muestra la entrada a la
         # página de moderación. No concede nada: las rutas lo vuelven a comprobar.
         "is_moderator": user.is_moderator,
+        # ADR-044 §2.5: rol separado (`reviewer`, `child_safety`, `admin`) o null. Igual que
+        # `is_moderator`, solo decide qué secciones ofrece el panel; el servidor lo comprueba.
+        "moderation_role": user.moderation_role,
         # ADR-032 §5: `true` solo si aceptó la versión VIGENTE. Las cuentas
         # anteriores y las que aceptaron una versión vieja dan `false`, y el
         # cliente les pide aceptar antes de crear contenido.

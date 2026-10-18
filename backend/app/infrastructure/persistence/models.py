@@ -197,6 +197,9 @@ class User(db.Model):
     # por línea de comandos (`flask set-moderator`), nunca por la API. Una cuenta
     # suspendida no puede iniciar sesión y ve `suspension_reason`.
     is_moderator = db.Column(db.Boolean, nullable=False, server_default=text("false"))
+    # Rol separado de moderación de contenido (ADR-044 §2.5); NULL = ninguno. Solo por línea de
+    # comandos. `is_moderator` equivale a `reviewer`.
+    moderation_role = db.Column(db.String(16), nullable=True)
     suspended_at = db.Column(db.DateTime(timezone=True), nullable=True)
     suspension_reason = db.Column(db.String(500), nullable=True)
 
@@ -697,7 +700,22 @@ class MediaAttachment(db.Model):
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
 
+    # Moderación (ADR-044). El valor por defecto de la BASE es 'pending': una fila que no dice su
+    # estado no se publica (falla cerrado). La aplicación lo fija siempre de forma explícita
+    # (`content_moderation.initial_status`). Las filas anteriores a la migración son 'approved'.
+    moderation_status = db.Column(
+        db.String(10), nullable=False, server_default=text("'pending'")
+    )
+    # `auto` (motor de políticas) o el id de la persona que decidió.
+    moderation_decided_by = db.Column(db.String(40), nullable=True)
+    moderation_decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     __table_args__ = (
+        db.CheckConstraint(
+            "moderation_status IN ('pending', 'approved', 'held', 'rejected')",
+            name="ck_media_attachments_moderation_status",
+        ),
+        db.Index("ix_media_attachments_moderation_status", "moderation_status"),
         db.CheckConstraint(
             "((post_id IS NOT NULL)::int + (message_id IS NOT NULL)::int "
             "+ (review_id IS NOT NULL)::int) = 1",
@@ -1726,6 +1744,8 @@ class AdminAuditLog(db.Model):
     resource_type = db.Column(db.String(30), nullable=False)
     resource_id = db.Column(PG_UUID(as_uuid=True), nullable=True)
     changes = db.Column(JSONB, nullable=True)
+    # `human` | `system` (ADR-044): distingue una decisión automática de una de una persona.
+    actor_kind = db.Column(db.String(8), nullable=False, server_default=text("'human'"))
     created_at = db.Column(
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -2145,6 +2165,123 @@ class TeroPendingAction(db.Model):
     )
 
 
+# --- Moderación de contenido (ADR-044) ---
+
+
+class ModerationJob(db.Model):
+    __tablename__ = "moderation_jobs"
+
+    # Cola persistente (outbox). El payload son SOLO identificadores: nunca el contenido.
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    kind = db.Column(db.String(24), nullable=False)
+    subject_type = db.Column(db.String(24), nullable=False)
+    subject_id = db.Column(PG_UUID(as_uuid=True), nullable=False)
+    # Único: encolar dos veces el mismo hecho no crea un segundo trabajo.
+    idempotency_key = db.Column(db.String(120), nullable=False, unique=True)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'queued'"))
+    attempts = db.Column(db.SmallInteger, nullable=False, server_default=text("0"))
+    next_attempt_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    locked_by = db.Column(db.String(60), nullable=True)
+    locked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Clase del error, nunca texto del proveedor ni del contenido.
+    last_error = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    finished_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'dead')",
+            name="ck_moderation_jobs_status",
+        ),
+        db.Index("ix_moderation_jobs_subject", "subject_type", "subject_id"),
+    )
+
+
+class ModerationResult(db.Model):
+    __tablename__ = "moderation_results"
+
+    # Lo que dijo el clasificador y lo que decidió el motor. SIN el contenido evaluado.
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    job_id = db.Column(
+        PG_UUID(as_uuid=True),
+        db.ForeignKey("moderation_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    provider = db.Column(db.String(40), nullable=False)
+    model_version = db.Column(db.String(60), nullable=False)
+    categories = db.Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    scores = db.Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    # Sin 'rejected': la base impide que una decisión automática rechace (ADR-044 §2.3).
+    decision = db.Column(db.String(10), nullable=False)
+    priority = db.Column(db.String(8), nullable=False, server_default=text("'normal'"))
+    policy_version = db.Column(db.String(20), nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "decision IN ('approved', 'held', 'pending')", name="ck_moderation_results_decision"
+        ),
+        db.CheckConstraint(
+            "priority IN ('normal', 'high', 'critical')", name="ck_moderation_results_priority"
+        ),
+    )
+
+
+class ModerationAppeal(db.Model):
+    __tablename__ = "moderation_appeals"
+
+    # Apelación de una persona contra la retención o el rechazo de su contenido (ADR-044 §2.7).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    subject_type = db.Column(db.String(24), nullable=False)
+    subject_id = db.Column(PG_UUID(as_uuid=True), nullable=False)
+    reason = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'open'"))
+    original_decided_by = db.Column(db.String(40), nullable=True)
+    reviewer_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    resolution_note = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+
+class AiUsage(db.Model):
+    __tablename__ = "ai_usage"
+
+    # Gasto mensual de IA POR PROPÓSITO (ADR-045 §2.3). Al lado de `tero_usage`, que no se toca.
+    period = db.Column(db.String(7), primary_key=True)
+    purpose = db.Column(db.String(40), primary_key=True)
+    input_tokens = db.Column(db.BigInteger, nullable=False, server_default="0")
+    output_tokens = db.Column(db.BigInteger, nullable=False, server_default="0")
+    cost_micro_usd = db.Column(db.BigInteger, nullable=False, server_default="0")
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    __table_args__ = (
+        CheckConstraint("period ~ '^[0-9]{4}-[0-9]{2}$'", name="ck_ai_usage_period"),
+        CheckConstraint(
+            "input_tokens >= 0 AND output_tokens >= 0 AND cost_micro_usd >= 0",
+            name="ck_ai_usage_nonnegative",
+        ),
+    )
+
 class Story(db.Model):
     __tablename__ = "stories"
 
@@ -2170,7 +2307,22 @@ class Story(db.Model):
     )
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
 
+    # Moderación (ADR-044): mismo patrón que `media_attachments`. El valor por defecto de la BASE es
+    # 'pending' (falla cerrado); la aplicación lo fija siempre de forma explícita. Las historias
+    # anteriores a la migración son 'approved'.
+    moderation_status = db.Column(db.String(10), nullable=False, server_default=text("'pending'"))
+    moderation_decided_by = db.Column(db.String(40), nullable=True)
+    moderation_decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # `true` = el archivo vive en el almacenamiento PRIVADO y solo se sirve con una URL firmada de
+    # vida corta, emitida tras comprobar permisos. Las historias anteriores son públicas (false).
+    file_private = db.Column(db.Boolean, nullable=False, server_default=text("false"))
+
     __table_args__ = (
+        db.CheckConstraint(
+            "moderation_status IN ('pending', 'approved', 'held', 'rejected')",
+            name="ck_stories_moderation_status",
+        ),
+        db.Index("ix_stories_moderation_status", "moderation_status"),
         db.Index("ix_stories_author_expires", "author_id", "expires_at"),
         db.Index("ix_stories_expires_at", "expires_at"),
     )
@@ -2193,3 +2345,104 @@ class StoryView(db.Model):
     viewed_at = db.Column(
         db.DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+
+
+class DomainEvent(db.Model):
+    __tablename__ = "domain_events"
+
+    # Outbox de eventos hacia n8n (ADR-044 §2.8). El payload son identificadores, categorías y
+    # conteos validados contra un esquema cerrado (`domain/automation/events.py`).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    event_type = db.Column(db.String(40), nullable=False)
+    payload = db.Column(JSONB, nullable=False)
+    idempotency_key = db.Column(db.String(120), nullable=False, unique=True)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'queued'"))
+    attempts = db.Column(db.SmallInteger, nullable=False, server_default=text("0"))
+    next_attempt_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    last_error = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('queued', 'sent', 'failed', 'dead')", name="ck_domain_events_status"
+        ),
+    )
+
+
+# --- Reels con Mux (ADR-043, ADR-043-A) ---
+
+
+class Video(db.Model):
+    __tablename__ = "videos"
+
+    # Un Reel: reserva de subida directa a Mux y su ciclo de vida. Nace `pending` en moderación y no
+    # se ve sin `ready` Y `approved` (ver `video_repository`).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    owner_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    caption = db.Column(db.String(200), nullable=True)
+    status = db.Column(db.String(12), nullable=False, server_default=text("'pending'"))
+    mux_upload_id = db.Column(db.String(80), nullable=True)
+    mux_asset_id = db.Column(db.String(80), nullable=True)
+    mux_playback_id = db.Column(db.String(80), nullable=True)
+    duration_ms = db.Column(db.Integer, nullable=True)
+    width = db.Column(db.Integer, nullable=True)
+    height = db.Column(db.Integer, nullable=True)
+    failure_reason = db.Column(db.String(40), nullable=True)
+    idempotency_key = db.Column(db.String(80), nullable=True)
+    moderation_status = db.Column(db.String(10), nullable=False, server_default=text("'pending'"))
+    moderation_decided_by = db.Column(db.String(40), nullable=True)
+    moderation_decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    ready_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+
+class MuxWebhookEvent(db.Model):
+    __tablename__ = "mux_webhook_events"
+
+    # Libro de eventos de Mux: un id de evento se procesa UNA vez. Guarda solo identificadores,
+    # duración y reproducción, no el evento completo.
+    event_id = db.Column(db.String(80), primary_key=True)
+    event_type = db.Column(db.String(60), nullable=False)
+    object_id = db.Column(db.String(80), nullable=True)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'processed'"))
+    data = db.Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    received_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class PendingExternalDeletion(db.Model):
+    __tablename__ = "pending_external_deletions"
+
+    # Borrados en proveedores externos con reintentos (ADR-043-A §3).
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    provider = db.Column(db.String(20), nullable=False)
+    external_id = db.Column(db.String(80), nullable=False)
+    status = db.Column(db.String(10), nullable=False, server_default=text("'queued'"))
+    attempts = db.Column(db.SmallInteger, nullable=False, server_default=text("0"))
+    next_attempt_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    last_error = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    done_at = db.Column(db.DateTime(timezone=True), nullable=True)

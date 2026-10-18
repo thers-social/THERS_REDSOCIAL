@@ -87,4 +87,4 @@ def send_message(
             message_repository.delete(message.id, sender_id)
             raise
 
-    return to_public_messages([message], message_repository)[0], created
+    return to_public_messages([message], message_repository, viewer_id=sender_id)[0], created

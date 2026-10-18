@@ -8,7 +8,7 @@
 
 from functools import wraps
 
-from flask import jsonify
+from flask import current_app, jsonify
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.infrastructure.persistence.repositories.moderation_repository import (
@@ -26,6 +26,12 @@ def moderator_required(view):
         if user is None or not user.is_moderator or user.suspended_at is not None:
             # Idéntico al manejador global de `error_handlers.py`.
             return jsonify({"msg": "Recurso no encontrado"}), 404
+        # ADR-044 decisión 5: con MODERATION_REQUIRE_2FA la cuenta moderadora necesita 2FA activa.
+        if current_app.config.get("MODERATION_REQUIRE_2FA") and not user.two_factor_enabled:
+            return jsonify({
+                "msg": "Activa la verificación en dos pasos para moderar",
+                "code": "two_factor_required",
+            }), 403
         return view(*args, **kwargs)
 
     return wrapper

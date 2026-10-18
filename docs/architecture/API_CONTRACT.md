@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.60 (Propuesta) |
+| Versión | 0.65 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -44,6 +44,16 @@
 >
 > **v0.14 — recuperación de contraseña y verificación de email vía Resend (`ADR-009-password-reset-and-email-verification.md`):** se agregan `POST /api/forgot-password`, `POST /api/reset-password`, `POST /api/send-verification-email` y `POST /api/verify-email` (§4.8) — séptima y octava entidad del alcance objetivo del producto (`DATABASE_ARCHITECTURE.md` §4.B, candidata "Verificación de correo, Recuperación de contraseña") en pasar a implementadas. Rutas planas bajo `/api`, sin prefijo `/auth/` — mismo criterio que `/api/register`/`/api/login`. `forgot-password` nunca revela si un email está registrado (mismo mensaje `200` siempre); `reset-password`/`verify-email` usan tokens de un solo uso, expirables, con hash SHA-256 persistido (nunca el valor crudo). `GET`/`PATCH /api/users/me` y `register`/`login` se extienden de forma aditiva con `email_verified` (§4.2, §5) — no rompe el contrato existente. Nuevo servicio de correo centralizado (Resend, SDK oficial) detrás de un `EmailSender` abstracto — ningún endpoint llama a Resend directamente. Verificado con 30 pruebas nuevas + la suite completa (175/175, ejecutada contra PostgreSQL 16 real, incluido un ciclo de `flask db upgrade` sobre `thers_dev` y `thers_test`), más una prueba manual end-to-end contra el backend real (los cuatro endpoints, con `NullEmailSender` en desarrollo sin `RESEND_API_KEY`).
 >
+> **v0.65 — Reels con Mux (`ADR-043`, `ADR-043-A`, **PROPUESTO**, `VIDEOS_ENABLED` apagado por defecto):** 6 rutas nuevas (§4.40). Apagado, todas responden `404`, también el webhook. **La subida pública sigue bloqueada por D3**: solo suben las cuentas de `VIDEO_UPLOAD_ALLOWLIST` (la apertura al público exige cambiar código, no una variable). El panel de moderación acepta `?type=video` (cola, detalle, decisión, apelaciones); `preview-url` de un video devuelve un HLS firmado de 5 minutos. Variables solo del servidor: `VIDEOS_ENABLED`, `VIDEO_UPLOAD_ALLOWLIST`, `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_WEBHOOK_SECRET`, `MUX_SIGNING_KEY_ID`, `MUX_SIGNING_PRIVATE_KEY`, `MUX_CORS_ORIGIN`. Comando nuevo: `flask videos-sweep`. **El adaptador HTTP de Mux no se ha probado contra Mux real** (no hay cuenta).
+>
+> **v0.64 — automatización con n8n (`ADR-044` §2.8, **PROPUESTO**, apagada por defecto):** 2 rutas internas, solo con `N8N_ENABLED` y firma HMAC válida (si no, `404`): `GET /api/internal/moderation/summary` (solo conteos) y `POST /api/internal/notices` `{kind}` (correo de aviso; 20 por hora). `POST /api/reports` con motivo `child_safety` ahora avisa al equipo por correo desde el servidor (`MODERATION_ALERT_EMAIL`); la respuesta no cambia. Contrato completo en `docs/integration/N8N_CONTRACT.md`.
+>
+> **v0.63 — IA para clasificar texto de moderación (`ADR-045`, **PROPUESTO**):** **sin endpoints nuevos** ni cambios de respuesta. Solo servidor: propósito `moderation_text` con credencial, modelo, prompt y tope **propios** (`AI_MODERATION_TEXT_ENABLED`, `_API_KEY`, `_MODEL`, `_MONTHLY_BUDGET_USD`, `_TIMEOUT_SECONDS`), apagado por defecto; **no usa** `ANTHROPIC_API_KEY` ni `TERO_*`. `MODERATION_TEXT_CLASSIFIER=fake` activa un clasificador simulado solo para desarrollo y pruebas. Todavía **no está conectado a ninguna ruta de publicación**: clasificar publicaciones o comentarios exige añadir `moderation_status` a esos contenidos, algo que `ADR-044` aún no autoriza (decisión N4).
+>
+> **v0.62 — panel de moderación de contenido y apelaciones (`ADR-044` §2.6–§2.7, **PROPUESTO**, tras `MODERATION_ENABLED`):** 14 rutas nuevas (§4.39). Con el flag apagado todas responden `404`. `GET /api/users/me` añade `moderation_role` (`null` si no tiene). Una imagen no aprobada que llega a quien la subió incluye ahora su `id`, para poder apelar. Variable nueva: `MODERATION_REQUIRE_2FA` (apagada por defecto; encendida, las rutas de moderación —también las de reportes— responden `403 {"code": "two_factor_required"}` a una cuenta moderadora sin 2FA). Comando nuevo: `flask set-moderation-role <correo> reviewer|child_safety|admin|none`.
+>
+> **v0.61 — moderación de contenido, base (`ADR-044`, **PROPUESTO**, `MODERATION_ENABLED` apagado por defecto):** **sin endpoints nuevos.** Con el flag **apagado** ninguna respuesta cambia. Con él **encendido** cambia la forma de `images[]` (publicaciones, mensajes y fotos de reseñas de lugares), de forma aditiva: (1) un tercero solo recibe las imágenes `approved`; (2) quien subió la imagen la recibe siempre, pero mientras no esté aprobada con `url: null` y `moderation_status` (`pending`/`held`/`rejected`); (3) `GET /api/media/<clave>` responde `404` para el archivo de una imagen no aprobada. Los clientes deben tolerar `url: null` antes de encender el flag. `has_image` de la lista de conversaciones cuenta solo las imágenes visibles para quien consulta. Variables nuevas, solo del servidor: `MODERATION_ENABLED`, `MODERATION_CLASSIFIER` (`none`/`fake`), `MODERATION_NEW_ACCOUNT_DAYS`, `MODERATION_HOLD_ALL_NEW_ACCOUNTS`, y los umbrales y reintentos de `backend/.env.example`. Comando nuevo: `flask moderation-worker`.
+
 > **v0.60 — Historias de 24 horas (`ADR-042-stories.md`, **PROPUESTO**, implementado en el backend):** nuevos `POST /api/stories`, `GET /api/stories`, `GET /api/users/<id>/stories`, `POST /api/stories/<id>/view`, `GET /api/stories/<id>/views` y `DELETE /api/stories/<id>` (§4.38). Aditivo: ningún endpoint existente cambia. Migración `d1e5b8f2a640` (`stories`, `story_views`). La exportación de datos suma `stories.json` y `story_views.json` (`ADR-028`) y la eliminación de cuenta recoge los archivos (`ADR-031`). **Variable nueva, solo del servidor: `STORIES_ENABLED`, APAGADA por defecto:** apagada, las seis rutas responden `404 {"msg": "Recurso no encontrado"}` igual que una URL inexistente, con o sin sesión. La migración `c8dcd63b24d4` une las cabezas de Tero e Historias (sin cambios de esquema).
 >
 > **v0.59 — Tero, fase 6, acciones con confirmación (`ADR-041` §6.2, **ACEPTADO**):** nuevos `POST /api/tero/actions/<id>/confirm` y `POST /api/tero/actions/<id>/cancel` (§4.37), y el chat devuelve siempre `confirmation_cards` (cambio aditivo: lista vacía si no hay). Variable nueva, solo del servidor: `TERO_ACTIONS_ENABLED` (apagada por defecto; exige `TERO_TOOLS_ENABLED`). Una migración (`c4f8a2d6e913`, tabla `tero_pending_actions`).
@@ -2564,6 +2574,29 @@ Cada línea es una **copia** del artículo al cotizar: cambiar o borrar el catá
 
 **En las estadísticas del negocio (§4.34).** `totals.visits` es `{views, phone, website, directions, conversion_percent}` o **`null`** si el periodo suma menos de `min_count` (5) entre los cuatro eventos; en ese caso `hidden` incluye `"visits"` y `series[].views` es `null`. `previous.views` y `change.views` siguen la misma regla (`null` si ocultos o si el periodo anterior fue 0). `conversion_percent` es el porcentaje de (reservas + cotizaciones pedidas) sobre las visitas de la ficha, con un decimal; es `null` sin visitas a la ficha o si hubo más solicitudes que visitas (no se inventa un porcentaje mayor de 100).
 
+## 4.39 Panel de moderación de contenido y apelaciones (`ADR-044`) — v0.62
+
+**PROPUESTO, sin ratificar.** Todas las rutas responden `404 {"msg": "Recurso no encontrado"}` con `MODERATION_ENABLED` apagado. Autenticación: JWT. La autorización se decide en el servidor, contra la base, en cada petición. Quien no tiene un rol permitido recibe el mismo `404` que una ruta inexistente.
+
+Roles (`users.moderation_role`; `is_moderator` equivale a `reviewer`): `reviewer` revisa la cola general; `child_safety` y `admin` además ven lo **restringido** (señal de seguridad infantil o ilegal); solo `admin` ve la auditoría y los trabajos. Un `reviewer` no recibe lo restringido **ni en la cola, ni en el detalle, ni en las apelaciones, ni en las estadísticas** (siempre `404` o excluido).
+
+| Método y ruta | Rol | Qué hace |
+|---|---|---|
+| `GET /api/moderation/media?status=held\|pending\|rejected\|all&limit&offset` | cualquiera | Cola. Crítico primero, luego lo más antiguo. `limit` 1–50 |
+| `GET /api/moderation/media/<id>` | cualquiera | Detalle: resultados de clasificación (sin el contenido) y rastro de auditoría |
+| `GET /api/moderation/media/<id>/file` | cualquiera | Archivo de la imagen retenida. `Cache-Control: private, no-store`. `501` con almacenamiento remoto (requiere bucket privado, pendiente) |
+| `POST /api/moderation/media/<id>/decision` `{decision, note?}` | cualquiera | `approved`/`held`/`rejected`. Auditada como `human`. Nota ≤ 500 |
+| `GET /api/moderation/stats` | cualquiera | Conteos por estado y prioridad, trabajos, últimos 7 días, apelaciones |
+| `GET /api/moderation/appeals?status=open\|upheld\|overturned` | cualquiera | Apelaciones con `due_at` (72 h) y `overdue` |
+| `POST /api/moderation/appeals/<id>/resolve` `{outcome, note?}` | cualquiera | `upheld` o `overturned` (aprueba la imagen). `403` si quien resuelve tomó la decisión original o es la persona apelante; `409` si ya estaba resuelta |
+| `GET /api/moderation/audit?limit&offset` | `admin` | Decisiones automáticas y humanas |
+| `GET /api/moderation/jobs?status=failed\|dead\|all` | `admin` | Trabajos fallidos |
+| `POST /api/moderation/jobs/<id>/retry` | `admin` | Devuelve un trabajo `failed`/`dead` a la cola. Auditada |
+| `POST /api/appeals` `{attachment_id, reason}` | persona autenticada | Apela la retención o el rechazo de **su** imagen. `404` si no es suya, no existe o está aprobada; `409` si ya hay una abierta; `429` por límite (10 por hora) o más de 5 abiertas |
+| `GET /api/appeals` | persona autenticada | Sus apelaciones |
+
+Errores: `400` parámetro inválido, `401` sin sesión, `403` (resolver la propia decisión o `two_factor_required`), `404`, `409`, `429`.
+
 ## 4.38 Historias de 24 horas (`ADR-042`) — v0.60
 
 > **Interruptor `STORIES_ENABLED` (apagado por defecto).** Mientras esté apagado, **todas** las rutas de esta sección responden `404 {"msg": "Recurso no encontrado"}` —el mismo cuerpo que cualquier URL inexistente— tanto con sesión como sin ella, antes de autenticar y de leer o escribir nada. Activarlo es una decisión aparte: el bucket de imágenes es público y no existe `moderation_status` (ver `ADR-042` §4 y `ADR-044`). Los clientes deben tratar ese `404` como «no hay historias» y ocultar la tira, sin mostrar un error.
@@ -2584,3 +2617,18 @@ Todas exigen `Authorization: Bearer <token>`. Una historia dura **24 horas** (`e
 **Caducidad.** Toda lectura filtra `expires_at > ahora`; eso, no la purga, es lo que garantiza que no se vea una historia vencida. `scripts/purge_expired_data.py` borra después filas y archivos (con 6 horas de margen) y los cuenta como `stories`.
 
 **Pendiente (`ADR-042` §8):** el bucket es público, así que quien tenga la URL de la imagen la abre sin sesión mientras el archivo exista (D1); sin moderación automática de imágenes, solo reportes (`ADR-032`/`ADR-038`), y el tipo de reporte `story` (D3) no existe aún.
+
+## 4.40 Reels con Mux (`ADR-043`, `ADR-043-A`) — v0.65
+
+**PROPUESTO, sin ratificar.** Todas las rutas responden `404 {"msg": "Recurso no encontrado"}` con `VIDEOS_ENABLED` apagado, antes de autenticar. Nada de esto abre la subida al público (D3).
+
+| Método y ruta | Auth | Qué hace |
+|---|---|---|
+| `POST /api/videos/uploads` `{caption?, idempotency_key?}` (o encabezado `Idempotency-Key`) | JWT | Reserva una subida directa a Mux. Solo cuentas de la lista de prueba (el resto, `404`). `201 {video: {id, status, upload_url}}`; con la misma clave, `200` con el mismo `id` y `upload_url: null`. `400` entrada inválida, `429` (10 por día), `503` sin proveedor |
+| `GET /api/videos?author&limit&offset` | JWT | Reels que puedes ver: `ready` **y** `approved`, respetando cuentas privadas, bloqueos y suspensión. `limit` 1–30. Cada uno trae `playback: {hls_url, expires_in}` con un token firmado de 1 hora **por espectador** |
+| `GET /api/videos/mine` | JWT | Los tuyos, con `status`, `moderation_status` y `failure_reason` |
+| `GET /api/videos/<id>` | JWT | Uno. Su dueño lo ve en cualquier estado; los demás solo si es visible. `404` indistinguible |
+| `DELETE /api/videos/<id>` | JWT | Borra el tuyo; el asset de Mux se borra por cola con reintentos |
+| `POST /api/webhooks/mux` | firma `Mux-Signature: t=<unix>,v1=<HMAC-SHA256>` | Eventos de Mux. Firma estricta y reciente (±300 s) o `400`; idempotente por id de evento; tolera orden alterado y llegar antes que el video. `404` sin `MUX_WEBHOOK_SECRET` |
+
+El cliente sube el archivo directo a `upload_url` con `PUT` (sin enviar el JWT de THERS). Duración máxima 60 s (se comprueba al llegar `video.asset.ready`; si se pasa, el video queda `blocked` y el asset se borra). Nunca se publica una reproducción que no sea `signed`.

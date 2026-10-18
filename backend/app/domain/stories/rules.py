@@ -62,11 +62,11 @@ class StoryRepository:
         raise NotImplementedError
 
     def delete(self, story_id, author_id):
-        """Borra si es del autor. Devuelve la clave del archivo o `None`."""
+        """Borra si es del autor. Devuelve `(clave, es_privado)` del archivo o `None`."""
         raise NotImplementedError
 
     def purge_expired(self, cutoff):
-        """Borra las historias con `expires_at < cutoff` y devuelve las claves de sus archivos."""
+        """Borra las historias con `expires_at < cutoff` y devuelve `(clave, es_privado)` de cada archivo."""
         raise NotImplementedError
 
     def keys_for_owner(self, owner_id):

@@ -102,13 +102,16 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
         )
 
         # Imágenes de sus historias (ADR-042): igual, las filas caen en cascada y los archivos no.
-        media_keys += list(
-            db.session.execute(select(Story.storage_key).where(Story.author_id == user_id)).scalars()
-        )
+        # Las historias de almacenamiento PRIVADO se borran de su bucket, no del público.
+        story_files = db.session.execute(
+            select(Story.storage_key, Story.file_private).where(Story.author_id == user_id)
+        ).all()
+        media_keys += [key for key, private in story_files if not private]
+        private_story_keys = [key for key, private in story_files if private]
 
         # Documentos de reclamos pendientes (almacenamiento PRIVADO, ADR-040 fase 6): las
         # filas caen en cascada, los archivos no.
-        private_keys = list(
+        private_keys = private_story_keys + list(
             db.session.execute(
                 text(
                     "SELECT document_key FROM place_claims "
@@ -124,6 +127,17 @@ class SQLAlchemyAccountDeleter(AccountDeleter):
         # menciones, filtros, exportaciones...). La prueba de
         # tests/test_account_deletion.py recorre `information_schema` y falla si
         # alguna tabla nueva deja de cumplirlo.
+        # Los videos caen en cascada, pero su asset en Mux no: se encola su borrado en la misma
+        # transacción (ADR-043-A §3). Sin esto quedaría un video huérfano cobrando almacenamiento.
+        db.session.execute(
+            text(
+                "INSERT INTO pending_external_deletions (provider, external_id) "
+                "SELECT 'mux', mux_asset_id FROM videos "
+                "WHERE owner_id = :u AND mux_asset_id IS NOT NULL "
+                "ON CONFLICT (provider, external_id) DO NOTHING"
+            ),
+            {"u": str(user_id)},
+        )
         db.session.execute(delete(User).where(User.id == user_id))
         db.session.commit()
 

@@ -299,6 +299,79 @@ def _positive_float_env(name, default):
     return value
 
 
+# Moderación de contenido (ADR-044). Apagada por defecto: con ella apagada todo se publica como
+# siempre. Encendida, lo nuevo espera revisión y solo se ve `approved`. NO encender para el público
+# sin cola atendida (ADR-044, decisión D5 de la matriz de aprobación).
+Config.MODERATION_ENABLED = _flag_env("MODERATION_ENABLED")
+# `none` (por defecto): no hay clasificador, todo lo nuevo queda retenido para una persona.
+# `fake`: clasificador simulado, SOLO para desarrollo y pruebas. Nunca aprueba por sí solo en
+# producción porque no existe ahí. Los adaptadores reales se añaden tras su aprobación.
+Config.MODERATION_CLASSIFIER = (os.environ.get("MODERATION_CLASSIFIER") or "none").strip().lower()
+# Exige 2FA activa a las cuentas moderadoras (ADR-044 decisión 5). Apagado por defecto para no
+# dejar fuera a quien hoy modera; se enciende cuando todas tengan 2FA.
+Config.MODERATION_REQUIRE_2FA = _flag_env("MODERATION_REQUIRE_2FA")
+Config.MODERATION_NEW_ACCOUNT_DAYS = int(_positive_float_env("MODERATION_NEW_ACCOUNT_DAYS", 7))
+Config.MODERATION_HOLD_ALL_NEW_ACCOUNTS = _flag_env("MODERATION_HOLD_ALL_NEW_ACCOUNTS")
+Config.MODERATION_DOUBT_THRESHOLD = _positive_float_env("MODERATION_DOUBT_THRESHOLD", 0.40)
+Config.MODERATION_SEVERE_THRESHOLD = _positive_float_env("MODERATION_SEVERE_THRESHOLD", 0.85)
+Config.MODERATION_NEW_ACCOUNT_DOUBT_THRESHOLD = _positive_float_env(
+    "MODERATION_NEW_ACCOUNT_DOUBT_THRESHOLD", 0.10
+)
+Config.MODERATION_MAX_ATTEMPTS = int(_positive_float_env("MODERATION_MAX_ATTEMPTS", 5))
+Config.MODERATION_BACKOFF_SECONDS = int(_positive_float_env("MODERATION_BACKOFF_SECONDS", 30))
+Config.MODERATION_LEASE_SECONDS = int(_positive_float_env("MODERATION_LEASE_SECONDS", 300))
+
+# Propósito de IA `moderation_text` (ADR-045): clasificar texto. Credencial, modelo y tope PROPIOS,
+# separados de Tero; apagado por defecto. Sin AI_MODERATION_TEXT_API_KEY no llama a nadie.
+Config.AI_MODERATION_TEXT_ENABLED = _flag_env("AI_MODERATION_TEXT_ENABLED")
+Config.AI_MODERATION_TEXT_API_KEY = (os.environ.get("AI_MODERATION_TEXT_API_KEY") or "").strip() or None
+Config.AI_MODERATION_TEXT_MODEL = (os.environ.get("AI_MODERATION_TEXT_MODEL") or "").strip() or "claude-haiku-5-5"
+Config.AI_MODERATION_TEXT_TIMEOUT_SECONDS = _positive_float_env("AI_MODERATION_TEXT_TIMEOUT_SECONDS", 20.0)
+Config.AI_MODERATION_TEXT_MONTHLY_BUDGET_MICRO = int(
+    round(_positive_float_env("AI_MODERATION_TEXT_MONTHLY_BUDGET_USD", 5.0) * 1_000_000)
+)
+Config.AI_MODERATION_TEXT_PRICE_INPUT_MICRO_PER_MTOK = int(
+    round(_positive_float_env("AI_MODERATION_TEXT_PRICE_INPUT_USD_PER_MTOK", 0.10) * 1_000_000)
+)
+Config.AI_MODERATION_TEXT_PRICE_OUTPUT_MICRO_PER_MTOK = int(
+    round(_positive_float_env("AI_MODERATION_TEXT_PRICE_OUTPUT_USD_PER_MTOK", 0.50) * 1_000_000)
+)
+# `fake` = clasificador de texto simulado, SOLO desarrollo y pruebas.
+Config.MODERATION_TEXT_CLASSIFIER = (os.environ.get("MODERATION_TEXT_CLASSIFIER") or "none").strip().lower()
+
+# Historias nuevas en el almacenamiento PRIVADO (ADR-042/ADR-044): el archivo solo se entrega con una
+# URL firmada de vida corta, tras comprobar permisos y moderación. Apagado por defecto; encendido sin
+# almacenamiento privado, publicar una historia responde 503 (nunca cae al bucket público).
+Config.STORIES_PRIVATE_STORAGE = _flag_env("STORIES_PRIVATE_STORAGE")
+
+# n8n (ADR-044 §2.8): AVISA y ESCALA, nunca decide. Apagado por defecto y sin ninguna URL ni secreto
+# por defecto: sin ambos, no se envía nada y los eventos esperan en la base. Los secretos viven solo
+# en el servidor (nunca en el repositorio).
+Config.N8N_ENABLED = _flag_env("N8N_ENABLED")
+Config.N8N_WEBHOOK_URL = (os.environ.get("N8N_WEBHOOK_URL") or "").strip() or None
+Config.N8N_OUTBOUND_SECRET = (os.environ.get("N8N_OUTBOUND_SECRET") or "").strip() or None
+Config.N8N_INBOUND_SECRET = (os.environ.get("N8N_INBOUND_SECRET") or "").strip() or None
+Config.N8N_TIMEOUT_SECONDS = _positive_float_env("N8N_TIMEOUT_SECONDS", 5.0)
+# Aviso DIRECTO por correo (Resend) de reportes y contenido críticos, sin depender de n8n.
+Config.MODERATION_ALERT_EMAIL = (os.environ.get("MODERATION_ALERT_EMAIL") or "").strip() or None
+Config.MODERATION_PANEL_URL = (os.environ.get("MODERATION_PANEL_URL") or "").strip() or None
+
+# Reels con Mux (ADR-043-A). `VIDEOS_ENABLED` apagado por defecto: todo responde 404. Aunque se
+# encienda, la subida PÚBLICA sigue bloqueada por D3 (`domain/videos/rules.PUBLIC_UPLOAD_ALLOWED` es
+# una constante de código, no una variable): solo suben las cuentas de VIDEO_UPLOAD_ALLOWLIST. Sin
+# credenciales de Mux no se inventa un proveedor: subir responde 503. Los secretos nunca van al repo.
+Config.VIDEOS_ENABLED = _flag_env("VIDEOS_ENABLED")
+Config.VIDEO_UPLOAD_ALLOWLIST = os.environ.get("VIDEO_UPLOAD_ALLOWLIST", "")
+Config.MUX_TOKEN_ID = (os.environ.get("MUX_TOKEN_ID") or "").strip() or None
+Config.MUX_TOKEN_SECRET = (os.environ.get("MUX_TOKEN_SECRET") or "").strip() or None
+Config.MUX_WEBHOOK_SECRET = (os.environ.get("MUX_WEBHOOK_SECRET") or "").strip() or None
+Config.MUX_SIGNING_KEY_ID = (os.environ.get("MUX_SIGNING_KEY_ID") or "").strip() or None
+Config.MUX_SIGNING_PRIVATE_KEY = (os.environ.get("MUX_SIGNING_PRIVATE_KEY") or "").strip() or None
+Config.MUX_CORS_ORIGIN = (os.environ.get("MUX_CORS_ORIGIN") or "").strip() or None
+Config.MUX_TIMEOUT_SECONDS = _positive_float_env("MUX_TIMEOUT_SECONDS", 10.0)
+# `fake` = Mux simulado, SOLO desarrollo y pruebas.
+Config.MUX_CLIENT = (os.environ.get("MUX_CLIENT") or "none").strip().lower()
+
 Config.TERO_ENABLED = _flag_env("TERO_ENABLED")
 # Herramientas de lectura (ADR-041 fase 5): dejan que el modelo consulte datos de la cuenta, así que
 # es OTRO interruptor, apagado por defecto. Con TERO_AI_ENABLED y sin esto, Tero solo conversa.
