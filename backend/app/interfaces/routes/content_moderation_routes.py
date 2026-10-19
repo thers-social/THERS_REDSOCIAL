@@ -53,7 +53,7 @@ def _subject():
 
 
 def _bad_type():
-    return jsonify({"msg": "type debe ser media o story"}), 400
+    return jsonify({"msg": "type debe ser media, story o video"}), 400
 
 
 def _error(error):
@@ -264,7 +264,7 @@ def create_appeal():
             raise uc.InvalidRequestError("attachment_id debe ser un identificador válido")
         subject = subjects.FROM_QUERY.get(data.get("type") or "media")
         if subject is None:
-            raise uc.InvalidRequestError("type debe ser media o story")
+            raise uc.InvalidRequestError("type debe ser media, story o video")
         result = uc.create_appeal(
             user_id, attachment_id, data.get("reason"), _queue, _repository, subject_type=subject,
             events=_events,

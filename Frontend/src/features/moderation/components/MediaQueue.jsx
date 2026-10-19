@@ -5,6 +5,7 @@ import { useToast } from "@shared/components/Toast";
 import { useLanguage } from "@shared/i18n";
 import Spinner from "@shared/components/Spinner";
 import { formatRelativeTime } from "@features/feed/lib/formatRelativeTime";
+import ReelPlayer from "@features/videos/components/ReelPlayer";
 import {
   CONTENT_KINDS,
   DECISIONS,
@@ -36,6 +37,13 @@ function Preview({ id, kind }) {
     // Las historias en el almacenamiento PRIVADO se ven con una URL firmada de 5 minutos; el resto
     // (y las historias públicas) se piden como archivo con la sesión.
     async function load() {
+      if (kind === "video") {
+        // Un reel se ve por HLS con un token firmado de vida corta, que el servidor emite tras
+        // comprobar el rol.
+        const res = await api.get(`/moderation/media/${id}/preview-url`, { params, headers: authHeaders() });
+        if (!cancelled) setSrc(res.data.url);
+        return;
+      }
       if (kind === "story") {
         try {
           const res = await api.get(`/moderation/media/${id}/preview-url`, { params, headers: authHeaders() });
@@ -68,6 +76,13 @@ function Preview({ id, kind }) {
     );
   }
   if (!src) return <div className="h-40 rounded-2xl bg-canvas dark:bg-canvas-dark animate-pulse" />;
+  if (kind === "video") {
+    return (
+      <div className="max-w-xs">
+        <ReelPlayer hlsUrl={src} caption="Reel retenido" onExpired={() => setFailed(true)} />
+      </div>
+    );
+  }
   return <img src={src} alt="Imagen retenida" className="max-h-72 rounded-2xl border border-line dark:border-line-dark" />;
 }
 

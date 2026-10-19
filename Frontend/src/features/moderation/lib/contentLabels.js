@@ -19,6 +19,7 @@ export const MEDIA_TABS = [
 export const CONTENT_KINDS = [
   { value: "media", label: "Imágenes" },
   { value: "story", label: "Historias" },
+  { value: "video", label: "Reels" },
 ];
 
 export const APPEAL_TABS = [
@@ -59,7 +60,7 @@ const CATEGORIES = {
   child_safety: "Seguridad infantil",
 };
 
-const PARENTS = { post: "Publicación", message: "Mensaje", review: "Reseña de lugar" };
+const PARENTS = { post: "Publicación", message: "Mensaje", review: "Reseña de lugar", reel: "Reel" };
 const PRIORITIES = { critical: "Crítica", high: "Alta", normal: "Normal" };
 
 export const reasonText = (reason) => REASONS[reason] || reason || "—";
