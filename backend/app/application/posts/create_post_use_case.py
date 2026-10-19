@@ -10,6 +10,7 @@
 from app.application.media.attachments import discard_files, store_attachments, store_video
 from app.application.mentions.resolve_mentions import resolve_post_mentions
 from app.application.posts.post_presenter import to_public_post
+from app.domain.posts.audience import AUDIENCE_CLOSE_FRIENDS, AUDIENCE_EVERYONE
 from app.domain.posts.exceptions import PostPlaceNotFoundError
 
 
@@ -17,7 +18,8 @@ def create_post(
     author_id, content, post_repository, user_repository, follow_repository,
     mention_repository, notification_repository, restriction_repository,
     is_sensitive=False, prepared_images=None, media_repository=None, media_storage=None,
-    place_id=None, prepared_video=None, video_repository=None,
+    place_id=None, prepared_video=None, video_repository=None, audience=AUDIENCE_EVERYONE,
+    close_friend_repository=None,
 ):
     # Imágenes (ADR-039). `prepared_images` ya viene decodificada, sin EXIF y
     # reducida (la route la procesó antes de llegar acá). Se guardan los
@@ -41,7 +43,9 @@ def create_post(
         raise
 
     try:
-        post = post_repository.create(author_id, content, is_sensitive, place_id=place_id)
+        post = post_repository.create(
+            author_id, content, is_sensitive, place_id=place_id, audience=audience
+        )
         if stored:
             try:
                 media_repository.add_for_post(post.id, author_id, stored)
@@ -64,9 +68,16 @@ def create_post(
     # menciones de esta persona) se descartan en silencio: el post se publica
     # igual y el @texto queda como texto plano. Nadie pierde lo que escribió
     # por haber etiquetado a quien no podía (ADR-023 §Decisión).
+    # Solo para mejores amigos (ADR-054): solo se menciona a quien puede verla.
+    allowed_ids = (
+        close_friend_repository.member_ids(author_id)
+        if audience == AUDIENCE_CLOSE_FRIENDS and close_friend_repository is not None
+        else None
+    )
     mentions = resolve_post_mentions(
         post.id, author_id, content, user_repository, follow_repository,
         mention_repository, notification_repository, restriction_repository,
+        allowed_ids=allowed_ids,
     )
 
     return to_public_post(post, mentions=mentions, place_cards=cards, viewer_id=author_id)

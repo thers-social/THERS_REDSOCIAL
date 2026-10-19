@@ -57,7 +57,9 @@ def _validate(target_type, target_id, reason, details):
     return target_type, target_uuid, reason, details
 
 
-def _assert_visible(target, reporter_id, follow_repository, restriction_repository):
+def _assert_visible(
+    target, reporter_id, follow_repository, restriction_repository, close_friend_repository=None
+):
     """Lanza `ReportTargetNotFoundError` si `reporter_id` no puede ver el
     objetivo. **Solo se puede reportar lo que se puede ver** (ADR-032 §2):
     reportar no debe servir para confirmar que algo existe ni de quién es.
@@ -66,7 +68,10 @@ def _assert_visible(target, reporter_id, follow_repository, restriction_reposito
     inventar reglas nuevas, así que un cambio de visibilidad se propaga solo."""
     if target.target_type in (kinds.TARGET_POST, kinds.TARGET_COMMENT):
         try:
-            assert_post_visible(target.post, reporter_id, follow_repository, restriction_repository)
+            assert_post_visible(
+                target.post, reporter_id, follow_repository, restriction_repository,
+                close_friend_repository,
+            )
         except PostNotFoundError:
             raise ReportTargetNotFoundError()
 
@@ -98,6 +103,7 @@ def create_report(
     report_repository,
     follow_repository,
     restriction_repository,
+    close_friend_repository=None,
 ):
     target_type, target_id, reason, details = _validate(target_type, target_id, reason, details)
 
@@ -107,7 +113,9 @@ def create_report(
 
     # Primero la visibilidad, después "es mío": si fuera al revés, el 400 de
     # "no puedes reportarte" confirmaría que algo existe y es de esa persona.
-    _assert_visible(target, reporter_id, follow_repository, restriction_repository)
+    _assert_visible(
+        target, reporter_id, follow_repository, restriction_repository, close_friend_repository
+    )
 
     if str(target.owner_id) == str(reporter_id):
         raise CannotReportSelfError()

@@ -8,13 +8,15 @@ from app.domain.posts.exceptions import PostNotFoundError
 
 def unlike_post(
     post_id, user_id, post_repository, like_repository, follow_repository,
-    restriction_repository,
+    restriction_repository, close_friend_repository=None,
 ):
     post = post_repository.get_by_id(post_id)
     if post is None:
         raise PostNotFoundError(post_id)
 
-    assert_post_visible(post, user_id, follow_repository, restriction_repository)
+    assert_post_visible(
+        post, user_id, follow_repository, restriction_repository, close_friend_repository
+    )
 
     like_repository.remove(post_id, user_id)
 

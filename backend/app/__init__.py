@@ -88,6 +88,10 @@ def create_app():
     from app.interfaces.routes.story_routes import stories_bp
     app.register_blueprint(stories_bp, url_prefix="/api")
 
+    # Mejores amigos (ADR-054): solo existen con las historias encendidas.
+    from app.interfaces.routes.close_friend_routes import close_friends_bp
+    app.register_blueprint(close_friends_bp, url_prefix="/api")
+
     from app.interfaces.routes.like_routes import likes_bp
     app.register_blueprint(likes_bp, url_prefix="/api")
 

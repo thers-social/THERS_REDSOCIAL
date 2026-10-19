@@ -26,6 +26,9 @@ from app.infrastructure.persistence.repositories.notification_repository import 
 from app.infrastructure.persistence.repositories.post_repository import (
     SQLAlchemyPostRepository,
 )
+from app.infrastructure.persistence.repositories.close_friend_repository import (
+    SQLAlchemyCloseFriendRepository,
+)
 from app.infrastructure.persistence.repositories.restriction_repository import (
     SQLAlchemyRestrictionRepository,
 )
@@ -41,6 +44,7 @@ _follow_repository = SQLAlchemyFollowRepository()
 # ADR-029-blocked-and-restricted-accounts.md: tampoco se da like a quien bloqueó
 # o fue bloqueado.
 _restriction_repository = SQLAlchemyRestrictionRepository()
+_close_friend_repository = SQLAlchemyCloseFriendRepository()
 
 
 @likes_bp.route("/posts/<uuid:post_id>/like", methods=["POST"])
@@ -55,6 +59,7 @@ def like(post_id):
         result = like_post(
             post_id, user_id, _post_repository, _like_repository,
             _notification_repository, _follow_repository, _restriction_repository,
+            close_friend_repository=_close_friend_repository,
         )
     except PostNotFoundError:
         return jsonify({"msg": "Post no encontrado"}), 404
@@ -72,7 +77,7 @@ def unlike(post_id):
     try:
         result = unlike_post(
             post_id, user_id, _post_repository, _like_repository, _follow_repository,
-            _restriction_repository,
+            _restriction_repository, close_friend_repository=_close_friend_repository,
         )
     except PostNotFoundError:
         return jsonify({"msg": "Post no encontrado"}), 404

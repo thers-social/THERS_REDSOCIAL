@@ -22,15 +22,17 @@ from app.infrastructure.persistence.models import (
     VideoAttachment,
 )
 from app.infrastructure.persistence.repositories.post_visibility_sql import (
+    audience_ok as _audience_ok,
     not_blocked as _not_blocked,
     visible_to_viewer as _visible_to_viewer,
 )
 
 
 class SQLAlchemyPostRepository(PostRepository):
-    def create(self, author_id, content, is_sensitive=False, place_id=None):
+    def create(self, author_id, content, is_sensitive=False, place_id=None, audience="everyone"):
         post = Post(
-            author_id=author_id, content=content, is_sensitive=is_sensitive, place_id=place_id
+            author_id=author_id, content=content, is_sensitive=is_sensitive, place_id=place_id,
+            audience=audience,
         )
         db.session.add(post)
         db.session.commit()
@@ -111,7 +113,7 @@ class SQLAlchemyPostRepository(PostRepository):
         )
         topics_ok = or_(Post.author_id == viewer_id, ~has_muted_topic)
 
-        conditions = [visible_to_viewer, not_blocked, sensitive_ok, topics_ok]
+        conditions = [visible_to_viewer, not_blocked, _audience_ok(viewer_id), sensitive_ok, topics_ok]
 
         # Solo las publicaciones de un lugar (ADR-040 fase 4d). Las reglas de visibilidad de
         # arriba aplican igual: el lugar no es una forma de saltárselas.

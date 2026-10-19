@@ -9,9 +9,12 @@ from app.application.media.image_visibility import is_enabled as moderation_enab
 from app.application.media.media_url import media_url
 from app.domain.content_moderation.status import APPROVED, initial_status
 from app.domain.stories.rules import (
+    AUDIENCE_CLOSE_FRIENDS,
+    AUDIENCE_EVERYONE,
     FILE_GRACE,
     STORY_TTL,
     StoryNotFoundError,
+    normalize_audience,
     normalize_story_text,
 )
 
@@ -65,6 +68,8 @@ def present_story(row, include_seen=False, private_storage=None):
         "author": _author(row),
         "content": row["content"],
         "image": image,
+        # A quién va dirigida (ADR-054): `everyone` o `close_friends`.
+        "audience": row.get("audience", AUDIENCE_EVERYONE),
         "created_at": row["created_at"].isoformat(),
         "expires_at": row["expires_at"].isoformat(),
     }
@@ -81,13 +86,17 @@ class PrivateStorageUnavailableError(Exception):
 
 
 def create_story(author_id, content, prepared_image, story_repository, media_storage, now=None,
-                 private_storage=None, private_files=False):
+                 private_storage=None, private_files=False, audience=None):
     """`prepared_image`: `(bytes, content_type, ancho, alto)` ya validada y re-codificada.
+
+    `audience`: `everyone` (por defecto) o `close_friends` (ADR-054). Se valida ANTES de guardar
+    nada, para que una audiencia inválida no deje un archivo suelto.
 
     Primero el archivo y después la fila: si la base falla se borra el archivo, así que no
     queda nada a medias (mismo orden que las imágenes de las publicaciones, ADR-039).
     """
     text = normalize_story_text(content)
+    audience = normalize_audience(audience)
     now = now or _now()
     data, content_type, width, height = prepared_image
     key = f"stories/{uuid.uuid4()}.webp"
@@ -100,7 +109,7 @@ def create_story(author_id, content, prepared_image, story_repository, media_sto
     store.save(key, data, content_type)
     try:
         row = story_repository.create(
-            author_id, text, key, width, height, now + STORY_TTL,
+            author_id, text, key, width, height, now + STORY_TTL, audience=audience,
             moderation_status=initial_status(moderation_enabled()), file_private=private_files,
         )
     except Exception:
@@ -122,6 +131,8 @@ def list_strip(viewer_id, story_repository, now=None, private_storage=None):
             },
             "stories_count": row["stories_count"],
             "has_unseen": bool(row["has_unseen"]),
+            # Alguna de sus historias vigentes es solo para mejores amigos (ADR-054): el anillo verde.
+            "has_close_friends": bool(row.get("has_close_friends")),
             "latest_at": row["latest_at"].isoformat(),
             "latest_image_url": story_file_url(
                 row["latest_key"], row.get("latest_private", False),
@@ -143,6 +154,14 @@ def list_for_author(author_id, viewer_id, story_repository, now=None, private_st
 def _visible_story_or_404(story_id, viewer_id, story_repository, now):
     row = story_repository.get_active(story_id, now)
     if row is None or not story_repository.can_view(row["author_id"], viewer_id):
+        raise StoryNotFoundError()
+    # Audiencia (ADR-054): una historia para mejores amigos solo existe para su autor y para quien
+    # está en su lista. Mismo 404 que si no existiera.
+    if (
+        row.get("audience") == AUDIENCE_CLOSE_FRIENDS
+        and str(row["author_id"]) != str(viewer_id)
+        and not story_repository.is_close_friend(row["author_id"], viewer_id)
+    ):
         raise StoryNotFoundError()
     # Moderación (ADR-044): una historia no aprobada solo existe para quien la publicó.
     if (

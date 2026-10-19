@@ -7,13 +7,16 @@ from app.domain.posts.exceptions import PostNotFoundError
 
 def save_post(
     post_id, user_id, post_repository, saved_repository, follow_repository, restriction_repository,
+    close_friend_repository=None,
 ):
     post = post_repository.get_by_id(post_id)
     if post is None:
         raise PostNotFoundError(post_id)
     # No se puede guardar lo que no se puede ver (cuenta privada que no sigue, bloqueo): mismo 404 que
     # un post inexistente, sin revelar que existe.
-    assert_post_visible(post, user_id, follow_repository, restriction_repository)
+    assert_post_visible(
+        post, user_id, follow_repository, restriction_repository, close_friend_repository
+    )
     saved_repository.add(user_id, post_id)
     return {"saved": True}
 

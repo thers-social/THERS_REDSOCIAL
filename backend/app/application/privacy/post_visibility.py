@@ -12,11 +12,14 @@
 # descartar en Python rompería el límite de la página (ver
 # SQLAlchemyPostRepository.list_recent).
 
+from app.domain.posts.audience import AUDIENCE_CLOSE_FRIENDS
 from app.domain.posts.exceptions import PostNotFoundError
 from app.domain.privacy.visibility import can_view_content_of
 
 
-def assert_post_visible(post, viewer_id, follow_repository, restriction_repository):
+def assert_post_visible(
+    post, viewer_id, follow_repository, restriction_repository, close_friend_repository=None
+):
     """Lanza `PostNotFoundError` si `viewer_id` no puede ver `post`.
 
     Además de la privacidad de la cuenta (ADR-022), un bloqueo en CUALQUIERA de
@@ -42,3 +45,11 @@ def assert_post_visible(post, viewer_id, follow_repository, restriction_reposito
 
     if not can_view_content_of(author.is_private, author.id, viewer_id, is_accepted_follower):
         raise PostNotFoundError(post.id)
+
+    # Publicación solo para mejores amigos (ADR-054): además de lo anterior, hay que estar en la
+    # lista de la autora. Sin el repositorio no se puede comprobar, y ante la duda se niega.
+    if post.audience == AUDIENCE_CLOSE_FRIENDS and str(author.id) != str(viewer_id):
+        if close_friend_repository is None or not close_friend_repository.is_member(
+            author.id, viewer_id
+        ):
+            raise PostNotFoundError(post.id)

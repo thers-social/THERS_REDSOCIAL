@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.domain.content_moderation import jobs as moderation_jobs
 from app.domain.content_moderation import subjects
 from app.domain.restrictions.kinds import BLOCK
-from app.domain.stories.rules import StoryRepository
+from app.domain.stories.rules import AUDIENCE_EVERYONE, StoryRepository
 from app.extensions import db
 from app.infrastructure.persistence.models import Story, StoryView, User
 
@@ -32,6 +32,22 @@ _VISIBLE_AUTHOR = """
                   AND ((r.owner_id = CAST(:viewer AS uuid) AND r.target_id = s.author_id)
                     OR (r.owner_id = s.author_id AND r.target_id = CAST(:viewer AS uuid)))
             )
+        )
+    )
+"""
+
+
+# Audiencia (ADR-054): una historia para `close_friends` solo la ve su autor o quien está en SU lista
+# de mejores amigos (y, además, cumple `_VISIBLE_AUTHOR`: sigue al autor y no hay bloqueo). Se mira al
+# LEER, así que quitar a alguien de la lista le quita las historias ya publicadas. `everyone` no
+# cambia nada respecto a ADR-042.
+_AUDIENCE_OK = """
+    (
+        s.audience = 'everyone'
+        OR s.author_id = CAST(:viewer AS uuid)
+        OR EXISTS (
+            SELECT 1 FROM close_friends cf
+            WHERE cf.owner_id = s.author_id AND cf.friend_id = CAST(:viewer AS uuid)
         )
     )
 """
@@ -60,6 +76,7 @@ def _story_row(story, author):
         "expires_at": story.expires_at,
         "moderation_status": story.moderation_status,
         "file_private": story.file_private,
+        "audience": story.audience,
         "author_username": author.username,
         "author_name": author.name,
         "author_avatar_path": author.avatar_path,
@@ -68,7 +85,7 @@ def _story_row(story, author):
 
 class SQLAlchemyStoryRepository(StoryRepository):
     def create(self, author_id, content, storage_key, width, height, expires_at,
-               moderation_status="approved", file_private=False):
+               audience=AUDIENCE_EVERYONE, moderation_status="approved", file_private=False):
         story = Story(
             author_id=author_id,
             content=content,
@@ -76,6 +93,7 @@ class SQLAlchemyStoryRepository(StoryRepository):
             width=width,
             height=height,
             expires_at=expires_at,
+            audience=audience,
             moderation_status=moderation_status,
             file_private=file_private,
         )
@@ -113,6 +131,17 @@ class SQLAlchemyStoryRepository(StoryRepository):
         ).first()
         return row is not None
 
+    def is_close_friend(self, owner_id, viewer_id):
+        """¿`viewer_id` está en la lista de mejores amigos de `owner_id`? (ADR-054)"""
+        row = db.session.execute(
+            text(
+                "SELECT 1 FROM close_friends "
+                "WHERE owner_id = CAST(:owner AS uuid) AND friend_id = CAST(:viewer AS uuid)"
+            ),
+            {"owner": str(owner_id), "viewer": str(viewer_id)},
+        ).first()
+        return row is not None
+
     def strip_for(self, viewer_id, now):
         rows = db.session.execute(
             text(
@@ -125,12 +154,14 @@ class SQLAlchemyStoryRepository(StoryRepository):
                        (array_agg(s.moderation_status ORDER BY s.created_at DESC))[1]
                            AS latest_status,
                        bool_or(v.viewer_id IS NULL AND s.author_id <> CAST(:viewer AS uuid))
-                           AS has_unseen
+                           AS has_unseen,
+                       bool_or(s.audience = 'close_friends') AS has_close_friends
                 FROM stories s
                 JOIN users u ON u.id = s.author_id
                 LEFT JOIN story_views v
                        ON v.story_id = s.id AND v.viewer_id = CAST(:viewer AS uuid)
-                WHERE s.expires_at > :now AND {_VISIBLE_AUTHOR} AND {_MODERATION_OK}
+                WHERE s.expires_at > :now AND {_VISIBLE_AUTHOR} AND {_AUDIENCE_OK}
+                  AND {_MODERATION_OK}
                 GROUP BY u.id, u.username, u.name, u.avatar_path
                 ORDER BY (u.id = CAST(:viewer AS uuid)) DESC,
                          bool_or(v.viewer_id IS NULL AND s.author_id <> CAST(:viewer AS uuid))
@@ -148,6 +179,7 @@ class SQLAlchemyStoryRepository(StoryRepository):
                 f"""
                 SELECT s.id, s.author_id, s.content, s.storage_key, s.width, s.height,
                        s.created_at, s.expires_at, s.moderation_status, s.file_private,
+                       s.audience,
                        u.username AS author_username, u.name AS author_name,
                        u.avatar_path AS author_avatar_path,
                        (v.viewer_id IS NOT NULL) AS seen_by_me
@@ -156,7 +188,7 @@ class SQLAlchemyStoryRepository(StoryRepository):
                 LEFT JOIN story_views v
                        ON v.story_id = s.id AND v.viewer_id = CAST(:viewer AS uuid)
                 WHERE s.author_id = CAST(:author AS uuid) AND s.expires_at > :now
-                  AND {_VISIBLE_AUTHOR} AND {_MODERATION_OK}
+                  AND {_VISIBLE_AUTHOR} AND {_AUDIENCE_OK} AND {_MODERATION_OK}
                 ORDER BY s.created_at ASC
                 """
             ),

@@ -1,5 +1,5 @@
 # Historias de 24 horas (ADR-042-stories.md):
-#   POST   /api/stories                    publicar (multipart: `image` + `content` opcional)
+#   POST   /api/stories                    publicar (multipart: `image` + `content` y `audience` opcionales)
 #   GET    /api/stories                    la tira: quién tiene historias vigentes
 #   GET    /api/users/<id>/stories         historias vigentes de una persona
 #   POST   /api/stories/<id>/view          registrar la vista (idempotente)
@@ -15,7 +15,12 @@ from app.application.stories import story_use_cases as stories
 from app.domain.media.storage import ImageTooLargeError, InvalidImageError
 from app.domain.rate_limiting import policy
 from app.domain.rate_limiting.exceptions import RateLimitExceededError
-from app.domain.stories.rules import StoryNotFoundError, StoryTextInvalidError, MAX_STORY_TEXT
+from app.domain.stories.rules import (
+    MAX_STORY_TEXT,
+    StoryAudienceInvalidError,
+    StoryNotFoundError,
+    StoryTextInvalidError,
+)
 from app.infrastructure.media.image_processor import MAX_UPLOAD_BYTES, process_attachment
 from app.infrastructure.persistence.repositories.rate_limit_repository import (
     SQLAlchemyRateLimitRepository,
@@ -94,9 +99,12 @@ def create():
             current_app.extensions["media_storage"],
             private_storage=_private_storage(),
             private_files=_private_files(),
+            audience=request.form.get("audience"),
         )
     except stories.PrivateStorageUnavailableError:
         return jsonify({"msg": "El almacenamiento privado no está disponible"}), 503
+    except StoryAudienceInvalidError:
+        return jsonify({"msg": "La audiencia debe ser `everyone` o `close_friends`"}), 400
     except StoryTextInvalidError:
         return jsonify({"msg": f"El texto puede tener como máximo {MAX_STORY_TEXT} caracteres"}), 400
     return jsonify({"story": story}), 201

@@ -14,12 +14,34 @@ MAX_STORY_TEXT = 200
 FILE_GRACE = timedelta(hours=6)
 
 
+#: A quién va dirigida una historia (ADR-054). `everyone` = quien puede ver las historias del autor
+#: (sus seguidores aceptados, ADR-042); `close_friends` = solo quien además está en su lista de
+#: mejores amigos. La pertenencia se mira al LEER, no al publicar: quitar a alguien de la lista le
+#: quita el acceso a las historias que ya estaban publicadas.
+AUDIENCE_EVERYONE = "everyone"
+AUDIENCE_CLOSE_FRIENDS = "close_friends"
+AUDIENCES = (AUDIENCE_EVERYONE, AUDIENCE_CLOSE_FRIENDS)
+
+
 class StoryNotFoundError(Exception):
     """No existe, venció, no es tuya o no puedes verla: el mismo 404 en todos los casos."""
 
 
 class StoryTextInvalidError(Exception):
     """El texto supera el máximo o no es una cadena."""
+
+
+class StoryAudienceInvalidError(Exception):
+    """`audience` no es ninguno de los valores permitidos."""
+
+
+def normalize_audience(value):
+    """`everyone` si no se envía nada; el valor si es válido. Lanza si no lo es."""
+    if value is None or value == "":
+        return AUDIENCE_EVERYONE
+    if value not in AUDIENCES:
+        raise StoryAudienceInvalidError()
+    return value
 
 
 def normalize_story_text(value):
@@ -39,7 +61,11 @@ def normalize_story_text(value):
 class StoryRepository:
     """Puerto de persistencia de historias y vistas."""
 
-    def create(self, author_id, content, storage_key, width, height, expires_at):
+    def create(self, author_id, content, storage_key, width, height, expires_at, audience=AUDIENCE_EVERYONE):
+        raise NotImplementedError
+
+    def is_close_friend(self, owner_id, viewer_id):
+        """¿`viewer_id` está en la lista de mejores amigos de `owner_id`? (ADR-054)"""
         raise NotImplementedError
 
     def get_active(self, story_id, now):
