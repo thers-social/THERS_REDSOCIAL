@@ -109,7 +109,12 @@ export default function MomentsRow({ currentUser }) {
                 : `Ver las historias de ${item.author.name}${item.has_unseen ? " (sin ver)" : ""}`
             }
             className={`group relative h-[184px] w-[128px] shrink-0 snap-start overflow-hidden rounded-th-card bg-th-surface-raised shadow-th-card ring-2 transition-all th-focus-ring hover:ring-th-brand ${
-              item.has_unseen ? "ring-th-brand" : "ring-transparent"
+              // Verde = tiene historias solo para mejores amigos (ADR-054); morado = sin ver.
+              item.has_close_friends
+                ? "ring-th-success-accent"
+                : item.has_unseen
+                  ? "ring-th-brand"
+                  : "ring-transparent"
             }`}
           >
             {item.latest_image_url && (

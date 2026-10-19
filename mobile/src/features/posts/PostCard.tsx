@@ -80,7 +80,9 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
             <Text style={styles.meta} numberOfLines={1}>
               @{post.author.username} · {formatRelativeTime(post.created_at)}
               {post.edited ? ` · ${t('post.edited')}` : ''}
-              {post.audience === 'close_friends' ? ` · ★ ${t('story.audience.closeFriends')}` : ''}
+              {post.audience === 'close_friends' ? (
+                <Text style={{ color: colors.brandText, fontWeight: '700' }}>{` · ★ ${t('story.audience.closeFriends')}`}</Text>
+              ) : null}
             </Text>
           </View>
         </Pressable>

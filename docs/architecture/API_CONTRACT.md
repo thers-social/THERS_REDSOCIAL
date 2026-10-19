@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.74 (Propuesta) |
+| Versión | 0.75 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -2235,7 +2235,7 @@ Exigen sesión (`401`). La identidad sale del JWT. El token nunca se devuelve.
 | `POST /api/push/devices` | Cuerpo `{token, platform?}`: `token` es el de Firebase del teléfono (20–4096 caracteres, sin espacios; `400` si no); `platform` `android` (por defecto) o `ios`. UPSERT por token: si el token ya era de otra cuenta pasa a esta. Máximo 10 dispositivos por persona (se conservan los más recientes). `200 {"registered": true}` |
 | `DELETE /api/push/devices` | Cuerpo `{token}`. Solo borra un dispositivo propio; idempotente. `200 {"registered": false}` |
 
-**Qué se envía** (solo con `PUSH_ENABLED` y credenciales de Firebase; si no, nada y sin errores): seguir / solicitud / solicitud aceptada, me gusta, comentario y mención (tipos de `§4.7`), y un mensaje directo o de grupo nuevo. `data` (todo texto): `type` (`like`, `comment`, `follow`, `follow_request`, `follow_accepted`, `mention`, `message`, `group_message`) más `post_id`, `actor_id`, `sender_id` o `group_id` según el caso. Un reintento idempotente de un mensaje no vuelve a avisar; en un grupo no se avisa a quien escribe ni a cuentas bloqueadas con quien escribe. Un fallo de Firebase nunca rompe la acción que lo originó.
+**Qué se envía** (solo con `PUSH_ENABLED` y credenciales de Firebase; si no, nada y sin errores): seguir / solicitud / solicitud aceptada, me gusta, comentario y mención (tipos de `§4.7`), los avisos de Places (`place_reservation_new`, `place_reservation_decided`, `place_reservation_cancelled`, `place_quote_new`, `place_quote_decided`, `place_plan_invite`, `place_claim_decided`, `place_review_reply`; `data`: `type`, `place_id`, `object_id`) y un mensaje directo o de grupo nuevo: todo aviso de la lista de notificaciones llega también al teléfono. `data` (todo texto): `type` (`like`, `comment`, `follow`, `follow_request`, `follow_accepted`, `mention`, `message`, `group_message`) más `post_id`, `actor_id`, `sender_id` o `group_id` según el caso. Un reintento idempotente de un mensaje no vuelve a avisar; en un grupo no se avisa a quien escribe ni a cuentas bloqueadas con quien escribe. Un fallo de Firebase nunca rompe la acción que lo originó.
 
 ## 4.46 Lugares mejor valorados (`ADR-053`) — v0.72
 

@@ -19,6 +19,13 @@ export const en: Record<MessageKey, string> = {
   // --- tabs ---
   'tabs.home': 'Home',
   'tabs.reels': 'Reels',
+  'create.title': 'Create',
+  'create.camera': 'Story with the camera',
+  'create.camera.hint': 'Take a photo and share it for 24 hours.',
+  'create.gallery': 'Story from the gallery',
+  'create.gallery.hint': 'Pick a photo from your phone for your story.',
+  'create.error.title': 'Could not open',
+  'create.error.body': "We couldn't open the camera. Try the gallery.",
   'tabs.create': 'Create',
   'tabs.messages': 'Messages',
   'tabs.profile': 'Profile',

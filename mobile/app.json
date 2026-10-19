@@ -63,7 +63,7 @@
         "expo-image-picker",
         {
           "photosPermission": "THERS usa tu galería solo cuando eliges una foto o un video para tu foto de perfil, una publicación, un mensaje, una pregunta a Tero la imagen de tu negocio o una historia.",
-          "cameraPermission": false
+          "cameraPermission": "THERS usa la cámara solo cuando pulsás «Historia con la cámara» para sacar la foto de tu historia. La foto no se guarda en tu galería ni se envía hasta que vos la publiques."
         }
       ],
       "expo-video",

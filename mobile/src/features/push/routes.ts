@@ -12,6 +12,13 @@ function id(value: unknown): string | null {
   return typeof value === 'string' && UUID.test(value) ? value : null;
 }
 
+/** Avisos que le llegan a quien GESTIONA el lugar: abren su panel y no la ficha pública. */
+const MANAGER_PLACE_TYPES = new Set([
+  'place_reservation_new',
+  'place_reservation_cancelled',
+  'place_quote_new',
+]);
+
 export function routeForNotification(data: Record<string, unknown> | null | undefined): Href {
   const payload = data ?? {};
   switch (payload.type) {
@@ -39,6 +46,15 @@ export function routeForNotification(data: Record<string, unknown> | null | unde
       const postId = id(payload.post_id);
       if (postId) return { pathname: '/post/[id]', params: { id: postId } };
       break;
+    }
+  }
+  if (typeof payload.type === 'string' && payload.type.startsWith('place_')) {
+    // Avisos de THERS Places (reservas, cotizaciones, planes, reclamos, reseñas): el lugar, no la lista.
+    const placeId = id(payload.place_id);
+    if (placeId) {
+      return MANAGER_PLACE_TYPES.has(payload.type)
+        ? { pathname: '/places/manage/[id]', params: { id: placeId } }
+        : { pathname: '/places/[id]', params: { id: placeId } };
     }
   }
   return '/notifications';

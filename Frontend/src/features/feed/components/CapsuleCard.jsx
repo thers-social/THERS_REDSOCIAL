@@ -373,6 +373,9 @@ export default function CapsuleCard({
             {/* `edited` es un booleano en el contrato (ADR-021): se puede
                 decir QUE se editó, no cuándo. */}
             {capsule.edited && <> · editado</>}
+            {capsule.audience === "close_friends" && (
+              <span className="font-semibold text-th-brand-fg"> · ★ Mejores amigos</span>
+            )}
           </p>
         </div>
 

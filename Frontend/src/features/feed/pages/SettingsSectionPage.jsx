@@ -7,6 +7,7 @@ import { api, getErrorMessage } from "@shared/lib/api";
 import { SETTINGS_CONTENT } from "../data/settingsSections";
 import { loadSettings, saveSetting } from "../lib/settingsStorage";
 import { usePrivacySettings } from "../hooks/usePrivacySettings";
+import CloseFriendsRow from "../components/settings/CloseFriendsRow";
 import FollowRequestsRow from "../components/settings/FollowRequestsRow";
 import MutedKeywordsRow from "../components/settings/MutedKeywordsRow";
 import TwoFactorRow from "../components/settings/TwoFactorRow";
@@ -231,6 +232,9 @@ function SettingRowRenderer({
 
     case "followRequests":
       return <FollowRequestsRow onResolved={privacySettings.decrementPendingRequests} />;
+
+    case "closeFriends":
+      return <CloseFriendsRow currentUser={currentUser} />;
 
     case "mutedKeywords":
       return <MutedKeywordsRow />;

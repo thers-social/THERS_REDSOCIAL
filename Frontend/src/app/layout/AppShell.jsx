@@ -254,12 +254,21 @@ export default function AppShell() {
   // multipart/form-data (el navegador pone el boundary solo, por eso no se fija
   // `Content-Type` a mano).
   // `video` (ADR-046): un solo archivo en el campo `video`, excluyente con las imágenes.
-  const handleCreateCapsule = async (content, isSensitive = false, images = [], video = null) => {
+  // `audience` (ADR-054): `everyone` por defecto; `close_friends` = solo la lista de mejores amigos.
+  const handleCreateCapsule = async (
+    content,
+    isSensitive = false,
+    images = [],
+    video = null,
+    audience = "everyone",
+  ) => {
     let body = { content, is_sensitive: isSensitive };
+    if (audience !== "everyone") body.audience = audience;
     if (images.length > 0 || video) {
       body = new FormData();
       body.append("content", content);
       body.append("is_sensitive", String(isSensitive));
+      if (audience !== "everyone") body.append("audience", audience);
       images.forEach((file) => body.append("images", file));
       if (video) body.append("video", video);
     }

@@ -28,6 +28,8 @@ export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
   // Lo que el autor declara (ADR-030): quien tenga activado el filtro de
   // contenido sensible no verá esta cápsula en su feed.
   const [isSensitive, setIsSensitive] = useState(false);
+  // A quién va dirigida (ADR-054): solo la lista de mejores amigos, o todas las personas que ya la ven.
+  const [closeFriendsOnly, setCloseFriendsOnly] = useState(false);
   const toast = useToast();
   const { t } = useLanguage();
 
@@ -50,7 +52,13 @@ export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
 
     setIsSubmitting(true);
     try {
-      await onSubmit(content.trim(), isSensitive, images.files, video.file);
+      await onSubmit(
+        content.trim(),
+        isSensitive,
+        images.files,
+        video.file,
+        closeFriendsOnly ? "close_friends" : "everyone",
+      );
     } catch (error) {
       toast.error(getErrorMessage(error, t));
     } finally {
@@ -126,6 +134,32 @@ export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {
               </span>
             </span>
           </label>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={closeFriendsOnly}
+            onClick={() => setCloseFriendsOnly((value) => !value)}
+            disabled={isSubmitting}
+            className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-3 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-pulse-500 disabled:opacity-50 ${
+              closeFriendsOnly
+                ? "border-pulse-500 bg-pulse-50 dark:bg-pulse-500/10"
+                : "border-line dark:border-line-dark"
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`text-xl leading-none ${closeFriendsOnly ? "text-pulse-600" : "text-muted"}`}
+            >
+              {closeFriendsOnly ? "★" : "☆"}
+            </span>
+            <span className="text-sm text-ink dark:text-ink-dark">
+              {t("closeFriends.only")}
+              <span className="block text-xs text-muted dark:text-muted-dark">
+                {t("closeFriends.onlyPostHint")}
+              </span>
+            </span>
+          </button>
 
           <div className="flex items-center justify-between mt-2">
             <p className="text-xs text-muted dark:text-muted-dark">

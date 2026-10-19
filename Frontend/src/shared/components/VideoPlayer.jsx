@@ -16,7 +16,11 @@ export default function VideoPlayer({ video, label = "Video adjunto", compact = 
   const ratio = video.width && video.height ? `${video.width} / ${video.height}` : "16 / 9";
 
   return (
-    <figure className={`relative overflow-hidden rounded-2xl border border-th-border bg-black ${maxWidth}`}>
+    <figure
+      className={`relative overflow-hidden bg-black ${
+        compact ? "rounded-[13px]" : "rounded-2xl border border-th-border"
+      } ${maxWidth}`}
+    >
       <video
         src={video.url}
         poster={video.thumbnail_url}

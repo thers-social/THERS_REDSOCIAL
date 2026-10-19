@@ -13,6 +13,7 @@ import { ApiError } from '@shared/lib/api';
 import { fetchStrip } from './api';
 import type { PickedImage } from './api';
 import { StoryComposerModal } from './StoryComposerModal';
+import { onStoriesChanged } from './storyEvents';
 import { StoryViewerModal } from './StoryViewerModal';
 import type { StripAuthor } from './types';
 
@@ -51,6 +52,9 @@ export function StoriesStrip({ me, canPublish }: Props) {
     load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  // Una historia publicada desde la hoja de Crear (botón central) refresca la tira sin esperar a remontarla.
+  useEffect(() => onStoriesChanged(() => void load()), [load]);
 
   async function pickImage() {
     if (!canPublish) {

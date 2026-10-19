@@ -60,6 +60,41 @@ def notification_payload(notification_type, actor_username, post_id=None):
     return None
 
 
+_RESERVATION_STATE = {"confirmed": "Confirmó tu reserva", "declined": "Rechazó tu reserva"}
+_QUOTE_STATE = {"accepted": "Aceptó tu cotización", "rejected": "Rechazó tu cotización"}
+_CLAIM_STATE = {
+    "approved": "Aprobó tu reclamo: ya puedes administrar el negocio",
+    "rejected": "Rechazó tu reclamo",
+}
+
+
+def place_notice_payload(notification_type, detail, place_name, place_id, object_id=None):
+    """`(title, body, data)` de un aviso de THERS Places (ADR-040 fase 12), o `None` si el tipo no es de Places.
+
+    El título es el nombre del lugar; el cuerpo, la acción. Nunca lleva texto libre de nadie (el aviso
+    tampoco lo guarda). `data` solo lleva identificadores, para que la app abra la pantalla correcta."""
+    body = {
+        "place_reservation_new": "Nueva solicitud de reserva",
+        "place_reservation_cancelled": "Una reserva fue cancelada por el cliente",
+        "place_quote_new": "Nueva solicitud de cotización",
+        "place_plan_invite": "Te invitó a un plan",
+        "place_review_reply": "Respondió a tu reseña",
+    }.get(notification_type)
+    if body is None:
+        if notification_type == "place_reservation_decided":
+            body = _RESERVATION_STATE.get(detail, "Actualizó tu reserva")
+        elif notification_type == "place_quote_decided":
+            body = _QUOTE_STATE.get(detail, "Respondió tu cotización")
+        elif notification_type == "place_claim_decided":
+            body = _CLAIM_STATE.get(detail, "Respondió a tu reclamo")
+        else:
+            return None
+    data = {"type": notification_type, "place_id": str(place_id)}
+    if object_id:
+        data["object_id"] = str(object_id)
+    return _clip(place_name or "THERS Places", 60), body, data
+
+
 def direct_message_payload(sender_id, sender_name, preview):
     return sender_name, preview, {"type": TYPE_MESSAGE, "sender_id": str(sender_id)}
 

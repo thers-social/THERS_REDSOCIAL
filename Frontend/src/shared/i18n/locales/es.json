@@ -916,5 +916,27 @@
       "generic": "No se pudo grabar el audio. Inténtalo de nuevo.",
       "playback": "No se pudo reproducir"
     }
+  },
+  "closeFriends": {
+    "title": "Mejores amigos",
+    "intro": "Tus historias y publicaciones marcadas «Mejores amigos» solo las ven las personas de esta lista. No se avisa a nadie de que lo añadiste ni de que lo quitaste.",
+    "loading": "Cargando tu lista...",
+    "search": "Buscar",
+    "yourList": "Tu lista",
+    "empty": "Aún no has añadido a nadie.",
+    "noMatches": "Nadie de tu lista coincide con la búsqueda.",
+    "followers": "Tus seguidores",
+    "followersEmpty": "No hay seguidores para añadir.",
+    "full": "Tu lista puede tener hasta {{limit}} personas.",
+    "add": "Añadir",
+    "remove": "Quitar",
+    "addAria": "Añadir a {{name}} a mejores amigos",
+    "removeAria": "Quitar a {{name}} de mejores amigos",
+    "only": "Solo mejores amigos",
+    "onlyPostHint": "Solo las personas de tu lista de mejores amigos la verán.",
+    "audienceLabel": "¿Quién la ve?",
+    "everyone": "Todos mis seguidores",
+    "storyEveryoneNote": "Dura 24 horas. La verán quienes te siguen.",
+    "storyCloseNote": "Dura 24 horas. Solo la verán tus mejores amigos."
   }
 }

@@ -71,7 +71,7 @@ export function ImageGridView({ images, label = 'Imagen', compact = false }: Pro
 
 const styles = themedStyles(() => ({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: space[2], borderRadius: radius.card, overflow: 'hidden' },
-  compact: { maxWidth: 240 },
+  compact: { maxWidth: 240, marginTop: 0, borderRadius: radius.input - 2 },
   cell: { overflow: 'hidden', backgroundColor: colors.bgSubtle },
   square: { width: '49%', aspectRatio: 1 },
   image: { width: '100%', height: '100%' },

@@ -1,9 +1,11 @@
 import { Redirect, useRouter } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
+import { useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@features/auth/context/AuthContext';
+import { CreateSheet } from '@features/stories/CreateSheet';
 import { TeroFloating } from '@features/tero/components/TeroFloating';
 import { colors, fontSize, fonts } from '@shared/design/tokens';
 import { useLanguage } from '@shared/i18n';
@@ -27,6 +29,7 @@ export default function TabsLayout() {
   const router = useRouter();
   const unread = useUnreadCount(Boolean(user));
   const { t } = useLanguage();
+  const [creating, setCreating] = useState(false);
 
   if (isRestoring) {
     return (
@@ -79,7 +82,7 @@ export default function TabsLayout() {
             tabBarLabel: () => null,
             tabBarButton: () => (
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                <TRayoButton onPress={() => router.push('/create')} />
+                <TRayoButton onPress={() => setCreating(true)} />
               </View>
             ),
           }}
@@ -106,6 +109,8 @@ export default function TabsLayout() {
       </Tabs>
       {/* Tero (vista previa): encima de las pestañas, nunca sobre la barra. */}
       <TeroFloating bottomOffset={tabBarHeight} />
+      {/* Botón central: sacar una foto o elegirla para una historia, o escribir una publicación. */}
+      <CreateSheet visible={creating} onClose={() => setCreating(false)} />
     </View>
   );
 }

@@ -362,7 +362,7 @@ const styles = themedStyles(() => ({
   name: { color: '#fff', fontSize: fontSize.bodyMd, fontWeight: '700' },
   time: { color: 'rgba(255,255,255,0.75)', fontSize: fontSize.labelMd },
   closeFriends: {
-    backgroundColor: colors.successAccent,
+    backgroundColor: colors.brand,
     borderRadius: 999,
     paddingHorizontal: space[2],
     paddingVertical: 3,

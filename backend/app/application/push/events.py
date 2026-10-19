@@ -33,6 +33,10 @@ def notification_created(recipient_id, actor_id, notification_type, post_id=None
     _emit("notification_created", recipient_id, actor_id, notification_type, post_id)
 
 
+def place_notice_created(recipient_ids, notification_type, detail, place_id, place_name, object_id):
+    _emit("place_notice_created", recipient_ids, notification_type, detail, place_id, place_name, object_id)
+
+
 def direct_message_sent(sender_id, recipient_id, preview):
     _emit("direct_message_sent", sender_id, recipient_id, preview)
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Icon from "@shared/components/Icon";
+import { useLanguage } from "@shared/i18n";
 import Avatar from "@shared/components/Avatar";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
 import Spinner from "@shared/components/Spinner";
@@ -28,6 +29,7 @@ const TICK_MS = 100;
  * publicó puede ver cuántas personas la vieron y borrarla.
  */
 export default function StoryViewer({ authors, startIndex, onClose, onChanged }) {
+  const { t } = useLanguage();
   const [position, setPosition] = useState({ authorIndex: startIndex, storyIndex: 0 });
   // id de la persona -> {status: "loading"|"ready"|"error", stories: []}
   const [loaded, setLoaded] = useState({});
@@ -238,6 +240,12 @@ export default function StoryViewer({ authors, startIndex, onClose, onChanged })
                 <p className="text-sm font-semibold text-white drop-shadow">{author.author.name}</p>
                 <p className="text-xs text-white/70">{formatRelativeTime(story.created_at)}</p>
               </div>
+              {/* Etiqueta verde: esta historia es solo para mejores amigos (ADR-054). */}
+              {story.audience === "close_friends" && (
+                <span className="ml-1 rounded-full bg-th-brand px-2 py-0.5 text-[11px] font-bold text-th-on-brand">
+                  ★ {t("closeFriends.title")}
+                </span>
+              )}
             </div>
 
             {story.content && (

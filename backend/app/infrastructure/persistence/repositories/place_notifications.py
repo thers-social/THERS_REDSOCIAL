@@ -12,6 +12,7 @@ import logging
 
 from sqlalchemy import text
 
+from app.application.push import events as push_events
 from app.extensions import db
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ WHERE (CAST(:actor AS uuid) IS NULL OR r.id <> CAST(:actor AS uuid))
     )
   )
 ON CONFLICT DO NOTHING
+RETURNING recipient_id
 """
 
 _MANAGERS = "SELECT user_id FROM place_managers WHERE place_id = CAST(:place AS uuid)"
@@ -40,7 +42,9 @@ _PEOPLE = "SELECT unnest(CAST(:people AS uuid[]))"
 class PlaceNotifierMixin:
     def _notify(self, recipients_sql, params, notification_type, place_id, object_id, actor_id, detail):
         try:
-            db.session.execute(
+            # `RETURNING`: solo se avisa por push a quien de verdad recibió un aviso nuevo (los
+            # reintentos, los bloqueos y quien hizo la acción quedan fuera, igual que en la lista).
+            created = db.session.execute(
                 text(_INSERT.format(recipients=recipients_sql)),
                 {
                     "actor": str(actor_id) if actor_id else None,
@@ -50,11 +54,27 @@ class PlaceNotifierMixin:
                     "detail": detail,
                     **params,
                 },
-            )
+            ).scalars().all()
             db.session.commit()
         except Exception:  # noqa: BLE001 - el aviso nunca debe romper la acción ya hecha
             db.session.rollback()
             logger.exception("No se pudo crear el aviso %s", notification_type)
+            return
+        self._push(created, notification_type, detail, place_id, object_id)
+
+    def _push(self, recipients, notification_type, detail, place_id, object_id):
+        """Push (ADR-053): un extra que nunca rompe la acción; sin emisor configurado no hace nada."""
+        if not recipients:
+            return
+        try:
+            row = db.session.execute(
+                text("SELECT name FROM places WHERE id = CAST(:p AS uuid)"), {"p": str(place_id)}
+            ).first()
+            push_events.place_notice_created(
+                recipients, notification_type, detail, place_id, row[0] if row else None, object_id
+            )
+        except Exception:  # noqa: BLE001 - el push nunca rompe la acción
+            logger.exception("No se pudo enviar el push del aviso %s", notification_type)
 
     def notify_managers(self, notification_type, place_id, object_id, actor_id, detail=None):
         """Avisa a TODAS las personas que gestionan el lugar."""

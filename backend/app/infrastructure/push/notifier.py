@@ -42,6 +42,16 @@ class PushNotifier:
             data["actor_id"] = str(actor.id)
         self._deliver([recipient_id], (payload[0], payload[1], data))
 
+    def place_notice_created(
+        self, recipient_ids, notification_type, detail, place_id, place_name, object_id
+    ):
+        payload = payloads.place_notice_payload(
+            notification_type, detail, place_name, place_id, object_id
+        )
+        if payload is None or not recipient_ids:
+            return
+        self._deliver(list(recipient_ids), payload)
+
     def direct_message_sent(self, sender_id, recipient_id, preview):
         sender = self._users.find_by_id(sender_id)
         if sender is None:

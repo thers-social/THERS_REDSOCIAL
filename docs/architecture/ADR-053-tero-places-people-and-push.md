@@ -29,7 +29,7 @@
 
 ## 2. Qué NO hace
 
-- No avisa de reservas, cotizaciones, planes ni respuestas a reseñas de Places (sus avisos se crean por SQL directo).
+- ~~No avisa de los avisos de Places~~ — **corregido el 2026-10-19**: reservas, cotizaciones, planes, reclamos y respuestas a reseñas también se envían por push (título = nombre del lugar, cuerpo = la acción, `data` = `type`, `place_id`, `object_id`; sin texto libre). La creación por SQL directo (`place_notifications.py`) ahora devuelve a quién avisó (`RETURNING`) y solo esas personas reciben el push. Tocarlo abre la ficha del lugar, o el panel si es un aviso para quien lo gestiona.
 - No hay interruptor por tipo de aviso dentro de la app: se apagan en los ajustes de Android o cerrando sesión.
 - No agrupa ni colapsa avisos, no cuenta insignias y no distingue idioma (siempre español).
 - iOS: la tabla admite `ios`, pero no hay cliente ni credenciales APNs.

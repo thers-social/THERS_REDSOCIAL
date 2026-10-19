@@ -607,9 +607,12 @@ export default function Messages() {
                           </form>
                         ) : (
                           <div
-                            className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
+                            className={`max-w-[75%] rounded-2xl text-sm ${
+                              // Con foto o video la burbuja es un marco fino de 3 px alrededor del medio.
+                              message.images?.length || message.video ? "p-[3px]" : "px-4 py-2"
+                            } ${
                               message.sender_id === currentUser.id
-                                ? "bg-pulse-600 text-white rounded-br-md"
+                                ? "bg-[#5b21b6] dark:bg-[#4c1d95] text-white rounded-br-md"
                                 : "bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark rounded-bl-md"
                             }`}
                           >
@@ -644,7 +647,15 @@ export default function Messages() {
                               <SharedPostCard post={message.post} mine={message.sender_id === currentUser.id} />
                             )}
                             {message.content && (
-                              <span className={message.images?.length || message.place || message.post || message.audio || message.video ? "mt-2 block" : ""}>
+                              <span
+                                className={
+                                  message.images?.length || message.video
+                                    ? "block px-2.5 pb-1 pt-1.5"
+                                    : message.place || message.post || message.audio
+                                      ? "mt-2 block"
+                                      : ""
+                                }
+                              >
                                 {message.content}
                               </span>
                             )}

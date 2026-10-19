@@ -80,6 +80,8 @@ const darkPalette = {
   brandText: primitives.violet400,
   brandSoft: primitives.violet900,
   brandSoftStrong: primitives.violet800,
+  /** Burbujas propias del chat y de Tero: un violeta más oscuro que `brand`, con texto blanco AAA. */
+  bubbleMine: '#4c1d95',
   onBrand: primitives.white,
   /** Texto secundario sobre un relleno `brand` (p. ej. la hora de una burbuja propia). */
   onBrandMuted: primitives.violet300,
@@ -126,6 +128,7 @@ const lightPalette: Palette = {
   brandText: '#6d28d9',
   brandSoft: '#faf5ff',
   brandSoftStrong: '#f3e8ff',
+  bubbleMine: '#5b21b6',
   onBrand: '#ffffff',
   onBrandMuted: '#ede9fe',
 

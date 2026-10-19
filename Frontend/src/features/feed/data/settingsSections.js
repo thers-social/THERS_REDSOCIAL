@@ -57,6 +57,7 @@ export const SETTINGS_CONTENT = {
               "Solo los usuarios aprobados pueden ver tus cápsulas. Quien ya te seguía lo sigue haciendo; a partir de ahora, cada persona nueva tiene que pedirlo y aprobarlo vos.",
           },
           { type: "followRequests" },
+          { type: "closeFriends" },
         ],
       },
       {
