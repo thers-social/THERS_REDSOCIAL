@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.72 (Propuesta) |
+| Versión | 0.74 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -2757,3 +2757,18 @@ Todas exigen `Authorization: Bearer <token>`. Una historia dura **24 horas** (`e
 | `POST /api/webhooks/mux` | firma `Mux-Signature: t=<unix>,v1=<HMAC-SHA256>` | Eventos de Mux. Firma estricta y reciente (±300 s) o `400`; idempotente por id de evento; tolera orden alterado y llegar antes que el video. `404` sin `MUX_WEBHOOK_SECRET` |
 
 El cliente sube el archivo directo a `upload_url` con `PUT` (sin enviar el JWT de THERS). Duración máxima 60 s (se comprueba al llegar `video.asset.ready`; si se pasa, el video queda `blocked` y el asset se borra). Nunca se publica una reproducción que no sea `signed`.
+
+## 4.47 Mejores amigos e historias con audiencia (`ADR-054`) — v0.73
+
+Exigen sesión (`401`) y `STORIES_ENABLED` (apagado → `404`).
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/close-friends` | Tu lista: `{friends: [{id, username, name, avatar_url}], limit}`. |
+| `POST /api/close-friends` | Cuerpo `{user_id}`. `201` añadida, `200` si ya estaba, `400` sin `user_id`, `404` si no existe, eres tú, está bloqueada o el id es inválido, `409` si la lista está llena (500). Sin aviso a la otra persona. |
+| `DELETE /api/close-friends/<uuid>` | Quita a esa persona (idempotente). `200 {"removed": true/false}`. |
+
+`POST /api/stories` acepta el campo de formulario `audience` (`everyone` por defecto, o `close_friends`; `400` si es otro valor). Las historias devuelven `audience`. Cada entrada de `GET /api/stories` añade `has_close_friends`. Una historia `close_friends` solo la ven su autora y las personas de su lista que además cumplen la regla de `ADR-042`.
+
+**Publicaciones con audiencia (`ADR-054`) — v0.74.** `POST /api/posts` acepta `audience` (`everyone` por defecto, o `close_friends`; en JSON o en el formulario multipart): `400` si es otro valor o si es `close_friends` con `STORIES_ENABLED` apagado. El `post` devuelto lleva `audience`. Una publicación `close_friends` solo la ven su autora y las personas de su lista (además de cumplir cuentas privadas y bloqueos): en `GET /api/posts` (feed, perfil, explorar, guardados) no aparece para las demás, y `GET`/`POST` de sus comentarios, `POST`/`DELETE .../like`, `POST .../save` y los reportes responden `404 Post no encontrado`. Quitar a alguien de la lista le oculta también lo ya publicado. Las menciones de esa publicación y de sus comentarios solo se resuelven para personas de la lista.
+
