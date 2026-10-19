@@ -44,6 +44,22 @@ describe('routeForNotification', () => {
     }
   });
 
+  it('los avisos de Places abren el lugar; los de quien lo gestiona, su panel', () => {
+    for (const type of ['place_reservation_decided', 'place_quote_decided', 'place_plan_invite', 'place_review_reply']) {
+      assert.deepEqual(routeForNotification({ type, place_id: ID }), {
+        pathname: '/places/[id]',
+        params: { id: ID },
+      });
+    }
+    for (const type of ['place_reservation_new', 'place_reservation_cancelled', 'place_quote_new']) {
+      assert.deepEqual(routeForNotification({ type, place_id: ID }), {
+        pathname: '/places/manage/[id]',
+        params: { id: ID },
+      });
+    }
+    assert.equal(routeForNotification({ type: 'place_plan_invite', place_id: 'no-es-uuid' }), '/notifications');
+  });
+
   it('un identificador que no es UUID, un tipo desconocido o la falta de datos llevan a los avisos', () => {
     assert.equal(routeForNotification({ type: 'message', sender_id: '../../settings' }), '/notifications');
     assert.equal(routeForNotification({ type: 'otra_cosa' }), '/notifications');

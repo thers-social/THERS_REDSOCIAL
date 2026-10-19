@@ -19,6 +19,13 @@ export const es = {
   // --- pestañas ---
   'tabs.home': 'Inicio',
   'tabs.reels': 'Reels',
+  'create.title': 'Crear',
+  'create.camera': 'Historia con la cámara',
+  'create.camera.hint': 'Saca una foto y compártela durante 24 horas.',
+  'create.gallery': 'Historia desde la galería',
+  'create.gallery.hint': 'Elige una foto de tu teléfono para tu historia.',
+  'create.error.title': 'No se pudo abrir',
+  'create.error.body': 'No pudimos abrir la cámara. Prueba con la galería.',
   'tabs.create': 'Crear',
   'tabs.messages': 'Mensajes',
   'tabs.profile': 'Perfil',

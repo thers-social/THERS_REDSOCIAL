@@ -99,16 +99,19 @@ export function Composer({ onPublish }: Props) {
         </View>
       </View>
       {/* Solo para la lista de mejores amigos (ADR-054); se gestiona en Ajustes. */}
-      <View style={styles.audienceRow}>
-        <Switch
-          value={closeFriends}
-          onValueChange={setCloseFriends}
-          trackColor={{ true: colors.successAccent, false: colors.borderStrong }}
-          accessibilityLabel={t('composer.closeFriends.a11y')}
-          disabled={busy}
-        />
-        <Text style={styles.sensitiveText}>{t('composer.closeFriends')}</Text>
-      </View>
+      <Pressable
+        onPress={() => setCloseFriends((value) => !value)}
+        disabled={busy}
+        style={[styles.audienceChip, closeFriends && styles.audienceChipOn]}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: closeFriends, disabled: busy }}
+        accessibilityLabel={t('composer.closeFriends.a11y')}
+      >
+        <Icon name="star" size={18} color={colors.brandText} filled={closeFriends} />
+        <Text style={[styles.audienceText, closeFriends && styles.audienceTextOn]}>
+          {t('composer.closeFriends')}
+        </Text>
+      </Pressable>
       <View style={styles.media}>
         <MediaAttachmentBar media={media} maxImages={MAX_POST_IMAGES} disabled={busy} />
       </View>
@@ -137,7 +140,21 @@ const styles = themedStyles(() => ({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space[3] },
   sensitive: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
   sensitiveText: { fontSize: fontSize.bodySm, color: colors.fgSecondary },
-  audienceRow: { flexDirection: 'row', alignItems: 'center', gap: space[2], marginBottom: space[3] },
+  audienceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: space[2],
+    minHeight: 40,
+    paddingHorizontal: space[3],
+    marginBottom: space[3],
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  audienceChipOn: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
+  audienceText: { fontSize: fontSize.bodySm, color: colors.fgSecondary, fontWeight: '600' },
+  audienceTextOn: { color: colors.fg },
   tools: { flexDirection: 'row', alignItems: 'center', gap: space[3] },
   counter: { fontSize: fontSize.labelMd, color: colors.fgMuted },
   media: { marginBottom: space[3] },

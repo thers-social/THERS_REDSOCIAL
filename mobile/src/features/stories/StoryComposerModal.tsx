@@ -85,7 +85,10 @@ export function StoryComposerModal({ image, onClose, onPublished }: Props) {
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
               >
-                <Text style={[styles.choiceText, selected && styles.choiceTextOn]}>{option.label}</Text>
+                <Text style={[styles.choiceText, selected && styles.choiceTextOn]}>
+                  {green ? '★ ' : ''}
+                  {option.label}
+                </Text>
               </Pressable>
             );
           })}
@@ -140,8 +143,8 @@ const styles = themedStyles(() => ({
     paddingHorizontal: space[2],
   },
   choiceOn: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
-  // Verde = «Mejores amigos», igual que el anillo de la tira y la etiqueta del visor.
-  choiceGreen: { borderColor: colors.successAccent, backgroundColor: colors.successAccent + '22' },
+  // La estrella de «Mejores amigos» es morada en toda la app (el anillo de la tira sigue verde).
+  choiceGreen: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
   choiceText: { fontSize: fontSize.bodySm, fontWeight: '600', color: colors.fgSecondary },
   choiceTextOn: { color: colors.fg },
   note: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginVertical: space[2] },

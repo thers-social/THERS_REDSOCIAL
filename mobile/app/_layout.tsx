@@ -15,6 +15,7 @@ import { PostsProvider } from '@features/posts/PostsContext';
 import { TeroProvider } from '@features/tero/context/TeroContext';
 import { colors, setColorScheme } from '@shared/design/tokens';
 import { LanguageProvider } from '@shared/i18n';
+import { BrandSplash } from '@shared/ui/BrandSplash';
 
 /**
  * Layout raíz. Monta los proveedores una sola vez para toda la app.
@@ -43,6 +44,8 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      {/* Pantalla de entrada: negro con el logo, encima de todo; se desvanece sola (como en la web). */}
+      <BrandSplash />
       {/* Idioma de la app (español/inglés): por encima de todo, porque hasta el login se traduce. */}
       <LanguageProvider>
         <AuthProvider>

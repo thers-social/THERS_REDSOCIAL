@@ -394,6 +394,8 @@ function Bubble({
 }) {
   const failed = message.local === 'failed';
   const sending = message.local === 'sending';
+  // Con foto o video la burbuja es un marco fino alrededor de la imagen, no un bloque grueso de color.
+  const hasMedia = Boolean(message.images?.length || message.video || message.localMedia);
 
   return (
     <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs]}>
@@ -414,6 +416,7 @@ function Bubble({
         style={[
           styles.bubble,
           mine ? styles.bubbleMine : styles.bubbleTheirs,
+          hasMedia && styles.bubbleMedia,
           failed && styles.bubbleFailed,
           sending && styles.bubbleSending,
         ]}
@@ -446,9 +449,11 @@ function Bubble({
         {message.place ? <SharedPlaceCard place={message.place} mine={mine} /> : null}
         {message.post ? <SharedPostCard post={message.post} mine={mine} /> : null}
         {message.content || (!message.place && !message.post && !message.audio && !message.images?.length && !message.video && !message.localMedia) ? (
-          <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{message.content}</Text>
+          <Text style={[styles.bubbleText, mine && styles.bubbleTextMine, hasMedia && styles.mediaText]}>
+            {message.content}
+          </Text>
         ) : null}
-        <Text style={[styles.meta, mine && styles.metaMine]}>
+        <Text style={[styles.meta, mine && styles.metaMine, hasMedia && styles.mediaMeta]}>
           {failed
             ? 'No se envió · toca para reintentar'
             : sending
@@ -471,7 +476,10 @@ const styles = themedStyles(() => ({
   rowMine: { justifyContent: 'flex-end' },
   rowTheirs: { justifyContent: 'flex-start' },
   bubble: { maxWidth: '78%', borderRadius: radius.card, paddingHorizontal: space[3], paddingVertical: space[2] },
-  bubbleMine: { backgroundColor: colors.brand, borderBottomRightRadius: radius.xs },
+  bubbleMine: { backgroundColor: colors.bubbleMine, borderBottomRightRadius: radius.xs },
+  bubbleMedia: { padding: 3 },
+  mediaText: { paddingHorizontal: space[2], paddingTop: space[1] },
+  mediaMeta: { paddingHorizontal: space[2], paddingBottom: 2 },
   bubbleTheirs: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: radius.xs },
   bubbleFailed: { backgroundColor: colors.dangerSurface, borderWidth: 1, borderColor: colors.dangerBorder },
   bubbleSending: { opacity: 0.7 },

@@ -516,13 +516,18 @@ function MessageBubble({
         style={[
           styles.bubble,
           mine ? styles.mine : styles.theirs,
+          message.image ? styles.withImage : null,
           message.status === 'failed' && styles.failed,
         ]}
       >
         {message.image ? (
           <Image source={{ uri: message.image.uri }} style={styles.sentImage} accessibilityLabel="Imagen que enviaste a Tero" />
         ) : null}
-        {message.text ? <Text style={mine ? styles.mineText : styles.theirsText}>{message.text}</Text> : null}
+        {message.text ? (
+          <Text style={[mine ? styles.mineText : styles.theirsText, message.image ? styles.imageText : null]}>
+            {message.text}
+          </Text>
+        ) : null}
       </View>
       {label ? (
         <View style={styles.statusRow}>
@@ -580,7 +585,9 @@ const styles = themedStyles(() => ({
     paddingVertical: space[2],
     marginBottom: space[1],
   },
-  mine: { alignSelf: 'flex-end', backgroundColor: colors.brand },
+  mine: { alignSelf: 'flex-end', backgroundColor: colors.bubbleMine },
+  withImage: { padding: 3 },
+  imageText: { paddingHorizontal: space[2], paddingTop: space[1], paddingBottom: space[1] },
   theirs: {
     alignSelf: 'flex-start',
     backgroundColor: colors.surface,
@@ -615,7 +622,7 @@ const styles = themedStyles(() => ({
   attachText: { color: colors.fg, fontSize: fontSize.labelLg },
   attachedRow: { flexDirection: 'row', alignItems: 'center', gap: space[3], paddingHorizontal: space[4], paddingTop: space[2] },
   attachedThumb: { width: 56, height: 56, borderRadius: radius.input },
-  sentImage: { width: 180, height: 130, borderRadius: radius.input, marginBottom: space[1] },
+  sentImage: { width: 180, height: 130, borderRadius: radius.input },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',

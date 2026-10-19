@@ -181,14 +181,18 @@ describe('las pantallas', () => {
     assert.match(player, /thumbnail_url/);
   });
 
-  it('solo se usa la galería: ni cámara ni micrófono', () => {
+  it('publicaciones, chat y perfil usan solo la galería; la cámara es solo para historias', () => {
     const picker = read('src/shared/media/pickMedia.ts');
     assert.match(picker, /launchImageLibraryAsync/);
     assert.doesNotMatch(picker, /launchCameraAsync|requestCameraPermissions/);
+    // La cámara está únicamente en la hoja de «Crear» del botón central (historias, ADR-054 / ADR-046 enmienda).
+    assert.match(read('src/features/stories/CreateSheet.tsx'), /launchCameraAsync/);
     const app = JSON.parse(read('app.json'));
     const plugin = app.expo.plugins.find((entry) => Array.isArray(entry) && entry[0] === 'expo-image-picker');
     assert.ok(plugin, 'falta el plugin de expo-image-picker');
-    assert.equal(plugin[1].cameraPermission, false);
+    // Con `false` Android quita CAMERA del manifiesto y la cámara de historias no podría abrirse: lleva el texto de uso.
+    assert.equal(typeof plugin[1].cameraPermission, 'string');
+    assert.ok(plugin[1].cameraPermission.length > 20);
     // OJO: `microphonePermission: false` quitaría RECORD_AUDIO de TODA la app (notas de voz y dictado, ADR-042).
     assert.equal('microphonePermission' in plugin[1], false);
   });
