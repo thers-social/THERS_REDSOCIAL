@@ -1,9 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import type { ReactElement } from 'react';
+import { Alert } from 'react-native';
 
 import type { Post } from '@features/posts/types';
-import { comingSoon } from '@shared/lib/comingSoon';
+import { setPostSaved } from '@features/posts/api';
+import { ApiError } from '@shared/lib/api';
 import { ActionSheet } from '@shared/ui/ActionSheet';
 import type { SheetAction } from '@shared/ui/ActionSheet';
 
@@ -14,8 +16,7 @@ type Target = { post: Post; isOwn: boolean };
  * Reutiliza `ActionSheet` y, para «Reportar», el `ReportModal` que el menú ya
  * tiene (`onReport`), en vez de abrir uno propio.
  *
- * «Ver autor» y «Guardar» todavía no tienen pantalla ni servidor en la app
- * móvil: avisan «Próximamente» en lugar de simularlo.
+ * «Ver autor» abre su perfil y «Guardar» usa `POST /api/posts/<id>/save` (ADR-047).
  */
 export function useTeroPostActions(onReport: (post: Post) => void): {
   open: (post: Post, isOwn: boolean) => void;
@@ -36,8 +37,21 @@ export function useTeroPostActions(onReport: (post: Post) => void): {
         ...(target.isOwn
           ? []
           : [
-              { label: `Ver a @${target.post.author.username}`, onPress: () => comingSoon('Ver perfiles') },
-              { label: 'Guardar', onPress: () => comingSoon('Guardar publicaciones') },
+              {
+                label: `Ver a @${target.post.author.username}`,
+                onPress: () =>
+                  router.push({ pathname: '/user/[userId]', params: { userId: target.post.author.id } }),
+              },
+              {
+                label: 'Guardar',
+                onPress: () => {
+                  setPostSaved(target.post.id, true)
+                    .then(() => Alert.alert('Guardada', 'La encuentras en Configuración > Guardado.'))
+                    .catch((e) =>
+                      Alert.alert('No se pudo guardar', e instanceof ApiError ? e.message : 'Inténtalo de nuevo.'),
+                    );
+                },
+              },
               { label: 'Reportar', destructive: true, onPress: () => onReport(target.post) },
             ]),
       ];

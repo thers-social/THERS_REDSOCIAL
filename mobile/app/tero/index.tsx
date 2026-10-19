@@ -12,12 +12,11 @@ import { checkMessage, MAX_TERO_MESSAGE_LENGTH } from '@features/tero/lib/teroCh
 import { useReducedMotion } from '@features/tero/lib/useReducedMotion';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
-import { comingSoon } from '@shared/lib/comingSoon';
 import { Icon } from '@shared/ui/Icon';
 import type { IconName } from '@shared/ui/Icon';
 import { Screen } from '@shared/ui/Screen';
 
-type Shortcut = { label: string; description: string; icon: IconName; href?: Href; soon?: string };
+type Shortcut = { label: string; description: string; icon: IconName; href: Href };
 
 /**
  * «Novedades» reutiliza Avisos (datos reales). Places y Personas llevan a sus pantallas con datos reales
@@ -115,7 +114,7 @@ function TeroHomeContent() {
           <Pressable
             key={item.label}
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-            onPress={() => (item.href ? router.push(item.href) : comingSoon(item.soon))}
+            onPress={() => router.push(item.href)}
             accessibilityRole="button"
             accessibilityLabel={item.label}
             accessibilityHint={item.description}
