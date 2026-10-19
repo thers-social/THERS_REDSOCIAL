@@ -69,6 +69,8 @@ export default function Index() {
     );
   }
 
+  // Una cuenta nacida de Google sin teléfono/fecha de nacimiento se completa antes de entrar (ADR-012).
+  if (user && !user.profile_completed) return <Redirect href="/complete-profile" />;
   return <Redirect href={user ? '/home' : '/login'} />;
 }
 

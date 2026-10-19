@@ -20,11 +20,20 @@ import { unregisterPushDevice } from '@features/push/push';
 import { ApiError, request, revokeSessionOnServer, waitForRefresh } from '@shared/lib/api';
 import { clearSession, getRefreshToken, getToken, setSession } from '@shared/lib/session';
 
+import { getGoogleCredential } from '../lib/googleSignIn';
 import { isTwoFactorChallenge } from '../types';
 import type { LoginResponse, TwoFactorVerifyResponse, User } from '../types';
 
 /** Resultado de `login`: una sesión abierta, o falta el segundo factor (`ADR-026`). */
 export type LoginResult = { status: 'authenticated' } | { status: 'two_factor' };
+
+/**
+ * Resultado de `loginWithGoogle`. `profileCompleted` es `false` para una cuenta recién creada con
+ * Google: faltan teléfono, país y fecha de nacimiento (`ADR-012`), y hay que completarlos.
+ */
+export type GoogleLoginResult =
+  | { status: 'authenticated'; profileCompleted: boolean }
+  | { status: 'two_factor' };
 
 /** Resultado de `verifyTwoFactor`: para avisar si se gastó un código de recuperación. */
 export type TwoFactorOutcome = { usedRecoveryCode: boolean; recoveryCodesRemaining: number };
@@ -40,6 +49,12 @@ type AuthState = {
    */
   restoreFailed: boolean;
   login: (email: string, password: string) => Promise<LoginResult>;
+  /**
+   * «Continuar con Google» (`POST /api/auth/google`, `ADR-012`): sirve para registrarse y para
+   * entrar. Lanza `GoogleSignInError` (`reason: 'cancelled'` si la persona cierra el selector) o
+   * `ApiError` si el servidor rechaza la credencial.
+   */
+  loginWithGoogle: () => Promise<GoogleLoginResult>;
   /**
    * `true` si el login pidió el segundo factor y falta verificarlo. El token de
    * desafío NO sale de este contexto: ni por parámetros de ruta ni a disco (no
@@ -140,6 +155,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { status: 'authenticated' };
   }, []);
 
+  const loginWithGoogle = useCallback(async (): Promise<GoogleLoginResult> => {
+    // El ID Token sale de Google tal cual y va al servidor, que lo verifica (firma, `iss`, `aud`,
+    // `exp`). La app no manda email ni nombre: nunca se confía en lo que diga el cliente.
+    const credential = await getGoogleCredential();
+    const data = await request<LoginResponse>('/auth/google', {
+      method: 'POST',
+      body: { credential },
+    });
+
+    if (isTwoFactorChallenge(data)) {
+      setPendingTwoFactorToken(data.two_factor_token);
+      return { status: 'two_factor' };
+    }
+
+    await setSession({ accessToken: data.token, refreshToken: data.refresh_token });
+    setPendingTwoFactorToken(null);
+    setRestoreFailed(false);
+    setUser(data.user);
+    return { status: 'authenticated', profileCompleted: data.user.profile_completed };
+  }, []);
+
   const verifyTwoFactor = useCallback(
     async (code: string): Promise<TwoFactorOutcome> => {
       if (!pendingTwoFactorToken) {
@@ -192,6 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isRestoring,
       restoreFailed,
       login,
+      loginWithGoogle,
       hasPendingTwoFactor: pendingTwoFactorToken !== null,
       verifyTwoFactor,
       cancelTwoFactor,
@@ -203,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isRestoring,
       restoreFailed,
       login,
+      loginWithGoogle,
       pendingTwoFactorToken,
       verifyTwoFactor,
       cancelTwoFactor,
