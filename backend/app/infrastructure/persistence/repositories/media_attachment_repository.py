@@ -13,10 +13,13 @@ from app.infrastructure.persistence.models import MediaAttachment
 
 
 class SQLAlchemyMediaAttachmentRepository(MediaAttachmentRepository):
-    def _add(self, owner_id, items, **parent):
+    def _add(self, owner_id, items, moderate=True, **parent):
         # Moderación (ADR-044): el estado se fija SIEMPRE de forma explícita, y el trabajo de
         # revisión se encola en la MISMA transacción que la imagen (sin imagen sin trabajo).
-        moderated = bool(current_app.config.get("MODERATION_ENABLED"))
+        # `moderate=False` (mensajes directos): la imagen nace aprobada y no entra a la cola, porque
+        # el contenido de una conversación privada no lo revisa una persona del equipo. Sigue siendo
+        # reportable por quien la recibe (ADR-032).
+        moderated = bool(current_app.config.get("MODERATION_ENABLED")) and moderate
         status = initial_status(moderated)
         queue = None
         if moderated:
@@ -48,7 +51,7 @@ class SQLAlchemyMediaAttachmentRepository(MediaAttachmentRepository):
         self._add(owner_id, items, post_id=post_id)
 
     def add_for_message(self, message_id, owner_id, items):
-        self._add(owner_id, items, message_id=message_id)
+        self._add(owner_id, items, moderate=False, message_id=message_id)
 
     def keys_for_post(self, post_id, owner_id):
         return list(

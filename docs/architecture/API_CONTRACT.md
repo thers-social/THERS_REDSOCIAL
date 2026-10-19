@@ -1119,8 +1119,11 @@ Obligatorio, con el mismo validador y el mismo límite (1000, menor que el de po
 
 #### `POST /api/users/<user_id>/messages`
 
+> **Cambio 2026-10-19 (privacidad, decisión del propietario, ADR pendiente de redactar):** las imágenes de un mensaje directo **no pasan por la moderación de contenido**: nacen `approved` aunque `MODERATION_ENABLED` esté encendido y no entran a la cola del panel (`ADR-044`). La receptora las ve de inmediato y sigue pudiendo reportarlas (`ADR-032`). Las imágenes de publicaciones, historias y reels no cambian.
+
 | Campo | Valor |
 |---|---|
+| Estado | **IMPLEMENTADO** — nuevo (`ADR-013-messages-minimal-model.md`) |
 | Estado | **IMPLEMENTADO** — nuevo (`ADR-013-messages-minimal-model.md`) |
 | Blueprint | `messages_bp` (`backend/app/interfaces/routes/message_routes.py`) |
 | Auth requerida | **Sí** — `Bearer <jwt>` en el header `Authorization`. `sender_id` sale exclusivamente del JWT, `recipient_id` de la URL — ninguno de los dos se acepta del body |
