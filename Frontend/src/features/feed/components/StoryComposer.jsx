@@ -25,6 +25,8 @@ export default function StoryComposer({ onClose, onPublished }) {
   const [image, setImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [text, setText] = useState("");
+  // A quién va dirigida (ADR-054): `everyone` o `close_friends`.
+  const [audience, setAudience] = useState("everyone");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -60,7 +62,7 @@ export default function StoryComposer({ onClose, onPublished }) {
     setBusy(true);
     setError("");
     try {
-      const story = await createStory({ image, content: text });
+      const story = await createStory({ image, content: text, audience });
       onPublished?.(story);
       onClose();
     } catch (problem) {
@@ -142,8 +144,38 @@ export default function StoryComposer({ onClose, onPublished }) {
           </span>
         </label>
 
+        <fieldset className="flex flex-col gap-2" disabled={busy}>
+          <legend className="mb-1 text-label-md font-semibold text-th-fg-muted">{t("closeFriends.audienceLabel")}</legend>
+          <div className="flex gap-2" role="radiogroup" aria-label={t("closeFriends.audienceLabel")}>
+            {[
+              { id: "everyone", label: t("closeFriends.everyone") },
+              { id: "close_friends", label: t("closeFriends.title") },
+            ].map((option) => {
+              const selected = audience === option.id;
+              const green = option.id === "close_friends";
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setAudience(option.id)}
+                  className={`min-h-[40px] flex-1 rounded-th-pill border px-3 text-label-md font-semibold th-focus-ring ${
+                    selected
+                      ? "border-th-brand bg-th-surface-raised text-th-fg-strong"
+                      : "border-th-border text-th-fg-muted"
+                  }`}
+                >
+                  {green && "★ "}
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
         <p className="text-label-md text-th-fg-subtle">
-          Dura 24 horas. La verán quienes te siguen.
+          {audience === "close_friends" ? t("closeFriends.storyCloseNote") : t("closeFriends.storyEveryoneNote")}
         </p>
 
         {error && (

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Icon from "@shared/components/Icon";
 
 /**
@@ -33,7 +34,9 @@ export default function ImageGrid({ images: allImages, alt = "Imagen adjunta", c
   return (
     <>
       <div
-        className={`grid gap-1 overflow-hidden rounded-2xl border border-th-border ${maxWidth} ${
+        className={`grid gap-1 overflow-hidden ${
+          compact ? "rounded-[13px]" : "rounded-2xl border border-th-border"
+        } ${maxWidth} ${
           count === 1 ? "grid-cols-1" : "grid-cols-2"
         }`}
       >
@@ -108,7 +111,10 @@ function Lightbox({ images, index, alt, onChange, onClose }) {
     };
   }, [index, count, onChange, onClose]);
 
-  return (
+  // En `document.body` y no dentro de la burbuja: un ancestro con `transform`/animación crea su propio
+  // contexto de apilado y deja el visor (aunque sea `fixed`) por debajo de los mensajes siguientes,
+  // así que al abrir una foto antigua se veía por encima la del último mensaje.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -159,5 +165,7 @@ function Lightbox({ images, index, alt, onChange, onClose }) {
         onClick={(event) => event.stopPropagation()}
       />
     </div>
+    ,
+    document.body,
   );
 }

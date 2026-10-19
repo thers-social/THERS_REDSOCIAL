@@ -916,5 +916,27 @@
       "generic": "The audio could not be recorded. Try again.",
       "playback": "Could not play"
     }
+  },
+  "closeFriends": {
+    "title": "Close friends",
+    "intro": "Your stories and posts marked “Close friends” are only seen by people on this list. Nobody is notified when you add or remove them.",
+    "loading": "Loading your list...",
+    "search": "Search",
+    "yourList": "Your list",
+    "empty": "You haven't added anyone yet.",
+    "noMatches": "Nobody on your list matches the search.",
+    "followers": "Your followers",
+    "followersEmpty": "There are no followers to add.",
+    "full": "Your list can have up to {{limit}} people.",
+    "add": "Add",
+    "remove": "Remove",
+    "addAria": "Add {{name}} to close friends",
+    "removeAria": "Remove {{name}} from close friends",
+    "only": "Close friends only",
+    "onlyPostHint": "Only the people on your close friends list will see it.",
+    "audienceLabel": "Who sees it?",
+    "everyone": "All my followers",
+    "storyEveryoneNote": "Lasts 24 hours. People who follow you will see it.",
+    "storyCloseNote": "Lasts 24 hours. Only your close friends will see it."
   }
 }

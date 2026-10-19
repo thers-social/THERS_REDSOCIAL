@@ -7,7 +7,7 @@ function authConfig(extra = {}) {
   return { ...extra, headers: { Authorization: `Bearer ${getStoredToken()}` } };
 }
 
-/** La tira: `[{author, stories_count, has_unseen, latest_at, latest_image_url, is_me}]`. */
+/** La tira: `[{author, stories_count, has_unseen, has_close_friends, latest_at, latest_image_url, is_me}]`. */
 export async function fetchStrip(signal) {
   const { data } = await api.get("/stories", authConfig({ signal }));
   return data.authors;
@@ -28,10 +28,12 @@ export async function fetchViews(storyId, signal) {
   return data;
 }
 
-export async function createStory({ image, content }) {
+export async function createStory({ image, content, audience = "everyone" }) {
   const form = new FormData();
   form.append("image", image);
   if (content && content.trim()) form.append("content", content.trim());
+  // Solo se envía si no es la de siempre: el servidor trata la ausencia como `everyone` (ADR-054).
+  if (audience !== "everyone") form.append("audience", audience);
   const { data } = await api.post("/stories", form, authConfig());
   return data.story;
 }

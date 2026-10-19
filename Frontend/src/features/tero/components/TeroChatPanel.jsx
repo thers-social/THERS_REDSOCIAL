@@ -220,9 +220,11 @@ export default function TeroChatPanel({ chat, onClose }) {
           <div key={message.id} className={`tero-msg-enter flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] ${message.role === "user" ? "" : "w-full"}`}>
               <div
-                className={`whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-sm ${
+                className={`whitespace-pre-wrap break-words rounded-2xl text-sm ${
+                  message.image ? "p-[3px]" : "px-3.5 py-2"
+                } ${
                   message.role === "user"
-                    ? "bg-th-brand text-th-on-brand"
+                    ? "bg-[#5b21b6] text-white dark:bg-[#4c1d95]"
                     : "bg-th-surface-subtle text-th-fg"
                 } ${message.status === "failed" ? "opacity-70" : ""}`}
               >
@@ -230,10 +232,14 @@ export default function TeroChatPanel({ chat, onClose }) {
                   <img
                     src={previewUrl(message.image)}
                     alt={t("tero.image.sent")}
-                    className="mb-2 max-h-40 w-auto rounded-xl"
+                    className="max-h-40 w-auto rounded-[13px]"
                   />
                 )}
-                {message.text}
+                {message.image && message.text ? (
+                  <span className="block px-2.5 pb-1 pt-1.5">{message.text}</span>
+                ) : (
+                  message.text
+                )}
               </div>
               {message.status === "failed" ? (
                 <button
