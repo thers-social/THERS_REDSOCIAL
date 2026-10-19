@@ -117,13 +117,27 @@ class TestFlagAndD3:
             token, _ = make_account(client, "autora")
             assert _upload(client, token).status_code == 404
 
-    def test_public_upload_cannot_be_opened_from_configuration(self, app, client, reels):
-        """D3: la constante es de código. Ninguna variable de entorno ni de configuración la abre."""
+    def test_public_upload_is_closed_without_human_review(self, app, client, reels):
+        """D3: sin moderación encendida, o con el clasificador simulado, solo vale la lista. Ninguna
+        variable de configuración abre la subida por sí sola."""
         with app.app_context():
-            assert rules.PUBLIC_UPLOAD_ALLOWED is False
-            app.config.update(VIDEO_PUBLIC_UPLOAD=True, PUBLIC_UPLOAD_ALLOWED=True, VIDEOS_PUBLIC=True)
+            app.config.update(
+                VIDEO_PUBLIC_UPLOAD=True, PUBLIC_UPLOAD_ALLOWED=True, VIDEOS_PUBLIC=True,
+                MODERATION_ENABLED=False, MODERATION_CLASSIFIER="none",
+            )
             token, _ = make_account(client, "otra")
             assert _upload(client, token).status_code == 404
+            app.config.update(MODERATION_ENABLED=True, MODERATION_CLASSIFIER="fake")
+            assert _upload(client, token).status_code == 404
+
+    def test_public_upload_opens_only_when_everything_is_held_for_a_person(self, app, client, reels):
+        with app.app_context():
+            app.config.update(MODERATION_ENABLED=True, MODERATION_CLASSIFIER="none")
+            token, _ = make_account(client, "otra")
+            assert _upload(client, token).status_code in (200, 201)
+        assert rules.may_upload("otra", frozenset(), human_review_only=True) is True
+        assert rules.may_upload("otra", frozenset(), human_review_only=False) is False
+        assert rules.may_upload(None, frozenset(), human_review_only=True) is False
 
     def test_the_list_is_case_insensitive_and_exact(self, app, client, reels):
         assert rules.may_upload("Autora", rules.parse_allowlist(" Autora , otra ")) is True

@@ -2745,7 +2745,7 @@ Todas exigen `Authorization: Bearer <token>`. Una historia dura **24 horas** (`e
 
 ## 4.40 Reels con Mux (`ADR-043`, `ADR-043-A`) — v0.65
 
-**PROPUESTO, sin ratificar.** Todas las rutas responden `404 {"msg": "Recurso no encontrado"}` con `VIDEOS_ENABLED` apagado, antes de autenticar. Nada de esto abre la subida al público (D3).
+**PROPUESTO, sin ratificar.** Todas las rutas responden `404 {"msg": "Recurso no encontrado"}` con `VIDEOS_ENABLED` apagado, antes de autenticar. **Cambio 2026-10-18 (D3, decisión del propietario, ADR pendiente de redactar):** `POST /api/videos/uploads` deja de limitarse a `VIDEO_UPLOAD_ALLOWLIST` cuando `MODERATION_ENABLED` está encendido y `MODERATION_CLASSIFIER` no es `fake` (todo queda retenido hasta que una persona lo aprueba). Con la moderación apagada o con el clasificador simulado, sigue valiendo solo la lista; el resto recibe `404`.
 
 | Método y ruta | Auth | Qué hace |
 |---|---|---|
