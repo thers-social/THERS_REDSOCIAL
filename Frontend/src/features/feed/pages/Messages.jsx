@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import { IoSearchOutline, IoArrowBack, IoImageOutline, IoVideocamOutline, IoSend, IoChatbubblesOutline, IoTrashOutline, IoPencilOutline, IoPeopleOutline, IoInformationCircleOutline } from "react-icons/io5";
 import Avatar from "@shared/components/Avatar";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
@@ -501,11 +501,16 @@ export default function Messages() {
                   </>
                 ) : (
                   <>
-                <Avatar name={active.user.name} photo={active.user.avatar_url} size="w-9 h-9" />
+                <Link to={`/user/${active.user.id}`} aria-label={active.user.name} className="shrink-0">
+                  <Avatar name={active.user.name} photo={active.user.avatar_url} size="w-9 h-9" />
+                </Link>
                 <div className="min-w-0">
-                  <p className="text-ink dark:text-ink-dark text-sm font-semibold truncate">
+                  <Link
+                    to={`/user/${active.user.id}`}
+                    className="block text-ink dark:text-ink-dark text-sm font-semibold truncate hover:underline"
+                  >
                     {active.user.name}
-                  </p>
+                  </Link>
                   {otherIsTyping ? (
                     <p className="text-pulse-600 text-xs animate-pulse">Escribiendo...</p>
                   ) : (
