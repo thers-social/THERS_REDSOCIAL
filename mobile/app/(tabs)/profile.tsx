@@ -13,7 +13,6 @@ import { colors, fontSize, fonts, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { useLanguage } from '@shared/i18n';
 import { messageOf } from '@features/posts/PostsContext';
-import { comingSoon } from '@shared/lib/comingSoon';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
 import { EditProfileModal } from '@shared/ui/EditProfileModal';
@@ -173,22 +172,6 @@ export default function Profile() {
             </View>
 
             {suggesting ? <SuggestedAccounts onClose={() => setSuggesting(false)} /> : null}
-
-            <Pressable
-              onPress={() => comingSoon(t('profile.highlights.feature'))}
-              style={styles.highlights}
-              accessibilityRole="button"
-              accessibilityLabel={t('profile.highlights.a11y')}
-            >
-              <View style={styles.highlightNew}>
-                <Icon name="plus" size={22} color={colors.fgSecondary} />
-              </View>
-              <View style={styles.flexText}>
-                <Text style={styles.highlightTitle}>{t('profile.highlights')}</Text>
-                <Text style={styles.highlightHint}>{t('coming.title')}</Text>
-              </View>
-              <Icon name="chevron" size={18} color={colors.fgDisabled} />
-            </Pressable>
 
             <View style={styles.tabs}>
               {(
