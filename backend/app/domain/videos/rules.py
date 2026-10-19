@@ -1,13 +1,15 @@
 # Reglas de producto de los Reels (ADR-043, ADR-043-A). Solo tipos nativos: domain/ no importa Flask
 # ni SQLAlchemy (BACKEND_ARCHITECTURE.md §7/§17).
 
-# --- D3 de ADR-043: la subida PÚBLICA de video sigue bloqueada --------------------------------------
+# --- D3 de ADR-043: subida PÚBLICA de video, solo con revisión humana obligatoria -------------------
 #
-# Mientras no exista, esté evaluada, implementada, probada y aprobada una solución de seguridad
-# infantil (ADR-044 §3), SOLO pueden subir video las cuentas de una lista de prueba. Esta constante
-# no es un interruptor de configuración a propósito: abrir la subida al público exige cambiar CÓDIGO
-# en un cambio revisado y un ADR aceptado, no editar una variable de entorno.
-PUBLIC_UPLOAD_ALLOWED = False
+# Decisión del propietario (2026-10-18): cualquier cuenta puede subir video. La condición de
+# seguridad infantil (ADR-044 §3) se mantiene: la subida pública SOLO se permite si la moderación
+# está encendida y NO hay clasificador automático (`MODERATION_CLASSIFIER` distinto de `fake`), es
+# decir, si el servidor deja TODO retenido hasta que una persona lo apruebe (falla cerrado). Con el
+# clasificador simulado o con la moderación apagada vuelve a valer la lista de cuentas de prueba.
+# Esta constante no es un interruptor de configuración a propósito: cambiarla exige CÓDIGO revisado.
+PUBLIC_UPLOAD_ALLOWED = True
 
 PENDING = "pending"
 UPLOADING = "uploading"
@@ -86,11 +88,14 @@ def parse_allowlist(raw):
     )
 
 
-def may_upload(username, allowlist):
-    """Regla D3. `PUBLIC_UPLOAD_ALLOWED` es `False` y no se lee de la configuración."""
-    if PUBLIC_UPLOAD_ALLOWED:
-        return True  # nunca se ejecuta mientras la constante sea False (la fija una prueba)
-    return bool(username) and username.lower() in allowlist
+def may_upload(username, allowlist, human_review_only=False):
+    """Regla D3. Abierta al público solo si `PUBLIC_UPLOAD_ALLOWED` Y la moderación retiene todo para
+    revisión humana (`human_review_only`); si no, solo la lista de cuentas de prueba."""
+    if not username:
+        return False
+    if PUBLIC_UPLOAD_ALLOWED and human_review_only:
+        return True
+    return username.lower() in allowlist
 
 
 # --- Puertos -------------------------------------------------------------------------------------
