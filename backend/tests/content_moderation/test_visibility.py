@@ -94,9 +94,11 @@ class TestModerationOn:
                 db.session.commit()
                 assert _feed_images(client, other) == []
 
-    def test_a_message_image_is_hidden_from_the_recipient_until_approved(
+    def test_a_message_image_is_not_moderated_and_reaches_the_recipient(
         self, app, client, moderation_on
     ):
+        """Una conversación privada no la revisa una persona del equipo: la imagen nace aprobada,
+        no entra a la cola de moderación y la receptora la ve de inmediato."""
         import io
 
         from tests.content_moderation.conftest import png
@@ -119,7 +121,13 @@ class TestModerationOn:
                 f"/api/users/{sender_id}/messages", headers=_auth_headers(recipient)
             ).get_json()["messages"]
 
-            assert thread[0]["content"] == "mira" and thread[0]["images"] == []
+            assert thread[0]["content"] == "mira" and len(thread[0]["images"]) == 1
+            assert db.session.execute(
+                text("SELECT count(*) FROM media_attachments WHERE moderation_status <> 'approved'")
+            ).scalar() == 0
+            assert db.session.execute(
+                text("SELECT count(*) FROM moderation_jobs")
+            ).scalar() == 0
 
     def test_the_file_itself_is_not_served_while_not_approved(self, app, client, moderation_on):
         """Autorización efectiva: no basta con ocultar la URL, el archivo responde 404."""
