@@ -4,11 +4,7 @@ import { Text, View } from 'react-native';
 
 import { GoogleSignInButton } from '@features/auth/components/GoogleSignInButton';
 import { AUTH_BUTTON_MIN_HEIGHT, AUTH_BUTTON_RADIUS } from '@features/auth/lib/authButtonStyle';
-import {
-  MIN_AGE_MESSAGE,
-  isValidISODate,
-  meetsMinimumAge,
-} from '@features/auth/lib/age';
+import { MIN_AGE_YEARS, isValidISODate, meetsMinimumAge } from '@features/auth/lib/age';
 import {
   MIN_PASSWORD_LENGTH,
   isValidCountryCode,
@@ -19,6 +15,7 @@ import {
 import { ApiError, request } from '@shared/lib/api';
 import { colors, fontSize, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { Banner } from '@shared/ui/Banner';
 import { BirthDateInput } from '@shared/ui/BirthDateInput';
 import { Button } from '@shared/ui/Button';
@@ -39,6 +36,7 @@ type Errors = Partial<Record<
  */
 export default function Register() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -54,24 +52,24 @@ export default function Register() {
 
   function validate(): Errors {
     const next: Errors = {};
-    if (!name.trim()) next.name = 'Escribe tu nombre.';
-    if (!username.trim()) next.username = 'Elige un nombre de usuario.';
+    if (!name.trim()) next.name = t('form.error.name');
+    if (!username.trim()) next.username = t('form.error.usernameRequired');
     else if (!isValidUsername(username)) {
-      next.username = 'De 3 a 20 caracteres: letras, números o guion bajo.';
+      next.username = t('form.error.usernameInvalid');
     }
-    if (!email.trim()) next.email = 'Escribe tu correo.';
-    else if (!isValidEmail(email)) next.email = 'El correo no es válido.';
-    if (!isValidCountryCode(countryCode)) next.countryCode = 'Ejemplo: +503';
-    if (!phone.trim()) next.phone = 'Escribe tu teléfono.';
-    else if (!isValidPhone(phone)) next.phone = 'El teléfono no es válido.';
-    if (!birthDate) next.birthDate = 'Completa tu fecha de nacimiento.';
-    else if (!isValidISODate(birthDate)) next.birthDate = 'La fecha no es válida.';
-    else if (!meetsMinimumAge(birthDate)) next.birthDate = MIN_AGE_MESSAGE;
-    if (!password) next.password = 'Elige una contraseña.';
+    if (!email.trim()) next.email = t('form.error.emailRequired');
+    else if (!isValidEmail(email)) next.email = t('form.error.emailInvalid');
+    if (!isValidCountryCode(countryCode)) next.countryCode = t('form.error.country');
+    if (!phone.trim()) next.phone = t('form.error.phoneRequired');
+    else if (!isValidPhone(phone)) next.phone = t('form.error.phoneInvalid');
+    if (!birthDate) next.birthDate = t('form.error.birthRequired');
+    else if (!isValidISODate(birthDate)) next.birthDate = t('form.error.birthInvalid');
+    else if (!meetsMinimumAge(birthDate)) next.birthDate = t('age.min', { years: MIN_AGE_YEARS });
+    if (!password) next.password = t('form.error.passwordRequired');
     else if (password.length < MIN_PASSWORD_LENGTH) {
-      next.password = `Debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`;
+      next.password = t('form.error.passwordShort', { min: MIN_PASSWORD_LENGTH });
     }
-    if (confirm !== password) next.confirm = 'Las contraseñas no coinciden.';
+    if (confirm !== password) next.confirm = t('form.error.passwordMismatch');
     return next;
   }
 
@@ -107,7 +105,7 @@ export default function Register() {
         if (e.status === 400 && body?.min_age) setErrors({ birthDate: e.message });
         else setFormError(e.message);
       } else {
-        setFormError('Ocurrió un error inesperado. Inténtalo de nuevo.');
+        setFormError(t('common.unexpected'));
       }
     } finally {
       setSubmitting(false);
@@ -115,15 +113,13 @@ export default function Register() {
   }
 
   return (
-    <Screen title="Crear cuenta" back>
-      <Text style={styles.intro}>
-        Únete a THERS. Te enviaremos un código para verificar tu correo.
-      </Text>
+    <Screen title={t('register.title')} back>
+      <Text style={styles.intro}>{t('register.intro')}</Text>
 
       {formError ? <Banner tone="error">{formError}</Banner> : null}
 
       <TextField
-        label="Nombre"
+        label={t('form.name')}
         value={name}
         onChangeText={setName}
         autoComplete="name"
@@ -132,7 +128,7 @@ export default function Register() {
         editable={!submitting}
       />
       <TextField
-        label="Nombre de usuario"
+        label={t('form.username')}
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
@@ -141,7 +137,7 @@ export default function Register() {
         editable={!submitting}
       />
       <TextField
-        label="Correo"
+        label={t('form.email')}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -155,7 +151,7 @@ export default function Register() {
       <View style={styles.phoneRow}>
         <View style={styles.country}>
           <TextField
-            label="País"
+            label={t('form.country')}
             value={countryCode}
             onChangeText={setCountryCode}
             keyboardType="phone-pad"
@@ -165,7 +161,7 @@ export default function Register() {
         </View>
         <View style={styles.phone}>
           <TextField
-            label="Teléfono"
+            label={t('form.phone')}
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
@@ -179,8 +175,8 @@ export default function Register() {
       <BirthDateInput onChange={setBirthDate} error={errors.birthDate} />
 
       <TextField
-        label="Contraseña"
-        hint={`Mínimo ${MIN_PASSWORD_LENGTH} caracteres.`}
+        label={t('form.password')}
+        hint={t('form.passwordHint', { min: MIN_PASSWORD_LENGTH })}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -191,7 +187,7 @@ export default function Register() {
         editable={!submitting}
       />
       <TextField
-        label="Repite la contraseña"
+        label={t('form.passwordRepeat')}
         value={confirm}
         onChangeText={setConfirm}
         secureTextEntry
@@ -202,14 +198,11 @@ export default function Register() {
         editable={!submitting}
       />
 
-      <Text style={styles.legal}>
-        Al crear tu cuenta confirmas que tienes 18 años o más. Los términos de uso y la política de
-        privacidad se publicarán en la web de THERS antes del lanzamiento.
-      </Text>
+      <Text style={styles.legal}>{t('register.legal')}</Text>
 
       {/* Misma forma que «Continuar con Google» (authButtonStyle.ts); el borde es el morado del botón. */}
       <Button
-        label="Crear cuenta"
+        label={t('register.submit')}
         onPress={handleSubmit}
         loading={submitting}
         style={{ borderRadius: AUTH_BUTTON_RADIUS, minHeight: AUTH_BUTTON_MIN_HEIGHT }}

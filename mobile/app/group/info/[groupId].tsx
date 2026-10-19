@@ -15,6 +15,7 @@ import {
   renameGroup,
 } from '@features/messages/groups';
 import type { GroupDetail } from '@features/messages/groups';
+import { ProfileLink } from '@features/profile/ProfileLink';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
@@ -139,14 +140,16 @@ export default function GroupInfo() {
           <Text style={styles.section}>{group.members.length} personas</Text>
           {group.members.map((member) => (
             <View key={member.id} style={styles.row}>
-              <Avatar name={member.name} uri={member.avatar_url} size={40} />
-              <View style={styles.rowText}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {member.name}
-                  {member.id === user.id ? ' (tú)' : ''}
-                </Text>
-                {member.role === 'admin' ? <Text style={styles.badge}>Administrador</Text> : null}
-              </View>
+              <ProfileLink userId={member.id} name={member.name}>
+                <Avatar name={member.name} uri={member.avatar_url} size={40} />
+                <View style={styles.rowText}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {member.name}
+                    {member.id === user.id ? ' (tú)' : ''}
+                  </Text>
+                  {member.role === 'admin' ? <Text style={styles.badge}>Administrador</Text> : null}
+                </View>
+              </ProfileLink>
               {isAdmin && member.role !== 'admin' ? (
                 <View style={styles.rowActions}>
                   <Pressable

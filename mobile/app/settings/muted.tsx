@@ -4,6 +4,7 @@ import { Alert, Pressable, Text, View } from 'react-native';
 import { addMutedKeyword, fetchMutedKeywords, removeMutedKeyword } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { ApiError } from '@shared/lib/api';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
@@ -16,6 +17,7 @@ import { TextField } from '@shared/ui/TextField';
  * publicaciones que las contienen. Tus propias publicaciones nunca se ocultan.
  */
 export default function Muted() {
+  const { t } = useLanguage();
   const [words, setWords] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -26,9 +28,9 @@ export default function Muted() {
       setWords(await fetchMutedKeywords());
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No pudimos cargar tus palabras silenciadas.');
+      setError(e instanceof ApiError ? e.message : t('muted.error.load'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -44,7 +46,7 @@ export default function Muted() {
       setDraft('');
       await load();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No pudimos añadir la palabra.');
+      setError(e instanceof ApiError ? e.message : t('muted.error.add'));
     } finally {
       setBusy(false);
     }
@@ -55,17 +57,17 @@ export default function Muted() {
       await removeMutedKeyword(word);
       setWords((current) => current?.filter((w) => w !== word) ?? current);
     } catch (e) {
-      Alert.alert('No se pudo quitar', e instanceof ApiError ? e.message : 'Inténtalo de nuevo.');
+      Alert.alert(t('muted.error.remove'), e instanceof ApiError ? e.message : t('common.tryAgain'));
     }
   }
 
   return (
-    <Screen title="Palabras silenciadas" back>
+    <Screen title={t('muted.title')} back>
       {error ? <Banner tone="error">{error}</Banner> : null}
 
       <TextField
-        label="Silenciar una palabra"
-        hint="No distingue mayúsculas ni tildes."
+        label={t('muted.label')}
+        hint={t('muted.hint')}
         value={draft}
         onChangeText={setDraft}
         autoCapitalize="none"
@@ -73,13 +75,13 @@ export default function Muted() {
         editable={!busy}
         onSubmitEditing={add}
       />
-      <Button label="Añadir" variant="secondary" onPress={add} loading={busy} disabled={!draft.trim()} />
+      <Button label={t('common.add')} variant="secondary" onPress={add} loading={busy} disabled={!draft.trim()} />
 
-      <Text style={styles.title}>Tus palabras</Text>
+      <Text style={styles.title}>{t('muted.yourWords')}</Text>
       {words === null ? (
         error ? null : <StateMessage kind="loading" />
       ) : words.length === 0 ? (
-        <StateMessage kind="empty" message="No has silenciado ninguna palabra." />
+        <StateMessage kind="empty" message={t('muted.empty')} />
       ) : (
         <View style={styles.chips}>
           {words.map((word) => (
@@ -88,7 +90,7 @@ export default function Muted() {
               onPress={() => remove(word)}
               style={styles.chip}
               accessibilityRole="button"
-              accessibilityLabel={`Quitar ${word}`}
+              accessibilityLabel={t('muted.remove', { word })}
             >
               <Text style={styles.chipText}>{word}  ✕</Text>
             </Pressable>

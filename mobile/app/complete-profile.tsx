@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
-import { MIN_AGE_MESSAGE, isValidISODate, meetsMinimumAge } from '@features/auth/lib/age';
+import { MIN_AGE_YEARS, isValidISODate, meetsMinimumAge } from '@features/auth/lib/age';
 import { isValidCountryCode, isValidPhone, isValidUsername } from '@features/auth/lib/validators';
 import { ApiError, request } from '@shared/lib/api';
 import { colors, fontSize, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { Banner } from '@shared/ui/Banner';
 import { BirthDateInput } from '@shared/ui/BirthDateInput';
 import { Button } from '@shared/ui/Button';
@@ -30,6 +31,7 @@ type Errors = Partial<Record<'username' | 'countryCode' | 'phone' | 'birthDate',
  */
 export default function CompleteProfile() {
   const { user, refreshUser, logout } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
 
   const [username, setUsername] = useState('');
@@ -45,16 +47,16 @@ export default function CompleteProfile() {
 
   function validate(): Errors {
     const next: Errors = {};
-    if (!username.trim()) next.username = 'Elige un nombre de usuario.';
+    if (!username.trim()) next.username = t('form.error.usernameRequired');
     else if (!isValidUsername(username)) {
-      next.username = 'De 3 a 20 caracteres: letras, números o guion bajo.';
+      next.username = t('form.error.usernameInvalid');
     }
-    if (!isValidCountryCode(countryCode)) next.countryCode = 'Ejemplo: +503';
-    if (!phone.trim()) next.phone = 'Escribe tu teléfono.';
-    else if (!isValidPhone(phone)) next.phone = 'El teléfono no es válido.';
-    if (!birthDate) next.birthDate = 'Completa tu fecha de nacimiento.';
-    else if (!isValidISODate(birthDate)) next.birthDate = 'La fecha no es válida.';
-    else if (!meetsMinimumAge(birthDate)) next.birthDate = MIN_AGE_MESSAGE;
+    if (!isValidCountryCode(countryCode)) next.countryCode = t('form.error.country');
+    if (!phone.trim()) next.phone = t('form.error.phoneRequired');
+    else if (!isValidPhone(phone)) next.phone = t('form.error.phoneInvalid');
+    if (!birthDate) next.birthDate = t('form.error.birthRequired');
+    else if (!isValidISODate(birthDate)) next.birthDate = t('form.error.birthInvalid');
+    else if (!meetsMinimumAge(birthDate)) next.birthDate = t('age.min', { years: MIN_AGE_YEARS });
     return next;
   }
 
@@ -89,7 +91,7 @@ export default function CompleteProfile() {
         else if (e.status === 409) setErrors({ username: e.message });
         else setFormError(e.message);
       } else {
-        setFormError('Ocurrió un error inesperado. Inténtalo de nuevo.');
+        setFormError(t('common.unexpected'));
       }
     } finally {
       setSubmitting(false);
@@ -97,15 +99,13 @@ export default function CompleteProfile() {
   }
 
   return (
-    <Screen title="Completa tu perfil">
-      <Text style={styles.intro}>
-        Entraste con Google. Para terminar necesitamos unos datos que Google no comparte.
-      </Text>
+    <Screen title={t('complete.title')}>
+      <Text style={styles.intro}>{t('complete.intro')}</Text>
 
       {formError ? <Banner tone="error">{formError}</Banner> : null}
 
       <TextField
-        label="Nombre de usuario"
+        label={t('form.username')}
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
@@ -117,7 +117,7 @@ export default function CompleteProfile() {
       <View style={styles.phoneRow}>
         <View style={styles.country}>
           <TextField
-            label="País"
+            label={t('form.country')}
             value={countryCode}
             onChangeText={setCountryCode}
             keyboardType="phone-pad"
@@ -127,7 +127,7 @@ export default function CompleteProfile() {
         </View>
         <View style={styles.phone}>
           <TextField
-            label="Teléfono"
+            label={t('form.phone')}
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
@@ -140,11 +140,11 @@ export default function CompleteProfile() {
 
       <BirthDateInput onChange={setBirthDate} error={errors.birthDate} />
 
-      <Text style={styles.legal}>Confirmas que tienes 18 años o más.</Text>
+      <Text style={styles.legal}>{t('complete.legal')}</Text>
 
-      <Button label="Continuar" onPress={handleSubmit} loading={submitting} />
+      <Button label={t('common.continue')} onPress={handleSubmit} loading={submitting} />
       <Button
-        label="Cerrar sesión"
+        label={t('settings.logout')}
         variant="ghost"
         onPress={() => {
           void logout().then(() => router.replace('/login'));

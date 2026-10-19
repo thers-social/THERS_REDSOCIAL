@@ -1,108 +1,77 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, Switch, Text, View } from 'react-native';
+import { Switch, Text, View } from 'react-native';
 
-import { fetchPrivacy, patchPrivacy } from '@features/settings/api';
-import type { Audience, PrivacyPatch, PrivacySettings } from '@features/settings/api';
+import { AudienceChoice } from '@features/settings/AudienceChoice';
+import { usePrivacySettings } from '@features/settings/usePrivacySettings';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
-import { ApiError } from '@shared/lib/api';
+import { useLanguage } from '@shared/i18n';
 import { Banner } from '@shared/ui/Banner';
 import { Screen } from '@shared/ui/Screen';
 import { StateMessage } from '@shared/ui/StateMessage';
-
-const AUDIENCES: { id: Audience; label: string }[] = [
-  { id: 'everyone', label: 'Todas las personas' },
-  { id: 'followers', label: 'Solo quienes me siguen' },
-  { id: 'nobody', label: 'Nadie' },
-];
 
 /**
  * Privacidad (`GET`/`PATCH /api/users/me/privacy`, `ADR-022`/`023`/`024`). Cada
  * cambio se aplica en el SERVIDOR: si falla, el control vuelve a su valor real.
  */
 export default function Privacy() {
-  const [settings, setSettings] = useState<PrivacySettings | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      setSettings(await fetchPrivacy());
-      setError(null);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No pudimos cargar tu privacidad.');
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  async function update(patch: PrivacyPatch) {
-    if (!settings || saving) return;
-    setSaving(true);
-    setError(null);
-    const previous = settings;
-    setSettings({ ...settings, ...patch });
-    try {
-      setSettings(await patchPrivacy(patch));
-    } catch (e) {
-      setSettings(previous);
-      setError(e instanceof ApiError ? e.message : 'No pudimos guardar el cambio.');
-    } finally {
-      setSaving(false);
-    }
-  }
+  const { t } = useLanguage();
+  const { settings, error, saving, load, update } = usePrivacySettings();
 
   return (
-    <Screen title="Privacidad" back>
+    <Screen title={t('privacy.title')} back>
       {error && settings ? <Banner tone="error">{error}</Banner> : null}
 
       {!settings ? (
         error ? (
-          <StateMessage kind="error" title="No pudimos cargar tu privacidad" message={error} actionLabel="Reintentar" onAction={load} />
+          <StateMessage
+            kind="error"
+            title={t('privacy.error.loadTitle')}
+            message={error}
+            actionLabel={t('common.retry')}
+            onAction={load}
+          />
         ) : (
           <StateMessage kind="loading" />
         )
       ) : (
         <>
           <SwitchRow
-            label="Cuenta privada"
-            description="Solo quienes aprobaste ven tus publicaciones. Las demás personas deben solicitar seguirte."
+            label={t('privacy.private')}
+            description={t('privacy.private.desc')}
             value={settings.is_private}
             disabled={saving}
             onChange={(value) => update({ is_private: value })}
           />
           <SwitchRow
-            label="Mostrar mi actividad"
-            description="Otras personas pueden ver cuándo estuviste conectado por última vez."
+            label={t('privacy.activity')}
+            description={t('privacy.activity.desc')}
             value={settings.show_activity_status}
             disabled={saving}
             onChange={(value) => update({ show_activity_status: value })}
           />
           <SwitchRow
-            label="Ocultar contenido sensible"
-            description="No muestra las publicaciones que sus autores marcaron como sensibles."
+            label={t('privacy.sensitive')}
+            description={t('privacy.sensitive.desc')}
             value={settings.hide_sensitive_content}
             disabled={saving}
             onChange={(value) => update({ hide_sensitive_content: value })}
           />
           <SwitchRow
-            label="Ocultar comentarios ofensivos"
-            description="Filtra comentarios con lenguaje ofensivo."
+            label={t('privacy.offensive')}
+            description={t('privacy.offensive.desc')}
             value={settings.hide_offensive_comments}
             disabled={saving}
             onChange={(value) => update({ hide_offensive_comments: value })}
           />
 
-          <ChoiceGroup
-            title="Quién puede escribirme"
+          <AudienceChoice
+            title={t('privacy.whoMessage')}
             value={settings.who_can_message}
             disabled={saving}
             onChange={(value) => update({ who_can_message: value })}
           />
-          <ChoiceGroup
-            title="Quién puede mencionarme"
+          <AudienceChoice
+            title={t('privacy.whoMention')}
             value={settings.who_can_mention}
             disabled={saving}
             onChange={(value) => update({ who_can_mention: value })}
@@ -143,39 +112,6 @@ function SwitchRow({
   );
 }
 
-function ChoiceGroup({
-  title,
-  value,
-  disabled,
-  onChange,
-}: {
-  title: string;
-  value: Audience;
-  disabled: boolean;
-  onChange: (value: Audience) => void;
-}) {
-  return (
-    <View style={styles.group}>
-      <Text style={styles.label}>{title}</Text>
-      {AUDIENCES.map((option) => {
-        const selected = option.id === value;
-        return (
-          <Pressable
-            key={option.id}
-            disabled={disabled}
-            onPress={() => !selected && onChange(option.id)}
-            style={[styles.choice, selected && styles.choiceSelected]}
-            accessibilityRole="radio"
-            accessibilityState={{ selected, disabled }}
-          >
-            <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{option.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 const styles = themedStyles(() => ({
   row: {
     flexDirection: 'row',
@@ -191,18 +127,4 @@ const styles = themedStyles(() => ({
   rowText: { flex: 1 },
   label: { fontSize: fontSize.bodyLg, fontWeight: '600', color: colors.fg },
   description: { fontSize: fontSize.bodySm, color: colors.fgMuted, marginTop: 2, lineHeight: 18 },
-  group: { marginTop: space[3], marginBottom: space[2] },
-  choice: {
-    minHeight: 48,
-    justifyContent: 'center',
-    paddingHorizontal: space[4],
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    backgroundColor: colors.surface,
-    marginTop: space[2],
-  },
-  choiceSelected: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
-  choiceText: { fontSize: fontSize.bodyMd, color: colors.fg },
-  choiceTextSelected: { color: colors.brandText, fontWeight: '700' },
 }));

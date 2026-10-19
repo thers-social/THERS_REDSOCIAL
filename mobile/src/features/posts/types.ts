@@ -37,6 +37,8 @@ export type Post = {
   video?: PublicVideo | null;
   /** Lo declara quien publica (ADR-030): se muestra oculto a las demás personas. */
   is_sensitive: boolean;
+  /** A quién va dirigida (`ADR-054`): `close_friends` = solo la lista de mejores amigos de quien publica. */
+  audience?: 'everyone' | 'close_friends';
   created_at: string;
   mentions: Mention[];
   edited: boolean;

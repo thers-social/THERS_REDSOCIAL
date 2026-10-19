@@ -24,12 +24,19 @@ export async function createPost(
   isSensitive: boolean,
   placeId?: string,
   media: PickedMedia[] = [],
+  audience: 'everyone' | 'close_friends' = 'everyone',
 ): Promise<Post> {
   if (media.length === 0) {
     const { post } = await request<{ post: Post }>('/posts', {
       method: 'POST',
       authenticated: true,
-      body: { content, is_sensitive: isSensitive, ...(placeId ? { place_id: placeId } : {}) },
+      body: {
+        content,
+        is_sensitive: isSensitive,
+        ...(placeId ? { place_id: placeId } : {}),
+        // Solo se envía si no es la de siempre: el servidor trata la ausencia como `everyone`.
+        ...(audience !== 'everyone' ? { audience } : {}),
+      },
     });
     return post;
   }
@@ -37,6 +44,7 @@ export async function createPost(
   form.append('content', content);
   form.append('is_sensitive', String(isSensitive));
   if (placeId) form.append('place_id', placeId);
+  if (audience !== 'everyone') form.append('audience', audience);
   for (const item of media) appendMedia(form, item.kind === 'video' ? 'video' : 'images', item);
   const { post } = await request<{ post: Post }>('/posts', {
     method: 'POST',

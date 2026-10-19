@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 
+import { ProfileLink } from '@features/profile/ProfileLink';
+import { useLanguage } from '@shared/i18n';
+import { useOpenProfile } from '@features/profile/useOpenProfile';
 import { acceptFollowRequest, fetchFollowRequests, rejectFollowRequest } from '@features/settings/api';
 import type { FollowRequest } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
@@ -14,6 +17,8 @@ import { StateMessage } from '@shared/ui/StateMessage';
 
 /** Solicitudes pendientes de seguirte (`ADR-022`, cuentas privadas). */
 export default function FollowRequests() {
+  const openProfile = useOpenProfile();
+  const { t } = useLanguage();
   const [items, setItems] = useState<FollowRequest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -23,9 +28,9 @@ export default function FollowRequests() {
       setItems(await fetchFollowRequests());
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No pudimos cargar tus solicitudes.');
+      setError(e instanceof ApiError ? e.message : t('requests.error.load'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -38,28 +43,30 @@ export default function FollowRequests() {
       else await rejectFollowRequest(request.user.id);
       setItems((current) => current?.filter((r) => r.user.id !== request.user.id) ?? current);
     } catch (e) {
-      Alert.alert('No se pudo responder', e instanceof ApiError ? e.message : 'Inténtalo de nuevo.');
+      Alert.alert(t('requests.error.respond'), e instanceof ApiError ? e.message : t('common.tryAgain'));
     } finally {
       setBusyId(null);
     }
   }
 
   return (
-    <Screen title="Solicitudes de seguimiento" back>
+    <Screen title={t('requests.title')} back>
       {items === null ? (
         error ? (
-          <StateMessage kind="error" message={error} actionLabel="Reintentar" onAction={load} />
+          <StateMessage kind="error" message={error} actionLabel={t('common.retry')} onAction={load} />
         ) : (
           <StateMessage kind="loading" />
         )
       ) : items.length === 0 ? (
-        <StateMessage kind="empty" title="Sin solicitudes" message="Aquí aparecen quienes quieren seguirte cuando tu cuenta es privada." />
+        <StateMessage kind="empty" title={t('requests.empty.title')} message={t('requests.empty.body')} />
       ) : (
         items.map((request) => (
           <View key={request.user.id} style={styles.row}>
-            <Avatar name={request.user.name} size={44} />
+            <ProfileLink userId={request.user.id} name={request.user.name} style={{ flex: 0, alignItems: 'flex-start' }}>
+              <Avatar name={request.user.name} size={44} />
+            </ProfileLink>
             <View style={styles.text}>
-              <Text style={styles.name} numberOfLines={1}>
+              <Text style={styles.name} numberOfLines={1} onPress={() => openProfile(request.user.id)}>
                 {request.user.name}
               </Text>
               <Text style={styles.meta}>
@@ -67,13 +74,13 @@ export default function FollowRequests() {
               </Text>
               <View style={styles.buttons}>
                 <Button
-                  label="Aceptar"
+                  label={t('requests.accept')}
                   onPress={() => respond(request, true)}
                   loading={busyId === request.user.id}
                   style={styles.flex}
                 />
                 <Button
-                  label="Rechazar"
+                  label={t('requests.reject')}
                   variant="secondary"
                   onPress={() => respond(request, false)}
                   disabled={busyId === request.user.id}

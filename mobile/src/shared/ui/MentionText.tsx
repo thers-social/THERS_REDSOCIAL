@@ -8,6 +8,8 @@ type Props = {
   text: string;
   /** Solo se resaltan los @usuario que el servidor confirmó que existen. */
   usernames: string[];
+  /** Si se pasa, tocar una mención la abre (el perfil de esa persona). */
+  onMentionPress?: (username: string) => void;
   style?: StyleProp<TextStyle>;
 };
 
@@ -16,7 +18,7 @@ type Props = {
  * cuentas reales (`mentions`), así que un `@algo` que no existe se queda como
  * texto normal en vez de parecer un enlace roto.
  */
-export function MentionText({ text, usernames, style }: Props) {
+export function MentionText({ text, usernames, onMentionPress, style }: Props) {
   if (usernames.length === 0) return <Text style={style}>{text}</Text>;
 
   const known = new Set(usernames.map((name) => name.toLowerCase()));
@@ -26,7 +28,12 @@ export function MentionText({ text, usernames, style }: Props) {
     <Text style={style}>
       {parts.map((part, index) =>
         part.startsWith('@') && known.has(part.slice(1).toLowerCase()) ? (
-          <Text key={index} style={styles.mention}>
+          <Text
+            key={index}
+            style={styles.mention}
+            onPress={onMentionPress ? () => onMentionPress(part.slice(1)) : undefined}
+            accessibilityRole={onMentionPress ? 'link' : undefined}
+          >
             {part}
           </Text>
         ) : (

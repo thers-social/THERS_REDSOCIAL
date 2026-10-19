@@ -14,6 +14,7 @@ import { PushBridge } from '@features/push/usePushNotifications';
 import { PostsProvider } from '@features/posts/PostsContext';
 import { TeroProvider } from '@features/tero/context/TeroContext';
 import { colors, setColorScheme } from '@shared/design/tokens';
+import { LanguageProvider } from '@shared/i18n';
 
 /**
  * Layout raíz. Monta los proveedores una sola vez para toda la app.
@@ -42,24 +43,27 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        {/* Las publicaciones se cargan al iniciar sesión y se vacían al cerrarla. */}
-        <PostsProvider>
-          {/* Preferencias de Tero: las leen la burbuja (pestañas) y app/tero/*. */}
-          <TeroProvider>
-            <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-            {/* Notificaciones push (ADR-053): registra el teléfono y atiende los toques. */}
-            <PushBridge />
-            <Stack
-              key={scheme}
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.bg },
-              }}
-            />
-          </TeroProvider>
-        </PostsProvider>
-      </AuthProvider>
+      {/* Idioma de la app (español/inglés): por encima de todo, porque hasta el login se traduce. */}
+      <LanguageProvider>
+        <AuthProvider>
+          {/* Las publicaciones se cargan al iniciar sesión y se vacían al cerrarla. */}
+          <PostsProvider>
+            {/* Preferencias de Tero: las leen la burbuja (pestañas) y app/tero/*. */}
+            <TeroProvider>
+              <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+              {/* Notificaciones push (ADR-053): registra el teléfono y atiende los toques. */}
+              <PushBridge />
+              <Stack
+                key={scheme}
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.bg },
+                }}
+              />
+            </TeroProvider>
+          </PostsProvider>
+        </AuthProvider>
+      </LanguageProvider>
     </SafeAreaProvider>
   );
 }

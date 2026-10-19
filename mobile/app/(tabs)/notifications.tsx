@@ -9,6 +9,7 @@ import {
 } from '@features/notifications/api';
 import type { AppNotification } from '@features/notifications/api';
 import { placeNoticeTarget } from '@features/notifications/describe';
+import { useOpenProfile } from '@features/profile/useOpenProfile';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
@@ -26,6 +27,7 @@ const REFRESH_MS = 30000;
  */
 export default function Notifications() {
   const router = useRouter();
+  const openProfile = useOpenProfile();
   const [items, setItems] = useState<AppNotification[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -63,6 +65,8 @@ export default function Notifications() {
     const placeTarget = placeNoticeTarget(item);
     if (placeTarget) router.push(placeTarget);
     else if (item.post_id) router.push({ pathname: '/post/[id]', params: { id: item.post_id } });
+    // Sin publicación (p. ej. «empezó a seguirte»): el aviso lleva al perfil de quien actuó.
+    else if (item.actor?.id) openProfile(item.actor.id);
   }
 
   // Los avisos de Places se muestran con el nombre del lugar; los demás, con quien actuó.

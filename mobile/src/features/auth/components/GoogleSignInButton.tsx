@@ -13,6 +13,7 @@ import { GoogleSignInError, isGoogleSignInAvailable } from '@features/auth/lib/g
 import { ApiError } from '@shared/lib/api';
 import { fontSize, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 
 type Props = {
   /** Recibe el mensaje a mostrar, o `null` para limpiarlo al empezar. */
@@ -35,6 +36,7 @@ type Props = {
  */
 export function GoogleSignInButton({ onError, disabled = false }: Props) {
   const { loginWithGoogle } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -56,11 +58,13 @@ export function GoogleSignInButton({ onError, disabled = false }: Props) {
     } catch (e) {
       if (e instanceof GoogleSignInError) {
         // Cerrar el selector no es un error: no se muestra nada.
-        if (e.reason !== 'cancelled' && e.reason !== 'in_progress') onError(e.message);
+        if (e.reason === 'play_services') onError(t('google.error.playServices'));
+        else if (e.reason === 'config') onError(t('google.error.config'));
+        else if (e.reason === 'failed') onError(t('google.error.failed'));
       } else if (e instanceof ApiError) {
         onError(e.message);
       } else {
-        onError('Ocurrió un error inesperado. Inténtalo de nuevo.');
+        onError(t('common.unexpected'));
       }
     } finally {
       setBusy(false);
@@ -72,7 +76,7 @@ export function GoogleSignInButton({ onError, disabled = false }: Props) {
       onPress={handlePress}
       disabled={inactive}
       accessibilityRole="button"
-      accessibilityLabel="Continuar con Google"
+      accessibilityLabel={t('google.continue')}
       accessibilityState={{ disabled: inactive, busy }}
       style={({ pressed }) => [styles.button, pressed && styles.pressed, inactive && styles.disabled]}
     >
@@ -82,7 +86,7 @@ export function GoogleSignInButton({ onError, disabled = false }: Props) {
       {busy ? (
         <ActivityIndicator color={GOOGLE_TEXT} />
       ) : (
-        <Text style={styles.label}>Continuar con Google</Text>
+        <Text style={styles.label}>{t('google.continue')}</Text>
       )}
     </Pressable>
   );

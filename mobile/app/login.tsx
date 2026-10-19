@@ -20,9 +20,11 @@ import { isValidEmail } from '@features/auth/lib/validators';
 import { ApiError } from '@shared/lib/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 
 export default function Login() {
   const { login } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -39,11 +41,11 @@ export default function Login() {
     setError(null);
 
     if (!email.trim() || !password) {
-      setError('Email y contraseña son obligatorios.');
+      setError(t('login.error.required'));
       return;
     }
     if (!isValidEmail(email)) {
-      setError('El email no es válido.');
+      setError(t('login.error.email'));
       return;
     }
 
@@ -74,7 +76,7 @@ export default function Login() {
           setError(e.message);
         }
       } else {
-        setError('Ocurrió un error inesperado. Intentá de nuevo.');
+        setError(t('common.unexpected'));
       }
     } finally {
       // En `finally`: si no, un error deja el botón cargando para siempre.
@@ -95,15 +97,15 @@ export default function Login() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.brand}>THERS</Text>
-        <Text style={styles.subtitle}>Iniciá sesión para continuar</Text>
+        <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t('login.email')}</Text>
           <TextInput
             style={styles.input}
             value={email}
             onChangeText={setEmail}
-            placeholder="tu@email.com"
+            placeholder={t('login.email.placeholder')}
             placeholderTextColor={colors.fgDisabled}
             autoCapitalize="none"
             autoCorrect={false}
@@ -115,7 +117,7 @@ export default function Login() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Contraseña</Text>
+          <Text style={styles.label}>{t('login.password')}</Text>
           <TextInput
             style={styles.input}
             value={password}
@@ -152,7 +154,7 @@ export default function Login() {
           {isSubmitting ? (
             <ActivityIndicator color={colors.onBrand} />
           ) : (
-            <Text style={styles.buttonText}>Entrar</Text>
+            <Text style={styles.buttonText}>{t('login.submit')}</Text>
           )}
         </Pressable>
 
@@ -164,7 +166,7 @@ export default function Login() {
           onPress={() => router.push('/forgot-password')}
           accessibilityRole="link"
         >
-          <Text style={styles.linkText}>¿Olvidaste tu contraseña?</Text>
+          <Text style={styles.linkText}>{t('login.forgot')}</Text>
         </Pressable>
 
         <Pressable
@@ -172,7 +174,7 @@ export default function Login() {
           onPress={() => router.push('/register')}
           accessibilityRole="link"
         >
-          <Text style={styles.linkText}>¿No tienes cuenta? Crear cuenta</Text>
+          <Text style={styles.linkText}>{t('login.noAccount')}</Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>

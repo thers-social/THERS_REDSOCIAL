@@ -5,6 +5,8 @@ import { useAuth } from '@features/auth/context/AuthContext';
 import { fetchSavedPosts, setPostSaved } from '@features/posts/api';
 import { messageOf } from '@features/posts/PostsContext';
 import type { Post } from '@features/posts/types';
+import { ProfileLink } from '@features/profile/ProfileLink';
+import { useLanguage } from '@shared/i18n';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { formatRelativeTime } from '@shared/lib/time';
@@ -22,6 +24,7 @@ import { StateMessage } from '@shared/ui/StateMessage';
  */
 export default function Saved() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,50 +48,52 @@ export default function Saved() {
       await setPostSaved(post.id, false);
     } catch (e) {
       setPosts(previous);
-      Alert.alert('No se pudo quitar', messageOf(e));
+      Alert.alert(t('saved.error.remove'), messageOf(e));
     }
   }
 
   return (
-    <Screen title="Guardado" back>
-      <Text style={styles.hint}>Solo tú ves lo que guardas. No se avisa a nadie.</Text>
+    <Screen title={t('saved.title')} back>
+      <Text style={styles.hint}>{t('saved.hint')}</Text>
       {posts === null ? (
         error ? (
-          <StateMessage kind="error" message={error} actionLabel="Reintentar" onAction={load} />
+          <StateMessage kind="error" message={error} actionLabel={t('common.retry')} onAction={load} />
         ) : (
           <StateMessage kind="loading" />
         )
       ) : posts.length === 0 ? (
-        <StateMessage kind="empty" message="Aún no has guardado publicaciones. Toca el marcador de una publicación para verla aquí." />
+        <StateMessage kind="empty" message={t('saved.empty')} />
       ) : (
         posts.map((post) => (
           <View key={post.id} style={styles.card}>
             <View style={styles.header}>
-              <Avatar name={post.author.name} uri={post.author.avatar_url} size={40} />
-              <View style={styles.headerText}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {post.author.name}
-                </Text>
-                <Text style={styles.meta} numberOfLines={1}>
-                  @{post.author.username} · {formatRelativeTime(post.created_at)}
-                </Text>
-              </View>
+              <ProfileLink userId={post.author.id} name={post.author.name}>
+                <Avatar name={post.author.name} uri={post.author.avatar_url} size={40} />
+                <View style={styles.headerText}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {post.author.name}
+                  </Text>
+                  <Text style={styles.meta} numberOfLines={1}>
+                    @{post.author.username} · {formatRelativeTime(post.created_at)}
+                  </Text>
+                </View>
+              </ProfileLink>
               <Pressable
                 onPress={() => remove(post)}
                 style={styles.remove}
                 accessibilityRole="button"
-                accessibilityLabel="Quitar de guardados"
+                accessibilityLabel={t('saved.remove')}
               >
                 <Icon name="bookmark" size={22} filled color={colors.brandText} />
               </Pressable>
             </View>
             {post.is_sensitive && post.author.id !== user?.id ? (
-              <Text style={styles.meta}>Contenido marcado como sensible por su autor.</Text>
+              <Text style={styles.meta}>{t('post.sensitive.byAuthor')}</Text>
             ) : (
               <>
                 {post.content ? <Text style={styles.content}>{post.content}</Text> : null}
-                <ImageGridView images={post.images} label={`Imagen de ${post.author.name}`} />
-                {post.video ? <VideoPlayerView video={post.video} accessibilityLabel={`Video de ${post.author.name}`} /> : null}
+                <ImageGridView images={post.images} label={t('post.imageOf', { name: post.author.name })} />
+                {post.video ? <VideoPlayerView video={post.video} accessibilityLabel={t('post.videoOf', { name: post.author.name })} /> : null}
               </>
             )}
           </View>

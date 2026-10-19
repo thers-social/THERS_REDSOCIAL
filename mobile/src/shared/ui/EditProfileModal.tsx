@@ -6,6 +6,7 @@ import type { User } from '@features/auth/types';
 import type { ProfilePatch } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { MediaSelectionError, pickImages } from '@shared/media/pickMedia';
 import type { PickedMedia } from '@shared/media/mediaRules';
 
@@ -37,6 +38,7 @@ const LIMITS = { name: 120, bio: 160, location: 60, website: 100 } as const;
  */
 export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [name, setName] = useState(user.name);
   const [bio, setBio] = useState(user.bio ?? '');
   const [location, setLocation] = useState(user.location ?? '');
@@ -69,7 +71,7 @@ export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: P
       }
     } catch (e) {
       setError(
-        e instanceof MediaSelectionError || e instanceof Error ? e.message : 'No pudimos cambiar la foto.',
+        e instanceof MediaSelectionError || e instanceof Error ? e.message : t('editProfile.error.photo'),
       );
     } finally {
       setPhotoBusy(false);
@@ -79,7 +81,7 @@ export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: P
   async function save() {
     if (busy) return;
     if (!name.trim()) {
-      setError('El nombre no puede estar vacío.');
+      setError(t('editProfile.error.nameEmpty'));
       return;
     }
     setBusy(true);
@@ -94,7 +96,7 @@ export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: P
       if (Object.keys(patch).length > 0) await onSave(patch);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No pudimos guardar los cambios.');
+      setError(e instanceof Error ? e.message : t('editProfile.error.save'));
       setBusy(false);
     }
   }
@@ -107,7 +109,7 @@ export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: P
       >
         <View style={[styles.sheet, { paddingBottom: insets.bottom + space[4] }]}>
           <Text style={styles.title} accessibilityRole="header">
-            Editar perfil
+            {t('profile.edit')}
           </Text>
           <ScrollView keyboardShouldPersistTaps="handled">
             {error ? <Banner tone="error">{error}</Banner> : null}
@@ -115,7 +117,7 @@ export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: P
               <Avatar name={user.name} uri={user.avatar_url} size={72} />
               <View style={styles.photoActions}>
                 <Button
-                  label={user.avatar_url ? 'Cambiar foto' : 'Subir foto'}
+                  label={user.avatar_url ? t('editProfile.photo.change') : t('editProfile.photo.upload')}
                   variant="secondary"
                   onPress={() => void changePhoto(false)}
                   loading={photoBusy}
@@ -123,7 +125,7 @@ export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: P
                 />
                 {user.avatar_url ? (
                   <Button
-                    label="Quitar foto"
+                    label={t('editProfile.photo.remove')}
                     variant="ghost"
                     onPress={() => void changePhoto(true)}
                     disabled={photoBusy || busy}
@@ -131,9 +133,9 @@ export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: P
                 ) : null}
               </View>
             </View>
-            <TextField label="Nombre" value={name} onChangeText={setName} maxLength={LIMITS.name} editable={!busy} />
+            <TextField label={t('form.name')} value={name} onChangeText={setName} maxLength={LIMITS.name} editable={!busy} />
             <TextField
-              label="Biografía"
+              label={t('editProfile.bio')}
               value={bio}
               onChangeText={setBio}
               maxLength={LIMITS.bio}
@@ -141,14 +143,14 @@ export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: P
               editable={!busy}
             />
             <TextField
-              label="Ubicación"
+              label={t('editProfile.location')}
               value={location}
               onChangeText={setLocation}
               maxLength={LIMITS.location}
               editable={!busy}
             />
             <TextField
-              label="Sitio web"
+              label={t('editProfile.website')}
               value={website}
               onChangeText={setWebsite}
               maxLength={LIMITS.website}
@@ -158,8 +160,8 @@ export function EditProfileModal({ visible, user, onSave, onAvatar, onClose }: P
             />
           </ScrollView>
           <View style={styles.buttons}>
-            <Button label="Cancelar" variant="secondary" onPress={onClose} disabled={busy} style={styles.flex} />
-            <Button label="Guardar" onPress={save} loading={busy} style={styles.flex} />
+            <Button label={t('common.cancel')} variant="secondary" onPress={onClose} disabled={busy} style={styles.flex} />
+            <Button label={t('common.save')} onPress={save} loading={busy} style={styles.flex} />
           </View>
         </View>
       </KeyboardAvoidingView>

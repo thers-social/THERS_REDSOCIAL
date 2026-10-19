@@ -3,8 +3,10 @@ import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, Text, Vi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { messageOf } from '@features/posts/PostsContext';
-import { fontSize, space } from '@shared/design/tokens';
+import { useOpenProfile } from '@features/profile/useOpenProfile';
+import { colors, fontSize, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { formatRelativeTime } from '@shared/lib/time';
 import { Avatar } from '@shared/ui/Avatar';
 import { Icon } from '@shared/ui/Icon';
@@ -43,6 +45,8 @@ type Props = {
  */
 export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Props) {
   const insets = useSafeAreaInsets();
+  const openProfile = useOpenProfile();
+  const { t } = useLanguage();
   const [position, setPosition] = useState<Position>({ authorIndex: startIndex, storyIndex: 0 });
   const [loaded, setLoaded] = useState<Record<string, Loaded>>({});
   const [elapsed, setElapsed] = useState(0);
@@ -141,9 +145,9 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
 
   function confirmDelete() {
     setHolding(true);
-    Alert.alert('¿Borrar esta historia?', 'Se borra para todas las personas y no se puede deshacer.', [
-      { text: 'Cancelar', style: 'cancel', onPress: () => setHolding(false) },
-      { text: 'Borrar', style: 'destructive', onPress: doDelete },
+    Alert.alert(t('viewer.delete.title'), t('viewer.delete.body'), [
+      { text: t('common.cancel'), style: 'cancel', onPress: () => setHolding(false) },
+      { text: t('viewer.delete.confirm'), style: 'destructive', onPress: doDelete },
     ]);
   }
 
@@ -165,7 +169,7 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
       setElapsed(0);
       setViews(null);
     } catch (e) {
-      Alert.alert('No se pudo borrar la historia', messageOf(e));
+      Alert.alert(t('viewer.error.delete'), messageOf(e));
     } finally {
       setBusy(false);
       setHolding(false);
@@ -180,12 +184,12 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
         ) : null}
         {entry?.status === 'error' ? (
           <View style={styles.center}>
-            <Text style={styles.message}>No se pudieron cargar las historias.</Text>
+            <Text style={styles.message}>{t('viewer.error.load')}</Text>
           </View>
         ) : null}
         {entry?.status === 'ready' && stories.length === 0 ? (
           <Pressable style={styles.center} onPress={advance} accessibilityRole="button">
-            <Text style={styles.message}>Esta historia ya no está disponible. Toca para continuar.</Text>
+            <Text style={styles.message}>{t('viewer.unavailable')}</Text>
           </Pressable>
         ) : null}
 
@@ -197,12 +201,12 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
                 style={styles.image}
                 resizeMode="cover"
                 accessibilityIgnoresInvertColors
-                accessibilityLabel={story.content || `Historia de ${strip.author.name}`}
+                accessibilityLabel={story.content || t('viewer.storyOf', { name: strip.author.name })}
               />
             ) : (
               // Moderación (ADR-044): sin URL = todavía no aprobada; solo la ve quien la publicó.
               <View style={styles.center}>
-                <Text style={styles.message}>Tu historia está en revisión. Se publicará cuando se apruebe.</Text>
+                <Text style={styles.message}>{t('viewer.inReview')}</Text>
               </View>
             )}
             <View style={styles.shade} pointerEvents="none" />
@@ -214,7 +218,7 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
                 onPressIn={() => setHolding(true)}
                 onPressOut={() => setHolding(false)}
                 accessibilityRole="button"
-                accessibilityLabel="Historia anterior"
+                accessibilityLabel={t('viewer.previous')}
               />
               <Pressable
                 style={styles.tapNext}
@@ -222,7 +226,7 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
                 onPressIn={() => setHolding(true)}
                 onPressOut={() => setHolding(false)}
                 accessibilityRole="button"
-                accessibilityLabel="Historia siguiente"
+                accessibilityLabel={t('viewer.next')}
               />
             </View>
 
@@ -240,18 +244,36 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
                 ))}
               </View>
               <View style={styles.header}>
-                <Avatar name={strip.author.name} uri={strip.author.avatar_url} size={36} />
-                <View style={styles.headerText}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {strip.is_me ? 'Tu historia' : strip.author.name}
-                  </Text>
-                  <Text style={styles.time}>{formatRelativeTime(story.created_at)}</Text>
-                </View>
+                {/* Foto y nombre de quien publicó -> su perfil (cierra el visor primero: está sobre la pantalla). */}
+                <Pressable
+                  onPress={() => {
+                    onClose();
+                    openProfile(strip.author.id);
+                  }}
+                  disabled={strip.is_me}
+                  style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space[3] }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('profile.viewOf', { name: strip.author.name })}
+                >
+                  <Avatar name={strip.author.name} uri={strip.author.avatar_url} size={36} />
+                  <View style={styles.headerText}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {strip.is_me ? t('strip.mine') : strip.author.name}
+                    </Text>
+                    <Text style={styles.time}>{formatRelativeTime(story.created_at)}</Text>
+                  </View>
+                </Pressable>
+                {/* Etiqueta verde: esta historia es solo para mejores amigos (ADR-054). */}
+                {story.audience === 'close_friends' ? (
+                  <View style={styles.closeFriends} accessibilityLabel={t('story.audience.closeFriends')}>
+                    <Text style={styles.closeFriendsText}>★ {t('story.audience.closeFriends')}</Text>
+                  </View>
+                ) : null}
                 <Pressable
                   onPress={onClose}
                   hitSlop={12}
                   accessibilityRole="button"
-                  accessibilityLabel="Cerrar historias"
+                  accessibilityLabel={t('viewer.close')}
                   style={styles.close}
                 >
                   <Text style={styles.closeText}>✕</Text>
@@ -266,19 +288,28 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
                 {views ? (
                   <ScrollView style={styles.viewsBox}>
                     {views.status === 'loading' ? <ActivityIndicator color="#fff" /> : null}
-                    {views.status === 'error' ? <Text style={styles.viewsText}>No se pudo cargar quién la vio.</Text> : null}
+                    {views.status === 'error' ? <Text style={styles.viewsText}>{t('viewer.views.error')}</Text> : null}
                     {views.status === 'ready' && views.views.length === 0 ? (
-                      <Text style={styles.viewsText}>Todavía nadie la vio.</Text>
+                      <Text style={styles.viewsText}>{t('viewer.views.empty')}</Text>
                     ) : null}
                     {views.status === 'ready'
                       ? views.views.map((viewer) => (
-                          <View key={viewer.id} style={styles.viewer}>
+                          <Pressable
+                            key={viewer.id}
+                            style={styles.viewer}
+                            onPress={() => {
+                              onClose();
+                              openProfile(viewer.id);
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('profile.viewOf', { name: viewer.name })}
+                          >
                             <Avatar name={viewer.name} uri={viewer.avatar_url} size={28} />
                             <Text style={styles.viewerName} numberOfLines={1}>
                               {viewer.name}
                             </Text>
                             <Text style={styles.time}>{formatRelativeTime(viewer.viewed_at)}</Text>
-                          </View>
+                          </Pressable>
                         ))
                       : null}
                   </ScrollView>
@@ -286,14 +317,14 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
                 <View style={styles.ownerRow}>
                   <Pressable onPress={toggleViews} style={styles.pill} accessibilityRole="button">
                     <Text style={styles.pillText}>
-                      {views?.status === 'ready' ? `${views.count} vistas` : 'Vistas'}
+                      {views?.status === 'ready' ? t('viewer.views.count', { count: views.count }) : t('viewer.views')}
                     </Text>
                   </Pressable>
                   <Pressable
                     onPress={confirmDelete}
                     style={styles.pill}
                     accessibilityRole="button"
-                    accessibilityLabel="Borrar esta historia"
+                    accessibilityLabel={t('viewer.delete.a11y')}
                   >
                     <Icon name="trash" size={18} color="#fff" />
                   </Pressable>
@@ -303,7 +334,7 @@ export function StoryViewerModal({ authors, startIndex, onClose, onChanged }: Pr
           </>
         ) : (
           <View style={[styles.top, { paddingTop: insets.top + space[2] }]} pointerEvents="box-none">
-            <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Cerrar historias" style={styles.close}>
+            <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={t('viewer.close')} style={styles.close}>
               <Text style={styles.closeText}>✕</Text>
             </Pressable>
           </View>
@@ -330,6 +361,13 @@ const styles = themedStyles(() => ({
   headerText: { flex: 1 },
   name: { color: '#fff', fontSize: fontSize.bodyMd, fontWeight: '700' },
   time: { color: 'rgba(255,255,255,0.75)', fontSize: fontSize.labelMd },
+  closeFriends: {
+    backgroundColor: colors.successAccent,
+    borderRadius: 999,
+    paddingHorizontal: space[2],
+    paddingVertical: 3,
+  },
+  closeFriendsText: { color: '#fff', fontSize: fontSize.labelSm, fontWeight: '700' },
   close: { padding: space[2] },
   closeText: { color: '#fff', fontSize: 20 },
   caption: {

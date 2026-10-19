@@ -11,14 +11,15 @@ import { SuggestedAccounts } from '@features/profile/SuggestedAccounts';
 import { patchProfile, removeAvatar, uploadAvatar } from '@features/settings/api';
 import { colors, fontSize, fonts, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { messageOf } from '@features/posts/PostsContext';
 import { comingSoon } from '@shared/lib/comingSoon';
-import { Avatar } from '@shared/ui/Avatar';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
 import { EditProfileModal } from '@shared/ui/EditProfileModal';
 import { Icon } from '@shared/ui/Icon';
 import { Screen } from '@shared/ui/Screen';
+import { ZoomableAvatar } from '@shared/ui/ZoomableAvatar';
 
 type Tab = 'posts' | 'mentions';
 
@@ -32,6 +33,7 @@ type Tab = 'posts' | 'mentions';
 export default function Profile() {
   const { user, logout, refreshUser } = useAuth();
   const router = useRouter();
+  const { t } = useLanguage();
   const posts = usePosts();
   const menu = usePostMenu();
   const [editing, setEditing] = useState(false);
@@ -96,29 +98,29 @@ export default function Profile() {
             ) : null}
 
             <View style={styles.identity}>
-              <Avatar name={user.name} uri={user.avatar_url} size={88} />
+              <ZoomableAvatar name={user.name} uri={user.avatar_url} size={88} />
               <View style={styles.statsRow}>
                 <View style={styles.stat}>
                   <Text style={styles.statValue}>{mine.length}</Text>
-                  <Text style={styles.statLabel}>Publicaciones</Text>
+                  <Text style={styles.statLabel}>{t('profile.posts')}</Text>
                 </View>
                 <Pressable
                   style={styles.stat}
                   onPress={() => openConnections('followers')}
                   accessibilityRole="button"
-                  accessibilityLabel={`Ver tus seguidores, ${user.followers_count}`}
+                  accessibilityLabel={t('profile.viewFollowers', { count: user.followers_count })}
                 >
                   <Text style={styles.statValue}>{user.followers_count}</Text>
-                  <Text style={styles.statLabel}>Seguidores</Text>
+                  <Text style={styles.statLabel}>{t('profile.followers')}</Text>
                 </Pressable>
                 <Pressable
                   style={styles.stat}
                   onPress={() => openConnections('following')}
                   accessibilityRole="button"
-                  accessibilityLabel={`Ver a quién sigues, ${user.following_count}`}
+                  accessibilityLabel={t('profile.viewFollowing', { count: user.following_count })}
                 >
                   <Text style={styles.statValue}>{user.following_count}</Text>
-                  <Text style={styles.statLabel}>Siguiendo</Text>
+                  <Text style={styles.statLabel}>{t('profile.following')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -127,7 +129,7 @@ export default function Profile() {
               <Text style={styles.name}>{user.name}</Text>
               <Text style={styles.username}>
                 @{user.username}
-                {user.is_private ? ' · Cuenta privada' : ''}
+                {user.is_private ? ` · ${t('profile.privateAccount')}` : ''}
               </Text>
               {user.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
               {user.location ? <Text style={styles.meta}>{user.location}</Text> : null}
@@ -135,7 +137,7 @@ export default function Profile() {
                 <Pressable
                   onPress={() =>
                     Linking.openURL(/^https?:\/\//i.test(user.website!) ? user.website! : `https://${user.website}`).catch(
-                      () => Alert.alert('No se pudo abrir el enlace'),
+                      () => Alert.alert(t('profile.error.link')),
                     )
                   }
                   accessibilityRole="link"
@@ -148,16 +150,13 @@ export default function Profile() {
             </View>
 
             {!user.profile_completed ? (
-              <Banner tone="info">
-                Faltan datos de tu perfil (teléfono y fecha de nacimiento). Complétalos desde la web
-                de THERS para poder publicar.
-              </Banner>
+              <Banner tone="info">{t('profile.incomplete')}</Banner>
             ) : null}
 
             <View style={styles.buttons}>
-              <Button label="Editar perfil" variant="secondary" onPress={() => setEditing(true)} style={styles.flex} />
+              <Button label={t('profile.edit')} variant="secondary" onPress={() => setEditing(true)} style={styles.flex} />
               <Button
-                label="Compartir"
+                label={t('profile.share')}
                 variant="secondary"
                 onPress={() => shareProfile(user).catch(() => {})}
                 style={styles.flex}
@@ -167,7 +166,7 @@ export default function Profile() {
                 style={[styles.iconBtn, suggesting && styles.iconBtnOn]}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: suggesting }}
-                accessibilityLabel="Descubrir personas"
+                accessibilityLabel={t('profile.discover')}
               >
                 <Icon name="userAdd" size={20} color={suggesting ? colors.brandText : colors.fg} />
               </Pressable>
@@ -176,17 +175,17 @@ export default function Profile() {
             {suggesting ? <SuggestedAccounts onClose={() => setSuggesting(false)} /> : null}
 
             <Pressable
-              onPress={() => comingSoon('Las historias destacadas')}
+              onPress={() => comingSoon(t('profile.highlights.feature'))}
               style={styles.highlights}
               accessibilityRole="button"
-              accessibilityLabel="Historias destacadas (próximamente)"
+              accessibilityLabel={t('profile.highlights.a11y')}
             >
               <View style={styles.highlightNew}>
                 <Icon name="plus" size={22} color={colors.fgSecondary} />
               </View>
               <View style={styles.flexText}>
-                <Text style={styles.highlightTitle}>Historias destacadas</Text>
-                <Text style={styles.highlightHint}>Próximamente</Text>
+                <Text style={styles.highlightTitle}>{t('profile.highlights')}</Text>
+                <Text style={styles.highlightHint}>{t('coming.title')}</Text>
               </View>
               <Icon name="chevron" size={18} color={colors.fgDisabled} />
             </Pressable>
@@ -194,8 +193,8 @@ export default function Profile() {
             <View style={styles.tabs}>
               {(
                 [
-                  ['posts', 'Posts', 'grid'],
-                  ['mentions', 'Menciones', 'at'],
+                  ['posts', t('profile.tab.posts'), 'grid'],
+                  ['mentions', t('profile.tab.mentions'), 'at'],
                 ] as const
               ).map(([id, label, icon]) => (
                 <Pressable
@@ -214,16 +213,16 @@ export default function Profile() {
             {data.length === 0 ? (
               <Text style={styles.empty}>
                 {posts.status !== 'ready'
-                  ? 'Cargando publicaciones…'
+                  ? t('home.loading')
                   : tab === 'posts'
-                    ? 'Todavía no has publicado nada reciente.'
-                    : 'Ninguna publicación reciente te menciona.'}
+                    ? t('profile.empty.posts')
+                    : t('profile.empty.mentions')}
               </Text>
             ) : null}
           </View>
         }
         ListFooterComponent={
-          <Button label="Cerrar sesión" variant="secondary" onPress={handleLogout} style={styles.logout} />
+          <Button label={t('settings.logout')} variant="secondary" onPress={handleLogout} style={styles.logout} />
         }
         renderItem={({ item }) => (
           <PostCard
