@@ -4,6 +4,7 @@
  */
 
 import { request } from '@shared/lib/api';
+import { appendMedia } from '@shared/media/mediaForm';
 
 import type { Story, StoryAudience, StoryViewer, StripAuthor } from './types';
 
@@ -43,13 +44,9 @@ export async function createStory(
   audience: StoryAudience = 'everyone',
 ): Promise<Story> {
   const form = new FormData();
-  // En React Native un archivo se adjunta con {uri, name, type}; el tipo de TS de `FormData` no
-  // lo conoce, por eso el cast.
-  form.append('image', {
-    uri: image.uri,
-    name: image.fileName || 'historia.jpg',
-    type: image.mimeType || 'image/jpeg',
-  } as unknown as Blob);
+  // El `fetch` de Expo SDK 57 no acepta el formato clásico `{uri, name, type}` (la app lo ve como falta
+  // de red): el archivo se adjunta como `File`, igual que en las publicaciones (`mediaForm.ts`).
+  appendMedia(form, 'image', { uri: image.uri, name: image.fileName || 'historia.jpg' });
   const text = content.trim();
   if (text) form.append('content', text);
   // Solo se envía si no es la de siempre: el servidor trata la ausencia como `everyone`.
