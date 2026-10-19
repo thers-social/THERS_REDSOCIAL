@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.extensions import db
 from app.infrastructure.persistence.models import Post, User
 from app.infrastructure.persistence.repositories.post_visibility_sql import (
+    audience_ok,
     not_blocked,
     visible_to_viewer,
 )
@@ -21,7 +22,12 @@ def fetch_visible_posts(post_ids, viewer_id):
         db.session.execute(
             select(Post)
             .join(User, User.id == Post.author_id)
-            .where(Post.id.in_(ids), visible_to_viewer(viewer_id), not_blocked(viewer_id))
+            .where(
+                Post.id.in_(ids),
+                visible_to_viewer(viewer_id),
+                not_blocked(viewer_id),
+                audience_ok(viewer_id),
+            )
         )
         .scalars()
         .all()

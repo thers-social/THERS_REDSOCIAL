@@ -4,6 +4,7 @@ import { Text, TextInput, View } from 'react-native';
 import { MIN_AGE_YEARS } from '@features/auth/lib/age';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 
 type Props = {
   /** Recibe `yyyy-mm-dd` cuando los tres campos forman una fecha completa, o `''`. */
@@ -20,6 +21,7 @@ type Props = {
  * Si es una fecha real y si cumple la edad lo decide quien la recibe.
  */
 export function BirthDateInput({ onChange, error }: Props) {
+  const { t } = useLanguage();
   const [day, setDay] = useState('');
   const [month, setMonth] = useState('');
   const [year, setYear] = useState('');
@@ -40,13 +42,13 @@ export function BirthDateInput({ onChange, error }: Props) {
 
   return (
     <View style={styles.wrapper}>
-      <Text style={styles.label}>Fecha de nacimiento</Text>
-      <Text style={styles.hint}>THERS es solo para personas de {MIN_AGE_YEARS} años o más.</Text>
+      <Text style={styles.label}>{t('birth.label')}</Text>
+      <Text style={styles.hint}>{t('birth.hint', { years: MIN_AGE_YEARS })}</Text>
       <View style={styles.row} accessibilityRole="none">
         <TextInput
           style={[styles.input, error ? styles.inputError : null]}
-          placeholder="Día"
-          accessibilityLabel="Día de nacimiento"
+          placeholder={t('birth.day')}
+          accessibilityLabel={t('birth.dayLabel')}
           placeholderTextColor={colors.fgDisabled}
           keyboardType="number-pad"
           maxLength={2}
@@ -61,8 +63,8 @@ export function BirthDateInput({ onChange, error }: Props) {
         <TextInput
           ref={monthRef}
           style={[styles.input, error ? styles.inputError : null]}
-          placeholder="Mes"
-          accessibilityLabel="Mes de nacimiento"
+          placeholder={t('birth.month')}
+          accessibilityLabel={t('birth.monthLabel')}
           placeholderTextColor={colors.fgDisabled}
           keyboardType="number-pad"
           maxLength={2}
@@ -77,8 +79,8 @@ export function BirthDateInput({ onChange, error }: Props) {
         <TextInput
           ref={yearRef}
           style={[styles.input, styles.inputYear, error ? styles.inputError : null]}
-          placeholder="Año"
-          accessibilityLabel="Año de nacimiento"
+          placeholder={t('birth.year')}
+          accessibilityLabel={t('birth.yearLabel')}
           placeholderTextColor={colors.fgDisabled}
           keyboardType="number-pad"
           maxLength={4}

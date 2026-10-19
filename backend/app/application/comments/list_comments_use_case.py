@@ -19,7 +19,7 @@ DEFAULT_LIMIT = 100
 def list_comments(
     post_id, viewer_id, post_repository, comment_repository, follow_repository,
     mention_repository, muted_keyword_repository, restriction_repository,
-    limit=DEFAULT_LIMIT,
+    limit=DEFAULT_LIMIT, close_friend_repository=None,
 ):
     post = post_repository.get_by_id(post_id)
     if post is None:
@@ -27,7 +27,9 @@ def list_comments(
 
     # El hilo de una cuenta privada no se lee desde fuera (ADR-022) -- mismo
     # 404 que un post inexistente.
-    assert_post_visible(post, viewer_id, follow_repository, restriction_repository)
+    assert_post_visible(
+        post, viewer_id, follow_repository, restriction_repository, close_friend_repository
+    )
 
     muted_keywords = muted_keyword_repository.list_for_user(viewer_id)
     comments = comment_repository.list_for_post(post_id, limit, viewer_id, muted_keywords)

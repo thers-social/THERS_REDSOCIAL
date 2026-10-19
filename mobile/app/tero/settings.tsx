@@ -96,19 +96,6 @@ function TeroSettingsContent() {
 
       {preferences.speakReplies ? <TeroVoicePicker /> : null}
 
-      <SwitchRow
-        label="Sonidos"
-        description="Próximamente: Tero todavía no reproduce sonidos."
-        value={preferences.sounds}
-        onChange={(sounds) => update({ sounds })}
-        disabled
-      />
-
-      <View style={styles.row}>
-        <Text style={styles.label}>Idioma</Text>
-        <Text style={styles.description}>Español. Otros idiomas llegarán con las traducciones de la app.</Text>
-      </View>
-
       <View style={styles.row}>
         <Text style={styles.label}>Privacidad</Text>
         <Text style={styles.description}>

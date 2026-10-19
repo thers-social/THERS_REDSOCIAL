@@ -42,7 +42,8 @@ export type IconName =
   | 'play'
   | 'pause'
   | 'stop'
-  | 'close';
+  | 'close'
+  | 'check';
 
 type Props = {
   name: IconName;
@@ -80,6 +81,7 @@ export function Icon({ name, size = 24, color, filled = false }: Props) {
       {name === 'home' ? (
         <Path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" {...stroke} />
       ) : null}
+      {name === 'check' ? <Path d="m5 12.5 4.5 4.5L19 7" {...line} /> : null}
       {name === 'reels' ? (
         <>
           <Rect x="3" y="3" width="18" height="18" rx="4" {...line} />

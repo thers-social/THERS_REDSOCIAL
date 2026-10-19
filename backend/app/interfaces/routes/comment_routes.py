@@ -42,6 +42,9 @@ from app.infrastructure.persistence.repositories.notification_repository import 
 from app.infrastructure.persistence.repositories.post_repository import (
     SQLAlchemyPostRepository,
 )
+from app.infrastructure.persistence.repositories.close_friend_repository import (
+    SQLAlchemyCloseFriendRepository,
+)
 from app.infrastructure.persistence.repositories.restriction_repository import (
     SQLAlchemyRestrictionRepository,
 )
@@ -63,6 +66,7 @@ _mention_repository = SQLAlchemyMentionRepository()
 _muted_keyword_repository = SQLAlchemyMutedKeywordRepository()
 # ADR-029-blocked-and-restricted-accounts.md: bloqueos y restricciones.
 _restriction_repository = SQLAlchemyRestrictionRepository()
+_close_friend_repository = SQLAlchemyCloseFriendRepository()
 
 
 @comments_bp.route("/posts/<uuid:post_id>/comments", methods=["POST"])
@@ -98,6 +102,7 @@ def create(post_id):
             _user_repository,
             _mention_repository,
             _restriction_repository,
+            close_friend_repository=_close_friend_repository,
         )
     except PostNotFoundError:
         return jsonify({"msg": "Post no encontrado"}), 404
@@ -117,6 +122,7 @@ def list_all(post_id):
             post_id, viewer_id, _post_repository, _comment_repository,
             _follow_repository, _mention_repository, _muted_keyword_repository,
             _restriction_repository, DEFAULT_LIMIT,
+            close_friend_repository=_close_friend_repository,
         )
     except PostNotFoundError:
         return jsonify({"msg": "Post no encontrado"}), 404

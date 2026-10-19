@@ -12,15 +12,21 @@ export type StripAuthor = {
   author: StoryAuthor;
   stories_count: number;
   has_unseen: boolean;
+  /** Alguna de sus historias vigentes es solo para mejores amigos (`ADR-054`): anillo verde. */
+  has_close_friends: boolean;
   latest_at: string;
   latest_image_url: string | null;
   is_me: boolean;
 };
 
+/** A quién va dirigida una historia (`ADR-054`). */
+export type StoryAudience = "everyone" | "close_friends";
+
 export type Story = {
   id: string;
   author: StoryAuthor;
   content: string | null;
+  audience: StoryAudience;
   // `url` es null mientras la moderación (ADR-044) no la aprueba; solo la ve quien la publicó.
   image: { url: string | null; width: number; height: number };
   moderation_status?: "pending" | "held" | "rejected";

@@ -8,7 +8,7 @@ from app.domain.posts.exceptions import PostNotFoundError
 
 def like_post(
     post_id, user_id, post_repository, like_repository, notification_repository,
-    follow_repository, restriction_repository,
+    follow_repository, restriction_repository, close_friend_repository=None,
 ):
     post = post_repository.get_by_id(post_id)
     if post is None:
@@ -17,7 +17,9 @@ def like_post(
     # No se le puede dar like a lo que no se puede ver: una cuenta privada no
     # recibe likes de quien no la sigue (ADR-022). Mismo 404 que un post
     # inexistente, sin revelar que existe.
-    assert_post_visible(post, user_id, follow_repository, restriction_repository)
+    assert_post_visible(
+        post, user_id, follow_repository, restriction_repository, close_friend_repository
+    )
 
     was_created = like_repository.add(post_id, user_id)
 

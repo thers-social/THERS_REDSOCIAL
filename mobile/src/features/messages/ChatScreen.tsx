@@ -15,6 +15,7 @@ import { VOICE_ENABLED } from './voiceConfig';
 import { voiceAccessibilityLabel } from './voice';
 import { SharedPlaceCard } from '@features/places/SharedPlaceCard';
 import { SharedPostCard } from '@features/posts/SharedPostCard';
+import { useOpenProfile } from '@features/profile/useOpenProfile';
 import { blockUser } from '@features/safety/api';
 import { ReportModal } from '@features/safety/ReportModal';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
@@ -49,6 +50,7 @@ type Props = ChatTarget & {
 export function ChatScreen({ kind, id: userId, name, username, avatar }: Props) {
   const isGroup = kind === 'group';
   const router = useRouter();
+  const openProfile = useOpenProfile();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
 
@@ -135,6 +137,7 @@ export function ChatScreen({ kind, id: userId, name, username, avatar }: Props) 
         : [{ label: 'Reportar mensaje', onPress: () => setReporting(menuFor) }];
 
   const headerActions: SheetAction[] = [
+    { label: `Ver el perfil de @${username ?? 'esta cuenta'}`, onPress: () => openProfile(userId) },
     { label: `Reportar a @${username ?? 'esta cuenta'}`, onPress: () => setReportUser(true) },
     {
       label: `Bloquear a @${username ?? 'esta cuenta'}`,
@@ -286,6 +289,8 @@ export function ChatScreen({ kind, id: userId, name, username, avatar }: Props) 
                 avatarName={isGroup ? (item.sender?.name ?? 'Alguien') : displayName}
                 avatarUri={isGroup ? (item.sender?.avatar_url ?? null) : avatar || null}
                 showName={isGroup}
+                // Foto de quien habla -> su perfil (en un grupo, el autor del mensaje; en un directo, la otra persona).
+                onAvatarPress={() => openProfile(isGroup ? (item.sender?.id ?? item.sender_id) : userId)}
                 onLongPress={() => openMessageMenu(item)}
                 onRetry={() => item.client_id && chat.retry(item.client_id)}
               />
@@ -372,6 +377,7 @@ function Bubble({
   avatarName,
   avatarUri,
   showName = false,
+  onAvatarPress,
   onLongPress,
   onRetry,
 }: {
@@ -381,6 +387,8 @@ function Bubble({
   avatarUri: string | null;
   /** En un grupo se escribe el nombre de quien habla sobre su mensaje. */
   showName?: boolean;
+  /** Tocar la foto de quien habla abre su perfil. */
+  onAvatarPress?: () => void;
   onLongPress: () => void;
   onRetry: () => void;
 }) {
@@ -389,7 +397,16 @@ function Bubble({
 
   return (
     <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs]}>
-      {!mine ? <Avatar name={avatarName} uri={avatarUri} size={28} /> : null}
+      {!mine ? (
+        <Pressable
+          onPress={onAvatarPress}
+          disabled={!onAvatarPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Ver el perfil de ${avatarName}`}
+        >
+          <Avatar name={avatarName} uri={avatarUri} size={28} />
+        </Pressable>
+      ) : null}
       <Pressable
         onLongPress={onLongPress}
         onPress={failed ? onRetry : undefined}

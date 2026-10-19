@@ -9,7 +9,8 @@ from sqlalchemy import and_, or_, select
 
 from app.domain.follows.follow_status import ACCEPTED
 from app.domain.restrictions.kinds import BLOCK
-from app.infrastructure.persistence.models import Follow, Post, User, UserRestriction
+from app.domain.posts.audience import AUDIENCE_EVERYONE
+from app.infrastructure.persistence.models import CloseFriend, Follow, Post, User, UserRestriction
 
 
 def visible_to_viewer(viewer_id):
@@ -45,4 +46,17 @@ def not_blocked(viewer_id):
             ),
         )
         .exists()
+    )
+
+
+def audience_ok(viewer_id):
+    """`everyone`, O es la propia autora, O el espectador está en su lista de mejores amigos
+    (ADR-054). Se suma (AND) a `visible_to_viewer`: una publicación solo para mejores amigos
+    tampoco la ve quien no podría ver las de esa cuenta."""
+    return or_(
+        Post.audience == AUDIENCE_EVERYONE,
+        Post.author_id == viewer_id,
+        select(CloseFriend.friend_id)
+        .where(CloseFriend.owner_id == Post.author_id, CloseFriend.friend_id == viewer_id)
+        .exists(),
     )

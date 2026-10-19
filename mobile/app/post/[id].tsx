@@ -10,6 +10,7 @@ import { messageOf, usePosts } from '@features/posts/PostsContext';
 import { MAX_POST_LENGTH } from '@features/posts/types';
 import type { PostComment } from '@features/posts/types';
 import { usePostMenu } from '@features/posts/usePostMenu';
+import { useOpenProfile } from '@features/profile/useOpenProfile';
 import { ReportModal } from '@features/safety/ReportModal';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
@@ -34,6 +35,7 @@ export default function PostDetail() {
   const { user } = useAuth();
   const posts = usePosts();
   const menu = usePostMenu();
+  const openProfile = useOpenProfile();
   const insets = useSafeAreaInsets();
 
   const post = posts.getPost(id);
@@ -168,10 +170,18 @@ export default function PostDetail() {
             }
             renderItem={({ item }) => (
               <View style={styles.comment}>
-                <Avatar name={item.author.name} uri={item.author.avatar_url} size={34} />
+                <Pressable
+                  onPress={() => openProfile(item.author.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver el perfil de ${item.author.name}`}
+                >
+                  <Avatar name={item.author.name} uri={item.author.avatar_url} size={34} />
+                </Pressable>
                 <View style={styles.commentBody}>
                   <Text style={styles.commentHead}>
-                    <Text style={styles.commentName}>{item.author.name}</Text>
+                    <Text style={styles.commentName} onPress={() => openProfile(item.author.id)}>
+                      {item.author.name}
+                    </Text>
                     {'  '}
                     <Text style={styles.commentMeta}>
                       {formatRelativeTime(item.created_at)}
@@ -181,6 +191,10 @@ export default function PostDetail() {
                   <MentionText
                     text={item.content}
                     usernames={item.mentions.map((m) => m.username)}
+                    onMentionPress={(username) => {
+                      const mentioned = item.mentions.find((m) => m.username.toLowerCase() === username.toLowerCase());
+                      if (mentioned) openProfile(mentioned.id);
+                    }}
                     style={styles.commentText}
                   />
                 </View>

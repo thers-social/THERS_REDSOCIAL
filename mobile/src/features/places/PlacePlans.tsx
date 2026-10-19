@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
+import { ProfileLink } from '@features/profile/ProfileLink';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
@@ -266,10 +267,12 @@ export function PlacePlans({ placeId }: { placeId: string }) {
             {plan.note ? <Text style={styles.body}>{plan.note}</Text> : null}
             {plan.members.map((member) => (
               <View key={member.id} style={styles.member}>
-                <Avatar name={member.name} uri={member.avatar_url} size={24} />
-                <Text style={styles.memberText} numberOfLines={1}>
-                  {member.name} · {STATUS_LABEL[member.status]}
-                </Text>
+                <ProfileLink userId={member.id} name={member.name} style={{ gap: space[2] }}>
+                  <Avatar name={member.name} uri={member.avatar_url} size={24} />
+                  <Text style={styles.memberText} numberOfLines={1}>
+                    {member.name} · {STATUS_LABEL[member.status]}
+                  </Text>
+                </ProfileLink>
               </View>
             ))}
             {plan.status === 'active' ? (

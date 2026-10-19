@@ -7,6 +7,7 @@
 
 from app.application.mentions.resolve_mentions import resolve_post_mentions
 from app.application.posts.post_presenter import to_public_post
+from app.domain.posts.audience import AUDIENCE_CLOSE_FRIENDS
 from app.domain.posts.exceptions import PostNotFoundError
 
 
@@ -14,6 +15,7 @@ def update_post(
     post_id, author_id, content, post_repository, like_repository, comment_repository,
     user_repository, follow_repository, mention_repository, notification_repository,
     muted_keyword_repository, restriction_repository, saved_repository=None,
+    close_friend_repository=None,
 ):
     post = post_repository.update_content(post_id, author_id, content)
     if post is None:
@@ -25,9 +27,15 @@ def update_post(
     # Las menciones se recalculan sobre el texto nuevo (ADR-023 §Decisión):
     # quitar un @username de una publicación quita la mención; agregar uno
     # nuevo la crea y la notifica. Quien ya estaba mencionado no se re-notifica.
+    allowed_ids = (
+        close_friend_repository.member_ids(author_id)
+        if post.audience == AUDIENCE_CLOSE_FRIENDS and close_friend_repository is not None
+        else None
+    )
     mentions = resolve_post_mentions(
         post.id, author_id, content, user_repository, follow_repository,
         mention_repository, notification_repository, restriction_repository,
+        allowed_ids=allowed_ids,
     )
 
     # A diferencia de create_post, acá los contadores NO pueden asumirse en 0:

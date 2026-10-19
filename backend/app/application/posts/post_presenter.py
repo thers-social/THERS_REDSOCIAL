@@ -48,6 +48,8 @@ def to_public_post(
         # Lo que el AUTOR declaró al publicar (ADR-030-content-preferences.md);
         # no es una clasificación del servidor.
         "is_sensitive": post.is_sensitive,
+        # A quién va dirigida (ADR-054): `everyone` o `close_friends`.
+        "audience": post.audience,
         "created_at": post.created_at.isoformat(),
         # Quiénes están mencionados de verdad en `content` (ADR-023). El texto
         # conserva el @username tal como se escribió; esta lista es la que

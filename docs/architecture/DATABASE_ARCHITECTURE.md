@@ -4,7 +4,7 @@
 |---|---|
 | Documento | `docs/architecture/DATABASE_ARCHITECTURE.md` |
 | Identificador propuesto | `DB-001` (sigue el patrón `HB-001`/`ARC-001`/`DS-001`/`WF-001`/`PV-001`/`FAS-001`) — **pendiente de ratificación formal** |
-| Versión | 0.50 |
+| Versión | 0.52 |
 | Estado | **Borrador / Contrato técnico — pendiente de aprobación del equipo** |
 | Depende de | `HB-001` (organización, gobernanza, git flow, seguridad), `REPOSITORY_STRUCTURE.md` (ubicación del backend y carpeta futura `database/`) |
 | Motivo | El `CLAUDE.md` maestro (§4, §14) identificó que la arquitectura de Base de Datos no estaba formalmente documentada |
@@ -43,6 +43,10 @@
 > · `moderation_results`: un resultado por trabajo (`job_id` único, `ON DELETE CASCADE`) con `provider`, `model_version`, `categories`/`scores` (`JSONB`), `decision`, `priority`, `policy_version`. **Sin el contenido evaluado.** El `CHECK` de `decision` **no admite `rejected`**: la base impide que una decisión automática rechace.
 >
 > · Migración `head`: `e2b8c4d6a931` (cuelga de `c4f8a2d6e913`). Cabeza única sobre `develop` `db84edc`; si `feature/stories-integration` se fusiona antes, hay que rebasar con una migración de unión. Verificado el 2026-10-18 sobre bases desechables: desde cero, desde datos preexistentes (las filas antiguas quedan `approved`), `downgrade` a `c4f8a2d6e913` sin perder filas y `upgrade` otra vez.
+
+> **v0.52 — Publicaciones para mejores amigos (`ADR-054`, propuesto):** la migración `c3e6a0b2d8f4` (cuelga de `b2d5f9a1c7e3`, cabeza única) añade `posts.audience` (`everyone` por defecto, o `close_friends`, `ck_posts_audience`); las publicaciones existentes quedan `everyone`.
+
+> **v0.51 — Mejores amigos (`ADR-054`, propuesto):** la migración `b2d5f9a1c7e3` crea `close_friends` (PK `(owner_id, friend_id)`, FK `CASCADE` a `users`, `CHECK owner_id <> friend_id`, `created_at`) y añade `stories.audience` (`everyone` por defecto o `close_friends`, `ck_stories_audience`).
 
 > **v0.43 — Historias de 24 horas (`ADR-042`) y migración de unión:** la migración `d1e5b8f2a640` crea `stories` (`id` UUID, `author_id` FK a `users` con `ON DELETE CASCADE`, `content` texto opcional de hasta 200 caracteres, `storage_key` único, `width`, `height`, `created_at` y `expires_at`, **guardado al crear y no recalculado**; índices `(author_id, expires_at)` y `expires_at`) y `story_views` (PK compuesta `(story_id, viewer_id)`, ambas FK con `CASCADE`, `viewed_at`). El archivo de la imagen vive en el almacenamiento de medios, que hoy es **público** (riesgo documentado en `ADR-042` §4); **no hay `moderation_status`** todavía (`ADR-044`, propuesta). La revisión `c8dcd63b24d4` es una **unión vacía** (sin cambios de esquema) de las cabezas `c4f8a2d6e913` (Tero) y `d1e5b8f2a640` (Historias), que colgaban de la misma revisión `c9d4a1e7b362`; no se editó ninguna migración existente. Cabeza actual: `c8dcd63b24d4`. El módulo está detrás del flag `STORIES_ENABLED` (apagado por defecto).
 

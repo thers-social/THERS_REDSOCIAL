@@ -18,6 +18,11 @@ from app.application.posts.list_posts_use_case import DEFAULT_LIMIT, list_posts
 from app.application.posts.update_post_use_case import update_post
 from app.application.rate_limiting import rate_limit_guard
 from app.domain.media.attachments import MAX_POST_IMAGES
+from app.domain.posts.audience import (
+    AUDIENCE_CLOSE_FRIENDS,
+    PostAudienceInvalidError,
+    normalize_audience,
+)
 from app.domain.posts.exceptions import PostNotFoundError, PostPlaceNotFoundError
 from app.domain.posts.validators import (
     MAX_CONTENT_LENGTH,
@@ -63,6 +68,9 @@ from app.infrastructure.persistence.repositories.muted_keyword_repository import
 from app.infrastructure.persistence.repositories.notification_repository import (
     SQLAlchemyNotificationRepository,
 )
+from app.infrastructure.persistence.repositories.close_friend_repository import (
+    SQLAlchemyCloseFriendRepository,
+)
 from app.infrastructure.persistence.repositories.restriction_repository import (
     SQLAlchemyRestrictionRepository,
 )
@@ -96,6 +104,7 @@ _notification_repository = SQLAlchemyNotificationRepository()
 _muted_keyword_repository = SQLAlchemyMutedKeywordRepository()
 # ADR-029-blocked-and-restricted-accounts.md: un bloqueo anula la mención.
 _restriction_repository = SQLAlchemyRestrictionRepository()
+_close_friend_repository = SQLAlchemyCloseFriendRepository()
 # ADR-039: imágenes adjuntas y su límite de subidas.
 _media_repository = SQLAlchemyMediaAttachmentRepository()
 # ADR-046: video corto.
@@ -154,6 +163,16 @@ def create():
     if not isinstance(is_sensitive, bool):
         return jsonify({"msg": "`is_sensitive` debe ser true o false"}), 400
 
+    # ADR-054: a quién va dirigida. `everyone` por defecto; `close_friends` = solo la lista de mejores
+    # amigos. Sin el módulo de historias (que es quien gestiona la lista) no hay lista a la que
+    # dirigirse: se rechaza en vez de publicar algo que nadie podría ver.
+    try:
+        audience = normalize_audience(data.get("audience"))
+    except PostAudienceInvalidError:
+        return jsonify({"msg": "`audience` debe ser everyone o close_friends"}), 400
+    if audience == AUDIENCE_CLOSE_FRIENDS and not current_app.config.get("STORIES_ENABLED", False):
+        return jsonify({"msg": "Mejores amigos no está disponible"}), 400
+
     # ADR-040 fase 4d: lugar asociado, opcional. Es una clave, no texto libre.
     place_id = data.get("place_id")
     if place_id is not None:
@@ -203,6 +222,8 @@ def create():
             place_id=place_id,
             prepared_video=prepared_video,
             video_repository=_video_repository,
+            audience=audience,
+            close_friend_repository=_close_friend_repository,
         )
     except PostPlaceNotFoundError:
         return jsonify({"msg": "Lugar no encontrado"}), 404
@@ -277,6 +298,7 @@ def save(post_id):
         result = save_post(
             post_id, get_jwt_identity(), _post_repository, _saved_repository,
             _follow_repository, _restriction_repository,
+            close_friend_repository=_close_friend_repository,
         )
     except PostNotFoundError:
         return jsonify({"msg": "Post no encontrado"}), 404
@@ -336,6 +358,7 @@ def update(post_id):
             _post_repository, _like_repository, _comment_repository,
             _user_repository, _follow_repository, _mention_repository,
             _notification_repository, _muted_keyword_repository, _restriction_repository,
+            close_friend_repository=_close_friend_repository,
         )
     except PostNotFoundError:
         # Mismo mensaje/código tanto si el id no existe como si existe pero es

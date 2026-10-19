@@ -5,7 +5,7 @@
 
 import { request } from '@shared/lib/api';
 
-import type { Story, StoryViewer, StripAuthor } from './types';
+import type { Story, StoryAudience, StoryViewer, StripAuthor } from './types';
 
 export async function fetchStrip(signal?: AbortSignal): Promise<StripAuthor[]> {
   const { authors } = await request<{ authors: StripAuthor[] }>('/stories', {
@@ -37,7 +37,11 @@ export async function fetchViews(
 
 export type PickedImage = { uri: string; mimeType?: string | null; fileName?: string | null };
 
-export async function createStory(image: PickedImage, content: string): Promise<Story> {
+export async function createStory(
+  image: PickedImage,
+  content: string,
+  audience: StoryAudience = 'everyone',
+): Promise<Story> {
   const form = new FormData();
   // En React Native un archivo se adjunta con {uri, name, type}; el tipo de TS de `FormData` no
   // lo conoce, por eso el cast.
@@ -48,6 +52,8 @@ export async function createStory(image: PickedImage, content: string): Promise<
   } as unknown as Blob);
   const text = content.trim();
   if (text) form.append('content', text);
+  // Solo se envía si no es la de siempre: el servidor trata la ausencia como `everyone`.
+  if (audience !== 'everyone') form.append('audience', audience);
 
   const { story } = await request<{ story: Story }>('/stories', {
     method: 'POST',

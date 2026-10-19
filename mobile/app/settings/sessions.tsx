@@ -5,6 +5,8 @@ import { closeOtherSessions, closeSession, fetchSessions } from '@features/setti
 import type { ActiveSession } from '@features/settings/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
+import type { MessageKey } from '@shared/i18n';
 import { ApiError } from '@shared/lib/api';
 import { formatRelativeTime } from '@shared/lib/time';
 import { Banner } from '@shared/ui/Banner';
@@ -13,14 +15,14 @@ import { Screen } from '@shared/ui/Screen';
 import { StateMessage } from '@shared/ui/StateMessage';
 
 /** Una descripción corta del navegador/dispositivo a partir del User-Agent. */
-function describeDevice(userAgent: string | null): string {
-  if (!userAgent) return 'Dispositivo desconocido';
-  if (/THERS|okhttp|Expo/i.test(userAgent)) return 'App de THERS (Android)';
-  if (/Android/i.test(userAgent)) return 'Navegador en Android';
-  if (/iPhone|iPad/i.test(userAgent)) return 'Navegador en iPhone/iPad';
-  if (/Windows/i.test(userAgent)) return 'Navegador en Windows';
-  if (/Mac OS/i.test(userAgent)) return 'Navegador en Mac';
-  if (/Linux/i.test(userAgent)) return 'Navegador en Linux';
+function describeDevice(userAgent: string | null, t: (key: MessageKey) => string): string {
+  if (!userAgent) return t('sessions.device.unknown');
+  if (/THERS|okhttp|Expo/i.test(userAgent)) return t('sessions.device.app');
+  if (/Android/i.test(userAgent)) return t('sessions.device.android');
+  if (/iPhone|iPad/i.test(userAgent)) return t('sessions.device.ios');
+  if (/Windows/i.test(userAgent)) return t('sessions.device.windows');
+  if (/Mac OS/i.test(userAgent)) return t('sessions.device.mac');
+  if (/Linux/i.test(userAgent)) return t('sessions.device.linux');
   return userAgent.slice(0, 40);
 }
 
@@ -30,6 +32,7 @@ function describeDevice(userAgent: string | null): string {
  * «Cerrar sesión» en el perfil.
  */
 export default function Sessions() {
+  const { t } = useLanguage();
   const [items, setItems] = useState<ActiveSession[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,19 +42,19 @@ export default function Sessions() {
       setItems(await fetchSessions());
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No pudimos cargar tus sesiones.');
+      setError(e instanceof ApiError ? e.message : t('sessions.error.load'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   function confirmClose(session: ActiveSession) {
-    Alert.alert('Cerrar esta sesión', `${describeDevice(session.user_agent)} dejará de tener acceso.`, [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('sessions.close.title'), t('sessions.close.body', { device: describeDevice(session.user_agent, t) }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Cerrar sesión',
+        text: t('sessions.close.confirm'),
         style: 'destructive',
         onPress: async () => {
           setBusy(true);
@@ -59,7 +62,7 @@ export default function Sessions() {
             await closeSession(session.id);
             await load();
           } catch (e) {
-            Alert.alert('No se pudo cerrar', e instanceof ApiError ? e.message : 'Inténtalo de nuevo.');
+            Alert.alert(t('sessions.error.close'), e instanceof ApiError ? e.message : t('common.tryAgain'));
           } finally {
             setBusy(false);
           }
@@ -69,10 +72,10 @@ export default function Sessions() {
   }
 
   function confirmCloseOthers() {
-    Alert.alert('Cerrar las demás sesiones', 'Todos los otros dispositivos perderán el acceso.', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('sessions.closeOthers.title'), t('sessions.closeOthers.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Cerrar las demás',
+        text: t('sessions.closeOthers.confirm'),
         style: 'destructive',
         onPress: async () => {
           setBusy(true);
@@ -80,7 +83,7 @@ export default function Sessions() {
             await closeOtherSessions();
             await load();
           } catch (e) {
-            Alert.alert('No se pudo cerrar', e instanceof ApiError ? e.message : 'Inténtalo de nuevo.');
+            Alert.alert(t('sessions.error.close'), e instanceof ApiError ? e.message : t('common.tryAgain'));
           } finally {
             setBusy(false);
           }
@@ -92,12 +95,12 @@ export default function Sessions() {
   const others = items?.filter((s) => !s.is_current) ?? [];
 
   return (
-    <Screen title="Sesiones activas" back>
+    <Screen title={t('sessions.title')} back>
       {error && items ? <Banner tone="error">{error}</Banner> : null}
 
       {items === null ? (
         error ? (
-          <StateMessage kind="error" message={error} actionLabel="Reintentar" onAction={load} />
+          <StateMessage kind="error" message={error} actionLabel={t('common.retry')} onAction={load} />
         ) : (
           <StateMessage kind="loading" />
         )
@@ -107,30 +110,32 @@ export default function Sessions() {
             <View key={session.id} style={styles.row}>
               <View style={styles.rowText}>
                 <Text style={styles.device}>
-                  {describeDevice(session.user_agent)}
-                  {session.is_current ? '  · este dispositivo' : ''}
+                  {describeDevice(session.user_agent, t)}
+                  {session.is_current ? `  · ${t('sessions.thisDevice')}` : ''}
                 </Text>
                 <Text style={styles.meta}>
-                  Último uso: {session.last_used_at ? formatRelativeTime(session.last_used_at) : 'sin registro'}
+                  {t('sessions.lastUsed', {
+                    when: session.last_used_at ? formatRelativeTime(session.last_used_at) : t('sessions.noRecord'),
+                  })}
                   {session.ip_address ? ` · IP ${session.ip_address}` : ''}
                 </Text>
               </View>
               {!session.is_current ? (
-                <Button label="Cerrar" variant="secondary" onPress={() => confirmClose(session)} disabled={busy} />
+                <Button label={t('common.close')} variant="secondary" onPress={() => confirmClose(session)} disabled={busy} />
               ) : null}
             </View>
           ))}
 
           {others.length > 0 ? (
             <Button
-              label="Cerrar todas las demás"
+              label={t('sessions.closeAll')}
               variant="danger"
               onPress={confirmCloseOthers}
               loading={busy}
               style={styles.closeAll}
             />
           ) : (
-            <Text style={styles.note}>No hay otras sesiones abiertas.</Text>
+            <Text style={styles.note}>{t('sessions.noOthers')}</Text>
           )}
         </>
       )}

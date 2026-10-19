@@ -33,7 +33,12 @@ type PostsState = {
   refreshing: boolean;
   reload: (options?: { pullToRefresh?: boolean }) => Promise<void>;
   getPost: (postId: string) => Post | undefined;
-  create: (content: string, isSensitive: boolean, media?: PickedMedia[]) => Promise<void>;
+  create: (
+    content: string,
+    isSensitive: boolean,
+    media?: PickedMedia[],
+    audience?: 'everyone' | 'close_friends',
+  ) => Promise<void>;
   edit: (postId: string, content: string) => Promise<void>;
   remove: (postId: string) => Promise<void>;
   toggleLike: (postId: string) => Promise<void>;
@@ -118,10 +123,18 @@ export function PostsProvider({ children }: { children: ReactNode }) {
     setPosts((current) => current.map((p) => (p.id === next.id ? next : p)));
   }, []);
 
-  const create = useCallback(async (content: string, isSensitive: boolean, media: PickedMedia[] = []) => {
-    const created = await api.createPost(content, isSensitive, undefined, media);
+  const create = useCallback(
+    async (
+      content: string,
+      isSensitive: boolean,
+      media: PickedMedia[] = [],
+      audience: 'everyone' | 'close_friends' = 'everyone',
+    ) => {
+    const created = await api.createPost(content, isSensitive, undefined, media, audience);
     setPosts((current) => [created, ...current]);
-  }, []);
+  },
+    [],
+  );
 
   const edit = useCallback(
     async (postId: string, content: string) => {

@@ -31,6 +31,9 @@ from app.infrastructure.persistence.repositories.report_repository import (
 from app.infrastructure.persistence.repositories.report_target_resolver import (
     SQLAlchemyReportTargetResolver,
 )
+from app.infrastructure.persistence.repositories.close_friend_repository import (
+    SQLAlchemyCloseFriendRepository,
+)
 from app.infrastructure.persistence.repositories.restriction_repository import (
     SQLAlchemyRestrictionRepository,
 )
@@ -43,6 +46,7 @@ _events = SQLAlchemyDomainEventRepository()
 _target_resolver = SQLAlchemyReportTargetResolver()
 _follow_repository = SQLAlchemyFollowRepository()
 _restriction_repository = SQLAlchemyRestrictionRepository()
+_close_friend_repository = SQLAlchemyCloseFriendRepository()
 _rate_limit_repository = SQLAlchemyRateLimitRepository()
 
 
@@ -82,6 +86,7 @@ def post_report():
             _report_repository,
             _follow_repository,
             _restriction_repository,
+            close_friend_repository=_close_friend_repository,
         )
     except InvalidReportError as error:
         return jsonify({"msg": error.message}), 400

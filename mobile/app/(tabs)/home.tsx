@@ -9,6 +9,7 @@ import { usePostMenu } from '@features/posts/usePostMenu';
 import { StoriesStrip } from '@features/stories/StoriesStrip';
 import { colors, fontSize, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { Icon } from '@shared/ui/Icon';
 import { Screen } from '@shared/ui/Screen';
 import { StateMessage } from '@shared/ui/StateMessage';
@@ -20,6 +21,7 @@ import { StateMessage } from '@shared/ui/StateMessage';
  */
 export default function Home() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const posts = usePosts();
   const menu = usePostMenu();
 
@@ -27,18 +29,18 @@ export default function Home() {
 
   return (
     <Screen
-      title="Inicio"
+      title={t('tabs.home')}
       scroll={false}
       withBottomInset={false}
       headerRight={
         <View style={styles.headerLinks}>
-          <Link href="/search" accessibilityRole="link" accessibilityLabel="Buscar" style={styles.headerLink}>
+          <Link href="/search" accessibilityRole="link" accessibilityLabel={t('tabs.search')} style={styles.headerLink}>
             <Icon name="search" color={colors.fg} />
           </Link>
           <Link
             href="/notifications"
             accessibilityRole="link"
-            accessibilityLabel="Avisos"
+            accessibilityLabel={t('tabs.notifications')}
             style={styles.headerLink}
           >
             <Icon name="bell" color={colors.fg} />
@@ -63,9 +65,9 @@ export default function Home() {
             <StoriesStrip me={user} canPublish={user.profile_completed} />
             {user.profile_completed ? (
               <Composer
-                onPublish={async (content, sensitive, media) => {
+                onPublish={async (content, sensitive, media, audience) => {
                   try {
-                    await posts.create(content, sensitive, media);
+                    await posts.create(content, sensitive, media, audience);
                   } catch (e) {
                     throw new Error(messageOf(e));
                   }
@@ -73,34 +75,27 @@ export default function Home() {
               />
             ) : (
               <View style={styles.notice}>
-                <Text style={styles.noticeText}>
-                  Completa tu perfil, incluida tu fecha de nacimiento, para publicar. Puedes hacerlo
-                  desde la web de THERS.
-                </Text>
+                <Text style={styles.noticeText}>{t('home.completeProfile')}</Text>
               </View>
             )}
             {posts.status === 'ready' && posts.error ? (
-              <Text style={styles.stale}>No pudimos actualizar. Mostrando lo último que cargó.</Text>
+              <Text style={styles.stale}>{t('home.stale')}</Text>
             ) : null}
           </View>
         }
         ListEmptyComponent={
           posts.status === 'loading' || posts.status === 'idle' ? (
-            <StateMessage kind="loading" message="Cargando publicaciones…" />
+            <StateMessage kind="loading" message={t('home.loading')} />
           ) : posts.status === 'error' ? (
             <StateMessage
               kind="error"
-              title="No pudimos cargar el inicio"
+              title={t('home.error.title')}
               message={posts.error ?? undefined}
-              actionLabel="Reintentar"
+              actionLabel={t('common.retry')}
               onAction={() => posts.reload()}
             />
           ) : (
-            <StateMessage
-              kind="empty"
-              title="Todavía no hay publicaciones"
-              message="Sé la primera persona en compartir algo."
-            />
+            <StateMessage kind="empty" title={t('home.empty.title')} message={t('home.empty.body')} />
           )
         }
         renderItem={({ item }) => (

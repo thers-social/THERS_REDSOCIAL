@@ -254,7 +254,7 @@ class SQLAlchemyPlaceRepository(PlaceRepository):
                     "  AND pl.status = 'active' "
                     "  AND pl.created_at > now() - make_interval(days => :d)) AS plans, "
                     "(SELECT count(*) FROM posts po JOIN users u ON u.id = po.author_id "
-                    "  WHERE po.place_id = :p AND NOT u.is_private "
+                    "  WHERE po.place_id = :p AND NOT u.is_private AND po.audience = 'everyone' "
                     "  AND po.created_at > now() - make_interval(days => :d)) AS posts"
                 ),
                 {"p": str(place_id), "d": int(window_days)},

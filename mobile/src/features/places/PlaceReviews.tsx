@@ -8,6 +8,8 @@ import { Avatar } from '@shared/ui/Avatar';
 import { Banner } from '@shared/ui/Banner';
 import { Button } from '@shared/ui/Button';
 import { Icon } from '@shared/ui/Icon';
+import { ProfileLink } from '@features/profile/ProfileLink';
+import { useOpenProfile } from '@features/profile/useOpenProfile';
 import { ReportModal } from '@features/safety/ReportModal';
 
 import type { ReviewImage, ReviewReply } from './types';
@@ -145,6 +147,7 @@ function ReviewForm({ initialRating, initialBody, editing, onSave, onDelete, onC
  */
 export function PlaceReviews({ placeId }: { placeId: string }) {
   const data = usePlaceReviews(placeId);
+  const openProfile = useOpenProfile();
   const [editing, setEditing] = useState(false);
   const [reportingId, setReportingId] = useState<string | null>(null);
 
@@ -229,9 +232,15 @@ export function PlaceReviews({ placeId }: { placeId: string }) {
 
       {others.map((review) => (
         <View key={review.id} style={styles.review}>
-          <Avatar name={review.author.name || review.author.username} uri={review.author.avatar_url} size={32} />
+          <ProfileLink
+            userId={review.author.id}
+            name={review.author.name || review.author.username}
+            style={{ flex: 0, alignItems: 'flex-start' }}
+          >
+            <Avatar name={review.author.name || review.author.username} uri={review.author.avatar_url} size={32} />
+          </ProfileLink>
           <View style={styles.reviewBody}>
-            <Text style={styles.author}>
+            <Text style={styles.author} onPress={() => openProfile(review.author.id)}>
               {review.author.name || review.author.username}
               <Text style={styles.date}> · {new Date(review.created_at).toLocaleDateString()}</Text>
             </Text>

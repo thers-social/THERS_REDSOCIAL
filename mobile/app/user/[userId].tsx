@@ -13,11 +13,12 @@ import { shareProfile } from '@features/profile/shareProfile';
 import { ApiError } from '@shared/lib/api';
 import { colors, fontSize, fonts, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
-import { Avatar } from '@shared/ui/Avatar';
+import { useLanguage } from '@shared/i18n';
 import { Button } from '@shared/ui/Button';
 import { Icon } from '@shared/ui/Icon';
 import { Screen } from '@shared/ui/Screen';
 import { StateMessage } from '@shared/ui/StateMessage';
+import { ZoomableAvatar } from '@shared/ui/ZoomableAvatar';
 
 /**
  * Perfil de otra persona (`ADR-049`): se llega tocando su foto en una publicación. Seguir, enviar
@@ -28,6 +29,7 @@ export default function UserProfile() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const { user: me } = useAuth();
   const router = useRouter();
+  const { t } = useLanguage();
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [posts, setPosts] = useState<Post[] | null>(null);
@@ -61,7 +63,7 @@ export default function UserProfile() {
       setProfile({ ...profile, follow_status: result.follow_status });
       await load();
     } catch (e) {
-      Alert.alert('No se pudo actualizar el seguimiento', messageOf(e));
+      Alert.alert(t('user.error.follow'), messageOf(e));
     } finally {
       setBusy(false);
     }
@@ -78,7 +80,7 @@ export default function UserProfile() {
       apply(result.liked_by_me, result.likes_count);
     } catch (e) {
       apply(post.liked_by_me, post.likes_count);
-      Alert.alert('No se pudo actualizar el me gusta', messageOf(e));
+      Alert.alert(t('user.error.like'), messageOf(e));
     }
   }
 
@@ -105,21 +107,21 @@ export default function UserProfile() {
 
   const followLabel =
     profile?.follow_status === 'accepted'
-      ? 'Siguiendo'
+      ? t('follow.following')
       : profile?.follow_status === 'pending'
-        ? 'Solicitado'
+        ? t('follow.requested')
         : profile?.is_private
-          ? 'Solicitar'
-          : 'Seguir';
+          ? t('follow.request')
+          : t('follow.follow');
 
   if (!profile) {
     return (
-      <Screen title="Perfil" back>
+      <Screen title={t('tabs.profile')} back>
         {error ? (
           <StateMessage
             kind="error"
-            message={error.notFound ? 'Este perfil no está disponible.' : error.message}
-            actionLabel={error.notFound ? undefined : 'Reintentar'}
+            message={error.notFound ? t('user.unavailable') : error.message}
+            actionLabel={error.notFound ? undefined : t('common.retry')}
             onAction={error.notFound ? undefined : load}
           />
         ) : (
@@ -140,7 +142,7 @@ export default function UserProfile() {
           hitSlop={10}
           style={styles.headerBtn}
           accessibilityRole="button"
-          accessibilityLabel="Compartir perfil"
+          accessibilityLabel={t('user.shareProfile')}
         >
           <Icon name="share" size={20} color={colors.fg} />
         </Pressable>
@@ -157,34 +159,34 @@ export default function UserProfile() {
                 source={{ uri: profile.cover_url }}
                 style={styles.cover}
                 accessibilityIgnoresInvertColors
-                accessibilityLabel={`Portada de ${profile.name}`}
+                accessibilityLabel={t('user.coverOf', { name: profile.name })}
               />
             ) : null}
 
             <View style={styles.identity}>
-              <Avatar name={profile.name} uri={profile.avatar_url} size={88} />
+              <ZoomableAvatar name={profile.name} uri={profile.avatar_url} size={88} />
               <View style={styles.statsRow}>
                 <View style={styles.stat}>
                   <Text style={styles.statValue}>{profile.can_view_posts ? (posts?.length ?? 0) : '–'}</Text>
-                  <Text style={styles.statLabel}>Publicaciones</Text>
+                  <Text style={styles.statLabel}>{t('profile.posts')}</Text>
                 </View>
                 <Pressable
                   style={styles.stat}
                   onPress={() => openConnections('followers')}
                   accessibilityRole="button"
-                  accessibilityLabel={`Ver los seguidores de ${profile.name}, ${profile.followers_count}`}
+                  accessibilityLabel={t('user.viewFollowers', { name: profile.name, count: profile.followers_count })}
                 >
                   <Text style={styles.statValue}>{profile.followers_count}</Text>
-                  <Text style={styles.statLabel}>Seguidores</Text>
+                  <Text style={styles.statLabel}>{t('profile.followers')}</Text>
                 </Pressable>
                 <Pressable
                   style={styles.stat}
                   onPress={() => openConnections('following')}
                   accessibilityRole="button"
-                  accessibilityLabel={`Ver a quién sigue ${profile.name}, ${profile.following_count}`}
+                  accessibilityLabel={t('user.viewFollowing', { name: profile.name, count: profile.following_count })}
                 >
                   <Text style={styles.statValue}>{profile.following_count}</Text>
-                  <Text style={styles.statLabel}>Siguiendo</Text>
+                  <Text style={styles.statLabel}>{t('profile.following')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -193,7 +195,7 @@ export default function UserProfile() {
               <Text style={styles.name}>{profile.name}</Text>
               <Text style={styles.username}>
                 @{profile.username}
-                {profile.is_private ? ' · Cuenta privada' : ''}
+                {profile.is_private ? ` · ${t('profile.privateAccount')}` : ''}
               </Text>
               {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
               {profile.location ? <Text style={styles.meta}>{profile.location}</Text> : null}
@@ -202,7 +204,7 @@ export default function UserProfile() {
                   onPress={() =>
                     Linking.openURL(
                       /^https?:\/\//i.test(profile.website!) ? profile.website! : `https://${profile.website}`,
-                    ).catch(() => Alert.alert('No se pudo abrir el enlace'))
+                    ).catch(() => Alert.alert(t('profile.error.link')))
                   }
                   accessibilityRole="link"
                   style={styles.linkRow}
@@ -221,12 +223,12 @@ export default function UserProfile() {
                 loading={busy}
                 style={styles.flex}
               />
-              <Button label="Mensaje" variant="secondary" onPress={openMessage} style={styles.flex} />
+              <Button label={t('user.message')} variant="secondary" onPress={openMessage} style={styles.flex} />
               <Pressable
                 onPress={() => shareProfile(profile).catch(() => {})}
                 style={styles.iconBtn}
                 accessibilityRole="button"
-                accessibilityLabel="Compartir perfil"
+                accessibilityLabel={t('user.shareProfile')}
               >
                 <Icon name="share" size={20} color={colors.fg} />
               </Pressable>
@@ -235,13 +237,13 @@ export default function UserProfile() {
             {!profile.can_view_posts ? (
               <View style={styles.locked}>
                 <Icon name="lock" size={22} color={colors.fgMuted} />
-                <Text style={styles.lockedTitle}>Esta cuenta es privada</Text>
-                <Text style={styles.lockedHint}>Sigue a esta cuenta para ver sus publicaciones.</Text>
+                <Text style={styles.lockedTitle}>{t('user.private.title')}</Text>
+                <Text style={styles.lockedHint}>{t('user.private.hint')}</Text>
               </View>
             ) : posts === null ? (
-              <Text style={styles.empty}>Cargando publicaciones…</Text>
+              <Text style={styles.empty}>{t('home.loading')}</Text>
             ) : posts.length === 0 ? (
-              <Text style={styles.empty}>Todavía no ha publicado nada reciente.</Text>
+              <Text style={styles.empty}>{t('user.empty.posts')}</Text>
             ) : null}
           </View>
         }

@@ -5,6 +5,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { createPost } from '@features/posts/api';
 import { MAX_POST_LENGTH } from '@features/posts/types';
 import type { Post } from '@features/posts/types';
+import { ProfileLink } from '@features/profile/ProfileLink';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { ApiError } from '@shared/lib/api';
@@ -99,10 +100,12 @@ export function PlacePosts({ placeId }: { placeId: string }) {
           accessibilityLabel={`Publicación de ${post.author.name}`}
         >
           <View style={styles.author}>
-            <Avatar name={post.author.name} uri={post.author.avatar_url ?? null} size={28} />
-            <Text style={styles.authorName} numberOfLines={1}>
-              {post.author.name}
-            </Text>
+            <ProfileLink userId={post.author.id} name={post.author.name} style={{ flex: 0 }}>
+              <Avatar name={post.author.name} uri={post.author.avatar_url ?? null} size={28} />
+              <Text style={styles.authorName} numberOfLines={1}>
+                {post.author.name}
+              </Text>
+            </ProfileLink>
           </View>
           <Text style={styles.body} numberOfLines={5}>
             {post.is_sensitive ? 'Contenido sensible. Tocá para verlo.' : post.content}

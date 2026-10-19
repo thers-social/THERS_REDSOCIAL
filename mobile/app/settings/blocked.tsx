@@ -6,6 +6,7 @@ import { fetchBlocks, unblockUser } from '@features/safety/api';
 import type { BlockedAccount } from '@features/safety/api';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { ApiError, request } from '@shared/lib/api';
 import { Avatar } from '@shared/ui/Avatar';
 import { Banner } from '@shared/ui/Banner';
@@ -21,6 +22,7 @@ import { TextField } from '@shared/ui/TextField';
  */
 export default function Blocked() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [items, setItems] = useState<BlockedAccount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [username, setUsername] = useState('');
@@ -31,9 +33,9 @@ export default function Blocked() {
       setItems(await fetchBlocks());
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No pudimos cargar tus bloqueos.');
+      setError(e instanceof ApiError ? e.message : t('blocked.error.load'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -54,23 +56,23 @@ export default function Blocked() {
       setUsername('');
       await load();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No pudimos bloquear esa cuenta.');
+      setError(e instanceof ApiError ? e.message : t('blocked.error.block'));
     } finally {
       setBusy(false);
     }
   }
 
   function confirmUnblock(account: BlockedAccount) {
-    Alert.alert(`¿Desbloquear a @${account.user.username}?`, 'Podrá volver a ver tu perfil y escribirte.', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('blocked.unblock.title', { username: account.user.username }), t('blocked.unblock.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Desbloquear',
+        text: t('blocked.unblock'),
         onPress: async () => {
           try {
             await unblockUser(account.user.id);
             setItems((current) => current?.filter((b) => b.user.id !== account.user.id) ?? current);
           } catch (e) {
-            Alert.alert('No se pudo desbloquear', e instanceof ApiError ? e.message : 'Inténtalo de nuevo.');
+            Alert.alert(t('blocked.error.unblock'), e instanceof ApiError ? e.message : t('common.tryAgain'));
           }
         },
       },
@@ -80,29 +82,29 @@ export default function Blocked() {
   if (!user) return null;
 
   return (
-    <Screen title="Cuentas bloqueadas" back>
+    <Screen title={t('blocked.title')} back>
       {error ? <Banner tone="error">{error}</Banner> : null}
 
       <TextField
-        label="Bloquear una cuenta"
-        hint="Escribe su @usuario."
+        label={t('blocked.label')}
+        hint={t('blocked.hint')}
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
         autoCorrect={false}
         editable={!busy}
       />
-      <Button label="Bloquear" variant="secondary" onPress={add} loading={busy} disabled={!username.trim()} />
+      <Button label={t('blocked.block')} variant="secondary" onPress={add} loading={busy} disabled={!username.trim()} />
 
-      <Text style={styles.title}>Bloqueadas</Text>
+      <Text style={styles.title}>{t('blocked.list')}</Text>
       {items === null ? (
         error ? (
-          <StateMessage kind="error" message={error} actionLabel="Reintentar" onAction={load} />
+          <StateMessage kind="error" message={error} actionLabel={t('common.retry')} onAction={load} />
         ) : (
           <StateMessage kind="loading" />
         )
       ) : items.length === 0 ? (
-        <StateMessage kind="empty" message="No has bloqueado a nadie." />
+        <StateMessage kind="empty" message={t('blocked.empty')} />
       ) : (
         items.map((account) => (
           <View key={account.user.id} style={styles.row}>
@@ -113,7 +115,7 @@ export default function Blocked() {
               </Text>
               <Text style={styles.username}>@{account.user.username}</Text>
             </View>
-            <Button label="Desbloquear" variant="secondary" onPress={() => confirmUnblock(account)} />
+            <Button label={t('blocked.unblock')} variant="secondary" onPress={() => confirmUnblock(account)} />
           </View>
         ))
       )}

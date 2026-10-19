@@ -3,8 +3,10 @@ import { memo, useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 
 import { SharedPlaceCard } from '@features/places/SharedPlaceCard';
+import { useOpenProfile } from '@features/profile/useOpenProfile';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { formatRelativeTime } from '@shared/lib/time';
 import { Avatar } from '@shared/ui/Avatar';
 import { Icon } from '@shared/ui/Icon';
@@ -34,6 +36,8 @@ type Props = {
  */
 function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: Props) {
   const router = useRouter();
+  const openProfile = useOpenProfile();
+  const { t } = useLanguage();
   const [revealed, setRevealed] = useState(false);
   const [sharing, setSharing] = useState(false);
   const { toggleSave } = usePosts();
@@ -42,12 +46,12 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
 
   const followLabel =
     post.author.follow_status === 'accepted'
-      ? 'Siguiendo'
+      ? t('follow.following')
       : post.author.follow_status === 'pending'
-        ? 'Solicitado'
+        ? t('follow.requested')
         : post.author.is_private
-          ? 'Solicitar'
-          : 'Seguir';
+          ? t('follow.request')
+          : t('follow.follow');
 
   function openDetail() {
     if (!detail) router.push({ pathname: '/post/[id]', params: { id: post.id } });
@@ -66,7 +70,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           onPress={openAuthor}
           style={styles.author}
           accessibilityRole="button"
-          accessibilityLabel={`Ver el perfil de ${post.author.name}`}
+          accessibilityLabel={t('profile.viewOf', { name: post.author.name })}
         >
           <Avatar name={post.author.name} uri={post.author.avatar_url} size={44} />
           <View style={styles.headerText}>
@@ -75,7 +79,8 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
             </Text>
             <Text style={styles.meta} numberOfLines={1}>
               @{post.author.username} · {formatRelativeTime(post.created_at)}
-              {post.edited ? ' · editado' : ''}
+              {post.edited ? ` · ${t('post.edited')}` : ''}
+              {post.audience === 'close_friends' ? ` · ★ ${t('story.audience.closeFriends')}` : ''}
             </Text>
           </View>
         </Pressable>
@@ -84,7 +89,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
             onPress={() => onFollow(post)}
             style={[styles.follow, post.author.follow_status ? styles.followOn : null]}
             accessibilityRole="button"
-            accessibilityLabel={`${followLabel} a ${post.author.name}`}
+            accessibilityLabel={`${followLabel}: ${post.author.name}`}
           >
             <Text
               style={[styles.followText, post.author.follow_status ? styles.followTextOn : null]}
@@ -98,7 +103,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           hitSlop={10}
           style={styles.menu}
           accessibilityRole="button"
-          accessibilityLabel="Más opciones"
+          accessibilityLabel={t('post.moreOptions')}
         >
           <Icon name="more" size={20} color={colors.fgMuted} />
         </Pressable>
@@ -106,11 +111,9 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
 
       {hidden ? (
         <View style={styles.sensitive}>
-          <Text style={styles.sensitiveText}>
-            Su autor marcó esta publicación como contenido sensible.
-          </Text>
+          <Text style={styles.sensitiveText}>{t('post.sensitive.byAuthorLong')}</Text>
           <Pressable onPress={() => setRevealed(true)} accessibilityRole="button">
-            <Text style={styles.sensitiveAction}>Mostrar</Text>
+            <Text style={styles.sensitiveAction}>{t('post.sensitive.show')}</Text>
           </Pressable>
         </View>
       ) : (
@@ -118,6 +121,10 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           <MentionText
             text={post.content}
             usernames={post.mentions.map((m) => m.username)}
+            onMentionPress={(username) => {
+              const mentioned = post.mentions.find((m) => m.username.toLowerCase() === username.toLowerCase());
+              if (mentioned) openProfile(mentioned.id);
+            }}
             style={styles.content}
           />
         </Pressable>
@@ -125,9 +132,9 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
       {/* Fotos y video corto (ADR-039, ADR-046). Ocultos igual que el texto si es contenido sensible. */}
       {!hidden ? (
         <>
-          <ImageGridView images={post.images} label={`Foto de ${post.author.name}`} />
+          <ImageGridView images={post.images} label={t('post.imageOf', { name: post.author.name })} />
           {post.video ? (
-            <VideoPlayerView video={post.video} accessibilityLabel={`Video de ${post.author.name}`} />
+            <VideoPlayerView video={post.video} accessibilityLabel={t('post.videoOf', { name: post.author.name })} />
           ) : null}
         </>
       ) : null}
@@ -141,7 +148,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           onPress={() => onLike(post)}
           style={styles.action}
           accessibilityRole="button"
-          accessibilityLabel={post.liked_by_me ? 'Quitar me gusta' : 'Me gusta'}
+          accessibilityLabel={post.liked_by_me ? t('post.unlike') : t('post.like')}
           accessibilityState={{ selected: post.liked_by_me }}
         >
           <Icon
@@ -156,7 +163,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           onPress={openDetail}
           style={styles.action}
           accessibilityRole="button"
-          accessibilityLabel={`Comentarios: ${post.comments_count}`}
+          accessibilityLabel={t('post.comments', { count: post.comments_count })}
         >
           <Icon name="comment" size={22} color={colors.fgSecondary} />
           <Text style={styles.actionText}>{post.comments_count}</Text>
@@ -165,17 +172,17 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           onPress={() => setSharing(true)}
           style={styles.action}
           accessibilityRole="button"
-          accessibilityLabel="Compartir publicación"
+          accessibilityLabel={t('post.share')}
         >
           <Icon name="share" size={22} color={colors.fgSecondary} />
         </Pressable>
         <View style={styles.spacer} />
         <Pressable
-          onPress={() => toggleSave(post.id).catch((e) => Alert.alert('No se pudo guardar', messageOf(e)))}
+          onPress={() => toggleSave(post.id).catch((e) => Alert.alert(t('post.error.save'), messageOf(e)))}
           style={styles.action}
           accessibilityRole="button"
           accessibilityState={{ selected: Boolean(post.saved_by_me) }}
-          accessibilityLabel={post.saved_by_me ? 'Quitar de guardados' : 'Guardar publicación'}
+          accessibilityLabel={post.saved_by_me ? t('saved.remove') : t('post.save')}
         >
           <Icon
             name="bookmark"
@@ -190,7 +197,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
         onClose={() => setSharing(false)}
         onShared={(name) => {
           setSharing(false);
-          Alert.alert('Publicación enviada', `Se la enviaste a ${name}.`);
+          Alert.alert(t('post.sent.title'), t('post.sent.body', { name }));
         }}
       />
     </View>

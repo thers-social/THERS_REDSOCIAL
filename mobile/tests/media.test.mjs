@@ -166,7 +166,7 @@ describe('las pantallas', () => {
   it('la foto de perfil se cambia y se quita desde la edición del perfil', () => {
     assert.match(read('src/features/settings/api.ts'), /appendMedia\(form, 'file', media\)/);
     assert.match(read('src/features/settings/api.ts'), /'\/users\/me\/avatar'/);
-    assert.match(read('src/shared/ui/EditProfileModal.tsx'), /Cambiar foto/);
+    assert.match(read('src/shared/ui/EditProfileModal.tsx'), /editProfile.photo.change/);
   });
 
   it('el panel del negocio sube y quita la imagen del lugar', () => {

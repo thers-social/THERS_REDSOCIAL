@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Image, Pressable, ScrollView, Text, View } fr
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { Avatar } from '@shared/ui/Avatar';
 import { Icon } from '@shared/ui/Icon';
 
@@ -27,6 +28,7 @@ type Props = {
  * historias lo dice, no inventa nada.
  */
 export function StoriesStrip({ me, canPublish }: Props) {
+  const { t } = useLanguage();
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'disabled'>('loading');
   const [authors, setAuthors] = useState<StripAuthor[]>([]);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
@@ -52,12 +54,12 @@ export function StoriesStrip({ me, canPublish }: Props) {
 
   async function pickImage() {
     if (!canPublish) {
-      Alert.alert('Completa tu perfil', 'Necesitas completar tu perfil, incluida tu fecha de nacimiento, para publicar.');
+      Alert.alert(t('strip.completeProfile.title'), t('strip.completeProfile.body'));
       return;
     }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permiso necesario', 'Permite el acceso a tus fotos para elegir la imagen de una historia.');
+      Alert.alert(t('strip.permission.title'), t('strip.permission.body'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -83,9 +85,9 @@ export function StoriesStrip({ me, canPublish }: Props) {
           onPress={() => (myIndex >= 0 ? setViewerIndex(myIndex) : pickImage())}
           style={styles.story}
           accessibilityRole="button"
-          accessibilityLabel={myIndex >= 0 ? 'Ver tu historia' : 'Crear una historia'}
+          accessibilityLabel={myIndex >= 0 ? t('strip.viewMine') : t('strip.createOne')}
         >
-          <View style={myIndex >= 0 ? styles.ringSeen : undefined}>
+          <View style={myIndex >= 0 ? (authors[myIndex].has_close_friends ? styles.ringGreen : styles.ringSeen) : undefined}>
             <Avatar name={me.name} uri={me.avatar_url} size={56} />
           </View>
           <Pressable
@@ -93,12 +95,12 @@ export function StoriesStrip({ me, canPublish }: Props) {
             style={styles.plus}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Agregar una historia"
+            accessibilityLabel={t('strip.add')}
           >
             <Icon name="plus" size={12} color={colors.onBrand} />
           </Pressable>
           <Text style={styles.label} numberOfLines={1}>
-            Tu historia
+            {t('strip.mine')}
           </Text>
         </Pressable>
 
@@ -108,9 +110,12 @@ export function StoriesStrip({ me, canPublish }: Props) {
             onPress={() => setViewerIndex(index)}
             style={styles.story}
             accessibilityRole="button"
-            accessibilityLabel={`Ver las historias de ${item.author.name}${item.has_unseen ? ' (sin ver)' : ''}`}
+            accessibilityLabel={t(item.has_unseen ? 'strip.viewOfUnseen' : 'strip.viewOf', { name: item.author.name })}
           >
-            <View style={item.has_unseen ? styles.ringUnseen : styles.ringSeen}>
+            {/* Verde = tiene historias solo para mejores amigos (ADR-054); morado = sin ver; gris = vistas. */}
+            <View
+              style={item.has_close_friends ? styles.ringGreen : item.has_unseen ? styles.ringUnseen : styles.ringSeen}
+            >
               {item.latest_image_url ? (
                 <Image source={{ uri: item.latest_image_url }} style={styles.thumb} accessibilityIgnoresInvertColors />
               ) : (
@@ -128,11 +133,11 @@ export function StoriesStrip({ me, canPublish }: Props) {
 
       {status === 'error' ? (
         <Pressable onPress={() => load()} accessibilityRole="button">
-          <Text style={styles.hint}>No se pudieron cargar las historias. Toca para reintentar.</Text>
+          <Text style={styles.hint}>{t('strip.error')}</Text>
         </Pressable>
       ) : null}
       {status === 'ready' && authors.length === 0 ? (
-        <Text style={styles.hint}>Nadie a quien sigues tiene historias ahora.</Text>
+        <Text style={styles.hint}>{t('strip.empty')}</Text>
       ) : null}
 
       {viewerIndex !== null ? (
@@ -155,6 +160,7 @@ const styles = themedStyles(() => ({
   story: { alignItems: 'center', width: 72 },
   ringUnseen: { padding: 2, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.brand },
   ringSeen: { padding: 2, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.border },
+  ringGreen: { padding: 2, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.successAccent },
   thumb: { width: 56, height: 56, borderRadius: radius.pill, backgroundColor: colors.bgSubtle },
   plus: {
     position: 'absolute',

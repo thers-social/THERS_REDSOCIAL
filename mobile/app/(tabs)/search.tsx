@@ -10,6 +10,7 @@ import { messageOf, usePosts } from '@features/posts/PostsContext';
 import { searchPosts } from '@features/posts/searchPosts';
 import type { SearchSort } from '@features/posts/searchPosts';
 import { usePostMenu } from '@features/posts/usePostMenu';
+import { useOpenProfile } from '@features/profile/useOpenProfile';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { Avatar } from '@shared/ui/Avatar';
@@ -149,6 +150,7 @@ function SortChip({ label, active, onPress }: { label: string; active: boolean; 
 
 /** Personas sugeridas, con seguir/dejar de seguir (`POST`/`DELETE /api/users/<id>/follow`). */
 function Suggestions() {
+  const openProfile = useOpenProfile();
   const [people, setPeople] = useState<SuggestedUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // `accepted`/`pending` por id; ausente = no sigue.
@@ -193,15 +195,23 @@ function Suggestions() {
         const state = following[person.id];
         return (
           <View key={person.id} style={styles.person}>
-            <Avatar name={person.name} size={40} />
-            <View style={styles.personText}>
-              <Text style={styles.personName} numberOfLines={1}>
-                {person.name}
-              </Text>
-              <Text style={styles.personUser} numberOfLines={1}>
-                @{person.username}
-              </Text>
-            </View>
+            {/* Foto y nombre llevan al perfil; «Seguir» sigue siendo su propio botón. */}
+            <Pressable
+              onPress={() => openProfile(person.id)}
+              style={styles.personTap}
+              accessibilityRole="button"
+              accessibilityLabel={`Ver el perfil de ${person.name}`}
+            >
+              <Avatar name={person.name} uri={person.avatar_url} size={40} />
+              <View style={styles.personText}>
+                <Text style={styles.personName} numberOfLines={1}>
+                  {person.name}
+                </Text>
+                <Text style={styles.personUser} numberOfLines={1}>
+                  @{person.username}
+                </Text>
+              </View>
+            </Pressable>
             <Pressable
               onPress={() => toggle(person)}
               style={[styles.followBtn, state ? styles.followBtnOn : null]}
@@ -271,6 +281,7 @@ const styles = themedStyles(() => ({
     padding: space[3],
     marginBottom: space[2],
   },
+  personTap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   personText: { flex: 1, marginHorizontal: space[3] },
   personName: { fontSize: fontSize.bodyMd, fontWeight: '700', color: colors.fg },
   personUser: { fontSize: fontSize.labelMd, color: colors.fgMuted },

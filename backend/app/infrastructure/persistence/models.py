@@ -280,6 +280,14 @@ class Post(db.Model):
         nullable=True,
     )
 
+    # A quién va dirigida (ADR-054): `everyone` o `close_friends`. Las publicaciones anteriores a la
+    # migración son `everyone`, que es exactamente lo que ya eran.
+    audience = db.Column(db.String(16), nullable=False, server_default=text("'everyone'"))
+
+    __table_args__ = (
+        db.CheckConstraint("audience IN ('everyone', 'close_friends')", name="ck_posts_audience"),
+    )
+
     # lazy="joined": listar posts siempre necesita el autor (to_public_post),
     # un JOIN evita el N+1 que tendría cada post resolviendo su autor por
     # separado.
@@ -2559,11 +2567,17 @@ class Story(db.Model):
     # `true` = el archivo vive en el almacenamiento PRIVADO y solo se sirve con una URL firmada de
     # vida corta, emitida tras comprobar permisos. Las historias anteriores son públicas (false).
     file_private = db.Column(db.Boolean, nullable=False, server_default=text("false"))
+    # A quién va dirigida (ADR-054): `everyone` o `close_friends`. Las historias anteriores a la
+    # migración son `everyone`, que es exactamente lo que ya eran.
+    audience = db.Column(db.String(16), nullable=False, server_default=text("'everyone'"))
 
     __table_args__ = (
         db.CheckConstraint(
             "moderation_status IN ('pending', 'approved', 'held', 'rejected')",
             name="ck_stories_moderation_status",
+        ),
+        db.CheckConstraint(
+            "audience IN ('everyone', 'close_friends')", name="ck_stories_audience"
         ),
         db.Index("ix_stories_moderation_status", "moderation_status"),
         db.Index("ix_stories_author_expires", "author_id", "expires_at"),
@@ -2713,4 +2727,29 @@ class PushDevice(db.Model):
     __table_args__ = (
         CheckConstraint("platform IN ('android', 'ios')", name="ck_push_devices_platform"),
         Index("ix_push_devices_user", "user_id"),
+    )
+
+
+# --- Mejores amigos (ADR-054) ---
+
+
+class CloseFriend(db.Model):
+    __tablename__ = "close_friends"
+
+    # La lista de mejores amigos de `owner_id`: es PRIVADA de quien la hace (nadie, ni la persona
+    # añadida, la consulta) y de una sola dirección. Clave compuesta: una persona entra una sola
+    # vez. CASCADE en ambas puntas: al borrar cualquiera de las dos cuentas desaparece la fila.
+    owner_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    friend_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    __table_args__ = (
+        CheckConstraint("owner_id <> friend_id", name="ck_close_friends_not_self"),
+        # La lectura de historias pregunta «¿estoy en la lista de este autor?»: (owner, friend) es la
+        # clave primaria; este índice cubre el sentido inverso («¿en cuántas listas estoy?»).
+        Index("ix_close_friends_friend", "friend_id"),
     )

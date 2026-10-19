@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@features/auth/context/AuthContext';
 import { TeroFloating } from '@features/tero/components/TeroFloating';
 import { colors, fontSize, fonts } from '@shared/design/tokens';
+import { useLanguage } from '@shared/i18n';
 import { Icon } from '@shared/ui/Icon';
 import { useUnreadCount } from '@features/messages/useUnreadCount';
 import { Avatar } from '@shared/ui/Avatar';
@@ -25,6 +26,7 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const unread = useUnreadCount(Boolean(user));
+  const { t } = useLanguage();
 
   if (isRestoring) {
     return (
@@ -58,14 +60,14 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="home"
           options={{
-            title: 'Inicio',
+            title: t('tabs.home'),
             tabBarIcon: ({ color, focused }) => <Icon name="home" color={color} filled={focused} />,
           }}
         />
         <Tabs.Screen
           name="reels"
           options={{
-            title: 'Reels',
+            title: t('tabs.reels'),
             tabBarIcon: ({ color }) => <Icon name="reels" color={color} />,
           }}
         />
@@ -73,7 +75,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="create"
           options={{
-            title: 'Crear',
+            title: t('tabs.create'),
             tabBarLabel: () => null,
             tabBarButton: () => (
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -85,7 +87,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="messages"
           options={{
-            title: 'Mensajes',
+            title: t('tabs.messages'),
             tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined,
             tabBarBadgeStyle: { backgroundColor: colors.brand, color: colors.onBrand },
             tabBarIcon: ({ color, focused }) => <Icon name="messages" color={color} filled={focused} />,
@@ -94,13 +96,13 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="profile"
           options={{
-            title: 'Perfil',
+            title: t('tabs.profile'),
             tabBarIcon: ({ color }) =>
               user ? <Avatar name={user.name} uri={user.avatar_url} size={26} /> : <Icon name="profile" color={color} />,
           }}
         />
-        <Tabs.Screen name="search" options={{ title: 'Buscar', href: null }} />
-        <Tabs.Screen name="notifications" options={{ title: 'Avisos', href: null }} />
+        <Tabs.Screen name="search" options={{ title: t('tabs.search'), href: null }} />
+        <Tabs.Screen name="notifications" options={{ title: t('tabs.notifications'), href: null }} />
       </Tabs>
       {/* Tero (vista previa): encima de las pestañas, nunca sobre la barra. */}
       <TeroFloating bottomOffset={tabBarHeight} />

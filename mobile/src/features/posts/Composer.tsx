@@ -3,6 +3,7 @@ import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
+import { useLanguage } from '@shared/i18n';
 import { comingSoon } from '@shared/lib/comingSoon';
 import { MediaAttachmentBar } from '@shared/media/MediaAttachmentBar';
 import { MAX_POST_IMAGES } from '@shared/media/mediaRules';
@@ -16,13 +17,20 @@ import { MAX_POST_LENGTH } from './types';
 
 type Props = {
   /** Debe lanzar con un mensaje legible si falla. */
-  onPublish: (content: string, isSensitive: boolean, media: PickedMedia[]) => Promise<void>;
+  onPublish: (
+    content: string,
+    isSensitive: boolean,
+    media: PickedMedia[],
+    audience: 'everyone' | 'close_friends',
+  ) => Promise<void>;
 };
 
 /** Caja para escribir una publicación: hasta 2000 caracteres y, si se quiere, hasta 4 fotos o un video corto. */
 export function Composer({ onPublish }: Props) {
+  const { t } = useLanguage();
   const [text, setText] = useState('');
   const [sensitive, setSensitive] = useState(false);
+  const [closeFriends, setCloseFriends] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const media = useMediaAttachments({ maxImages: MAX_POST_IMAGES });
@@ -36,14 +44,15 @@ export function Composer({ onPublish }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await onPublish(trimmed, sensitive, media.items);
+      await onPublish(trimmed, sensitive, media.items, closeFriends ? 'close_friends' : 'everyone');
       // Solo se limpia si salió bien: perder lo escrito por un fallo de red es
       // lo peor que puede pasar en un campo de texto.
       setText('');
       setSensitive(false);
+      setCloseFriends(false);
       media.clear();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No pudimos publicar. Inténtalo de nuevo.');
+      setError(e instanceof Error ? e.message : t('composer.error'));
     } finally {
       setBusy(false);
     }
@@ -56,12 +65,12 @@ export function Composer({ onPublish }: Props) {
         style={styles.input}
         value={text}
         onChangeText={setText}
-        placeholder="¿Qué estás creando hoy?"
+        placeholder={t('composer.placeholder')}
         placeholderTextColor={colors.fgDisabled}
         multiline
         maxLength={MAX_POST_LENGTH}
         textAlignVertical="top"
-        accessibilityLabel="Escribir una publicación"
+        accessibilityLabel={t('composer.a11y')}
         editable={!busy}
       />
       <View style={styles.row}>
@@ -70,17 +79,17 @@ export function Composer({ onPublish }: Props) {
             value={sensitive}
             onValueChange={setSensitive}
             trackColor={{ true: colors.brand, false: colors.borderStrong }}
-            accessibilityLabel="Marcar como contenido sensible"
+            accessibilityLabel={t('composer.sensitive.a11y')}
             disabled={busy}
           />
-          <Text style={styles.sensitiveText}>Contenido sensible</Text>
+          <Text style={styles.sensitiveText}>{t('composer.sensitive')}</Text>
         </View>
         <View style={styles.tools}>
           <Pressable
-            onPress={() => comingSoon('Los atajos de IA')}
+            onPress={() => comingSoon(t('composer.ai.feature'))}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Asistente de IA (próximamente)"
+            accessibilityLabel={t('composer.ai.a11y')}
           >
             <Icon name="sparkle" size={20} color={colors.brandText} />
           </Pressable>
@@ -89,10 +98,21 @@ export function Composer({ onPublish }: Props) {
           </Text>
         </View>
       </View>
+      {/* Solo para la lista de mejores amigos (ADR-054); se gestiona en Ajustes. */}
+      <View style={styles.audienceRow}>
+        <Switch
+          value={closeFriends}
+          onValueChange={setCloseFriends}
+          trackColor={{ true: colors.successAccent, false: colors.borderStrong }}
+          accessibilityLabel={t('composer.closeFriends.a11y')}
+          disabled={busy}
+        />
+        <Text style={styles.sensitiveText}>{t('composer.closeFriends')}</Text>
+      </View>
       <View style={styles.media}>
         <MediaAttachmentBar media={media} maxImages={MAX_POST_IMAGES} disabled={busy} />
       </View>
-      <Button label="Publicar" onPress={publish} loading={busy} disabled={!canPublish || media.picking} />
+      <Button label={t('composer.publish')} onPress={publish} loading={busy} disabled={!canPublish || media.picking} />
     </View>
   );
 }
@@ -117,6 +137,7 @@ const styles = themedStyles(() => ({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space[3] },
   sensitive: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
   sensitiveText: { fontSize: fontSize.bodySm, color: colors.fgSecondary },
+  audienceRow: { flexDirection: 'row', alignItems: 'center', gap: space[2], marginBottom: space[3] },
   tools: { flexDirection: 'row', alignItems: 'center', gap: space[3] },
   counter: { fontSize: fontSize.labelMd, color: colors.fgMuted },
   media: { marginBottom: space[3] },

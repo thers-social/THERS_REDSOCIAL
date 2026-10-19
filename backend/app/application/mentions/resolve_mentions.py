@@ -20,9 +20,13 @@ from app.domain.privacy.audience import FOLLOWERS, is_allowed
 
 
 def _authorized_mentions(
-    content, author_id, user_repository, follow_repository, restriction_repository
+    content, author_id, user_repository, follow_repository, restriction_repository,
+    allowed_ids=None,
 ):
-    """Usuarios realmente mencionables en `content` por `author_id`."""
+    """Usuarios realmente mencionables en `content` por `author_id`.
+
+    `allowed_ids` (ADR-054): en una publicación solo para mejores amigos, solo se puede mencionar
+    a quien puede verla; a los demás el @texto les queda como texto y no se les avisa."""
     usernames = extract_usernames(content)
     if not usernames:
         return []
@@ -36,6 +40,8 @@ def _authorized_mentions(
     # sola consulta para todos los candidatos.
     blocked_ids = restriction_repository.blocked_ids_either_way(author_id)
     candidates = [user for user in candidates if str(user.id) not in blocked_ids]
+    if allowed_ids is not None:
+        candidates = [user for user in candidates if str(user.id) in allowed_ids]
     if not candidates:
         return []
 
@@ -81,7 +87,7 @@ def _notify(mentioned_users, newly_added_ids, author_id, post_id, notification_r
 
 def resolve_post_mentions(
     post_id, author_id, content, user_repository, follow_repository,
-    mention_repository, notification_repository, restriction_repository,
+    mention_repository, notification_repository, restriction_repository, allowed_ids=None,
 ):
     """Sincroniza las menciones de una publicación y notifica a las nuevas.
 
@@ -89,7 +95,8 @@ def resolve_post_mentions(
     que el presenter pueda exponerlos sin volver a consultarlos.
     """
     mentioned = _authorized_mentions(
-        content, author_id, user_repository, follow_repository, restriction_repository
+        content, author_id, user_repository, follow_repository, restriction_repository,
+        allowed_ids,
     )
     newly_added = mention_repository.replace_for_post(
         post_id, author_id, [user.id for user in mentioned]
@@ -100,7 +107,7 @@ def resolve_post_mentions(
 
 def resolve_comment_mentions(
     comment_id, post_id, author_id, content, user_repository, follow_repository,
-    mention_repository, notification_repository, restriction_repository,
+    mention_repository, notification_repository, restriction_repository, allowed_ids=None,
 ):
     """Igual que `resolve_post_mentions`, sobre un comentario.
 
@@ -111,7 +118,8 @@ def resolve_comment_mentions(
     navegar para verla.
     """
     mentioned = _authorized_mentions(
-        content, author_id, user_repository, follow_repository, restriction_repository
+        content, author_id, user_repository, follow_repository, restriction_repository,
+        allowed_ids,
     )
     newly_added = mention_repository.replace_for_comment(
         comment_id, author_id, [user.id for user in mentioned]
