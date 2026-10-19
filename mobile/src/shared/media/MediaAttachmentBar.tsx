@@ -67,6 +67,16 @@ export function MediaAttachmentBar({ media, maxImages, disabled = false, allowVi
             {maxImages > 1 ? `Foto ${media.images.length}/${maxImages}` : 'Foto'}
           </Text>
         </Pressable>
+        <Pressable
+          onPress={() => void media.addCameraPhoto()}
+          disabled={busy || hasVideo || imagesFull}
+          style={[styles.action, (busy || hasVideo || imagesFull) && styles.actionOff]}
+          accessibilityRole="button"
+          accessibilityLabel="Tomar una foto"
+        >
+          <Icon name="camera" size={20} color={colors.fgSecondary} />
+          <Text style={styles.actionText}>Cámara</Text>
+        </Pressable>
         {VIDEO_ENABLED && allowVideo ? (
           <Pressable
             onPress={() => void media.addVideo()}

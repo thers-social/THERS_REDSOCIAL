@@ -4,7 +4,6 @@ import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { useLanguage } from '@shared/i18n';
-import { comingSoon } from '@shared/lib/comingSoon';
 import { MediaAttachmentBar } from '@shared/media/MediaAttachmentBar';
 import { MAX_POST_IMAGES } from '@shared/media/mediaRules';
 import type { PickedMedia } from '@shared/media/mediaRules';
@@ -85,14 +84,6 @@ export function Composer({ onPublish }: Props) {
           <Text style={styles.sensitiveText}>{t('composer.sensitive')}</Text>
         </View>
         <View style={styles.tools}>
-          <Pressable
-            onPress={() => comingSoon(t('composer.ai.feature'))}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('composer.ai.a11y')}
-          >
-            <Icon name="sparkle" size={20} color={colors.brandText} />
-          </Pressable>
           <Text style={styles.counter}>
             {text.length}/{MAX_POST_LENGTH}
           </Text>

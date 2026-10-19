@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 
-import { MediaSelectionError, pickImages, pickVideo } from './pickMedia';
+import { MediaSelectionError, pickImages, pickVideo, takePhoto } from './pickMedia';
 import { canAddVideo, imageRoom } from './mediaRules';
 import type { PickedMedia } from './mediaRules';
 
@@ -53,6 +53,25 @@ export function useMediaAttachments({ maxImages }: { maxImages: number }) {
     [maxImages, run],
   );
 
+  const addCameraPhoto = useCallback(
+    () =>
+      run(async () => {
+        if (imageRoom(maxImages, itemsRef.current) <= 0) {
+          setError(
+            itemsRef.current.some((item) => item.kind === 'video')
+              ? 'Quita el video para añadir fotos.'
+              : maxImages === 1
+                ? 'Solo puedes adjuntar una foto.'
+                : `Máximo ${maxImages} fotos.`,
+          );
+          return;
+        }
+        const photo = await takePhoto();
+        if (photo) setItems((current) => [...current, photo]);
+      }),
+    [maxImages, run],
+  );
+
   const addVideo = useCallback(
     () =>
       run(async () => {
@@ -79,7 +98,7 @@ export function useMediaAttachments({ maxImages }: { maxImages: number }) {
   const images = items.filter((item) => item.kind === 'image');
   const video = items.find((item) => item.kind === 'video') ?? null;
 
-  return { items, images, video, error, picking, addImages, addVideo, remove, clear };
+  return { items, images, video, error, picking, addImages, addCameraPhoto, addVideo, remove, clear };
 }
 
 export type MediaAttachments = ReturnType<typeof useMediaAttachments>;

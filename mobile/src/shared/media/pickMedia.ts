@@ -63,6 +63,24 @@ export async function pickImages(limit: number): Promise<PickedMedia[]> {
   return picked;
 }
 
+/** Toma UNA foto con la cámara del teléfono. `null` si la persona cancela. Lanza `MediaSelectionError` con un texto apto para mostrar. */
+export async function takePhoto(): Promise<PickedMedia | null> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) {
+    throw new MediaSelectionError('Permite el acceso a la cámara en los ajustes del teléfono para tomar una foto.');
+  }
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ['images'],
+    quality: IMAGE_QUALITY,
+    exif: false,
+  });
+  if (result.canceled || result.assets.length === 0) return null;
+  const media = normalize(result.assets[0], 'image');
+  const problem = mediaProblem(media);
+  if (problem) throw new MediaSelectionError(problem);
+  return media;
+}
+
 /** Elige UNA foto y la devuelve con su contenido en base64 (para Tero, que la recibe dentro del JSON). */
 export async function pickImageBase64(): Promise<(PickedMedia & { base64: string }) | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
