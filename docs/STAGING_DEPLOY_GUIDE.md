@@ -98,6 +98,19 @@ Nota de coste (ADR-018): el plan gratuito de Supabase **se pausa tras una semana
 
 4. Dominio personalizado: `staging.thersweb.com`.
 
+## 5b. «Continuar con Google» en staging (`ADR-012`)
+
+El código ya está en web y API; solo falta configurar. No necesita `GOOGLE_CLIENT_SECRET`.
+
+1. En Google Cloud Console → *APIs y servicios → Credenciales*, abrir el **Client ID de tipo «Aplicación web»** (el mismo que usa el móvil no sirve si es de tipo Android).
+2. En **Orígenes autorizados de JavaScript** añadir `https://staging.thersweb.com` (sin barra final ni ruta). No hace falta URI de redirección.
+3. Si la pantalla de consentimiento está en modo *Prueba*, añadir como **usuarios de prueba** los correos de quienes van a entrar, o publicarla.
+4. Cloudflare Pages: `VITE_GOOGLE_CLIENT_ID` = ese Client ID, y **redesplegar** (Vite lo incrusta al compilar).
+5. Render: `GOOGLE_CLIENT_ID` = **el mismo valor** (la API lo exige como `aud`). Reiniciar el servicio.
+6. Prueba: en `/login` y `/register` aparece el botón de Google; al elegir cuenta se crea la sesión y, si es cuenta nueva, pasa por `/complete-profile`.
+
+Si el botón no aparece: revisar la consola (`VITE_GOOGLE_CLIENT_ID` vacía) o el error `origin_mismatch` (origen sin autorizar en el paso 2). Si el botón sale pero la API responde 400, los dos Client ID no coinciden.
+
 ## 6. Cron de purga de datos (`ADR-037`)
 
 En Render: *New → Cron Job*, mismo repositorio y rama, *Root Directory* `backend`, comando `python scripts/purge_expired_data.py`, una vez al día (por ejemplo `0 6 * * *`). Mismas variables de entorno que la API. Imprime solo conteos.
