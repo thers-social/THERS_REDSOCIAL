@@ -10,17 +10,21 @@ import type { LatLng, LocationStatus } from './types';
  * - Nunca se pide al abrir la pantalla: `request()` se llama desde un botón.
  * - Una sola lectura (`getCurrentPositionAsync`), sin seguimiento ni servicio en segundo
  *   plano: no se rastrea.
- * - El punto se redondea a 3 decimales (~110 m) y vive solo en memoria: no se guarda en
- *   disco, ni en el estado global, ni se envía a ningún sitio que no sea la consulta.
- * - Precisión equilibrada (no GPS fino): para "qué hay cerca" sobra.
+ * - `point` se redondea a 3 decimales (~110 m) y es el ÚNICO que sale a la consulta
+ *   (ADR-040 §4.4, D2). `exact` es la lectura sin redondear y se queda en el teléfono, solo
+ *   para dibujar "estás aquí" y centrar el mapa. Ambos viven solo en memoria: no se guardan
+ *   en disco ni en el estado global.
+ * - Lectura por GPS (`High`), no la equilibrada que se apoyaba en antenas y wifi y podía
+ *   quedar a cientos de metros o a kilómetros de la persona (2026-10-20).
  *
  * Rechazar el permiso no desactiva nada: la pantalla sigue funcionando por búsqueda y mapa.
  */
-const TIMEOUT_MS = 10000;
+const TIMEOUT_MS = 20000;
 
 export function useGeolocation() {
   const [status, setStatus] = useState<LocationStatus>('idle');
   const [point, setPoint] = useState<LatLng | null>(null);
+  const [exact, setExact] = useState<LatLng | null>(null);
 
   const request = useCallback(async () => {
     setStatus('requesting');
@@ -35,19 +39,21 @@ export function useGeolocation() {
         return;
       }
       const position = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), TIMEOUT_MS)),
       ]);
       if (!position) {
         setStatus('timeout');
         return;
       }
-      setPoint(roundPoint({ lat: position.coords.latitude, lng: position.coords.longitude }));
+      const reading = { lat: position.coords.latitude, lng: position.coords.longitude };
+      setExact(reading);
+      setPoint(roundPoint(reading));
       setStatus('granted');
     } catch {
       setStatus('unavailable');
     }
   }, []);
 
-  return { status, point, request };
+  return { status, point, exact, request };
 }

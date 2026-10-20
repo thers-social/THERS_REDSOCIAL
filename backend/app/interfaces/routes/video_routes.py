@@ -54,13 +54,6 @@ def _signer():
     return current_app.extensions.get("video_playback_signer")
 
 
-def _human_review_only():
-    """`True` si la moderación está encendida y no hay clasificador automático: todo queda retenido
-    hasta que una persona lo aprueba (D3, `domain/videos/rules.py`)."""
-    config = current_app.config
-    return bool(config.get("MODERATION_ENABLED")) and config.get("MODERATION_CLASSIFIER") != "fake"
-
-
 @videos_bp.route("/videos/uploads", methods=["POST"])
 @jwt_required()
 @profile_completed_required
@@ -78,7 +71,6 @@ def create_upload():
             _repository, _mux(),
             rules.parse_allowlist(current_app.config.get("VIDEO_UPLOAD_ALLOWLIST")),
             current_app.config.get("MUX_CORS_ORIGIN"),
-            _human_review_only(),
         )
     except rules.VideoUploadNotAllowedError:
         # D3: para el resto de las cuentas el módulo no existe.
