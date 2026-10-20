@@ -43,6 +43,10 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
   const { toggleSave } = usePosts();
   const isMine = post.author.id === myId;
   const hidden = post.is_sensitive && !isMine && !revealed;
+  // Todas las publicaciones comparten el formato de Instagram: encabezado, contenido, acciones debajo y
+  // pie con «Me gusta», comentarios y hora. Con foto o video, el texto va como pie de foto con el nombre
+  // al lado; sin ellos, el texto va justo bajo el encabezado.
+  const hasMedia = ((post.images?.length ?? 0) > 0 || Boolean(post.video)) && !hidden;
 
   const followLabel =
     post.author.follow_status === 'accepted'
@@ -72,13 +76,13 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           accessibilityRole="button"
           accessibilityLabel={t('profile.viewOf', { name: post.author.name })}
         >
-          <Avatar name={post.author.name} uri={post.author.avatar_url} size={44} />
+          <Avatar name={post.author.name} uri={post.author.avatar_url} size={36} />
           <View style={styles.headerText}>
             <Text style={styles.name} numberOfLines={1}>
               {post.author.name}
             </Text>
             <Text style={styles.meta} numberOfLines={1}>
-              @{post.author.username} · {formatRelativeTime(post.created_at)}
+              @{post.author.username}
               {post.edited ? ` · ${t('post.edited')}` : ''}
               {post.audience === 'close_friends' ? (
                 <Text style={{ color: colors.brandText, fontWeight: '700' }}>{` · ★ ${t('story.audience.closeFriends')}`}</Text>
@@ -118,7 +122,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
             <Text style={styles.sensitiveAction}>{t('post.sensitive.show')}</Text>
           </Pressable>
         </View>
-      ) : (
+      ) : hasMedia ? null : (
         <Pressable onPress={openDetail} disabled={detail} accessibilityRole={detail ? 'text' : 'button'}>
           <MentionText
             text={post.content}
@@ -134,9 +138,9 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
       {/* Fotos y video corto (ADR-039, ADR-046). Ocultos igual que el texto si es contenido sensible. */}
       {!hidden ? (
         <>
-          <ImageGridView images={post.images} label={t('post.imageOf', { name: post.author.name })} />
+          <ImageGridView images={post.images} label={t('post.imageOf', { name: post.author.name })} bleed />
           {post.video ? (
-            <VideoPlayerView video={post.video} accessibilityLabel={t('post.videoOf', { name: post.author.name })} />
+            <VideoPlayerView video={post.video} bleed accessibilityLabel={t('post.videoOf', { name: post.author.name })} />
           ) : null}
         </>
       ) : null}
@@ -155,11 +159,10 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
         >
           <Icon
             name="heart"
-            size={22}
+            size={26}
             filled={post.liked_by_me}
             color={post.liked_by_me ? colors.brandText : colors.fgSecondary}
           />
-          <Text style={[styles.actionText, post.liked_by_me && styles.liked]}>{post.likes_count}</Text>
         </Pressable>
         <Pressable
           onPress={openDetail}
@@ -167,8 +170,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           accessibilityRole="button"
           accessibilityLabel={t('post.comments', { count: post.comments_count })}
         >
-          <Icon name="comment" size={22} color={colors.fgSecondary} />
-          <Text style={styles.actionText}>{post.comments_count}</Text>
+          <Icon name="comment" size={26} color={colors.fgSecondary} />
         </Pressable>
         <Pressable
           onPress={() => setSharing(true)}
@@ -176,7 +178,7 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
           accessibilityRole="button"
           accessibilityLabel={t('post.share')}
         >
-          <Icon name="share" size={22} color={colors.fgSecondary} />
+          <Icon name="share" size={26} color={colors.fgSecondary} />
         </Pressable>
         <View style={styles.spacer} />
         <Pressable
@@ -188,11 +190,41 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
         >
           <Icon
             name="bookmark"
-            size={22}
+            size={26}
             filled={Boolean(post.saved_by_me)}
             color={post.saved_by_me ? colors.brandText : colors.fgSecondary}
           />
         </Pressable>
+      </View>
+      <View style={styles.footer}>
+        {post.likes_count > 0 ? (
+          <Text style={styles.likes}>{t('post.likesCount', { count: post.likes_count })}</Text>
+        ) : null}
+        {hasMedia && post.content ? (
+          <Pressable onPress={openDetail} disabled={detail} accessibilityRole={detail ? 'text' : 'button'}>
+            <Text style={styles.caption}>
+              <Text style={styles.captionName}>{post.author.name} </Text>
+              <MentionText
+                text={post.content}
+                usernames={post.mentions.map((m) => m.username)}
+                onMentionPress={(username) => {
+                  const mentioned = post.mentions.find((m) => m.username.toLowerCase() === username.toLowerCase());
+                  if (mentioned) openProfile(mentioned.id);
+                }}
+                style={styles.captionText}
+              />
+            </Text>
+          </Pressable>
+        ) : null}
+        {post.comments_count > 0 && !detail ? (
+          <Pressable onPress={openDetail} accessibilityRole="button">
+            <Text style={styles.viewComments}>{t('post.viewComments', { count: post.comments_count })}</Text>
+          </Pressable>
+        ) : null}
+        <Text style={styles.time}>
+          {formatRelativeTime(post.created_at)}
+          {post.audience === 'close_friends' ? ` · ★ ${t('story.audience.closeFriends')}` : ''}
+        </Text>
       </View>
       <SharePostSheet
         post={sharing ? post : null}
@@ -209,15 +241,22 @@ function PostCardBase({ post, myId, onLike, onMenu, onFollow, detail = false }: 
 export const PostCard = memo(PostCardBase);
 
 const styles = themedStyles(() => ({
+  // Formato Instagram dentro del mismo margen lateral (16 px) que tiene el cuadro de publicar.
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: space[4],
-    marginBottom: space[3],
+    backgroundColor: colors.bg,
+    marginBottom: space[4],
+    paddingBottom: space[3],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: space[3] },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: space[2] },
+  footer: { gap: 4 },
+  likes: { fontSize: fontSize.bodyMd, fontWeight: '700', color: colors.fg },
+  caption: { lineHeight: 20 },
+  captionName: { fontSize: fontSize.bodyMd, fontWeight: '700', color: colors.fg },
+  captionText: { fontSize: fontSize.bodyMd, color: colors.fg, lineHeight: 20 },
+  viewComments: { fontSize: fontSize.bodyMd, color: colors.fgMuted },
+  time: { fontSize: fontSize.labelMd, color: colors.fgMuted, marginTop: 2 },
   author: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   headerText: { flex: 1, marginHorizontal: space[3] },
   name: { fontSize: fontSize.bodyMd, fontWeight: '700', color: colors.fg },
@@ -247,7 +286,7 @@ const styles = themedStyles(() => ({
   },
   sensitiveText: { flex: 1, fontSize: fontSize.bodySm, color: colors.fgSecondary },
   sensitiveAction: { color: colors.brandText, fontWeight: '700', fontSize: fontSize.bodySm },
-  actions: { flexDirection: 'row', alignItems: 'center', marginTop: space[3], gap: space[4] },
+  actions: { flexDirection: 'row', alignItems: 'center', marginTop: space[2], marginBottom: space[1], gap: space[3] },
   action: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: space[2] },
   spacer: { flex: 1 },
   actionText: { fontSize: fontSize.bodyMd, color: colors.fgSecondary },
