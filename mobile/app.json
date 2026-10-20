@@ -73,8 +73,7 @@
       ],
       "expo-video",
       "@react-native-google-signin/google-signin",
-      "@livekit/react-native-expo-plugin",
-      "@livekit/react-native-webrtc"
+      "@livekit/react-native-expo-plugin"
     ]
   }
 }
