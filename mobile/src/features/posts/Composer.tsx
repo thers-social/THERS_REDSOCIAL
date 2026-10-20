@@ -24,7 +24,7 @@ type Props = {
   ) => Promise<void>;
 };
 
-/** Caja para escribir una publicación: hasta 2000 caracteres y, si se quiere, hasta 4 fotos o un video corto. */
+/** Caja para escribir una publicación: hasta 2000 caracteres y, si se quiere, hasta 10 fotos o un video corto. */
 export function Composer({ onPublish }: Props) {
   const { t } = useLanguage();
   const [text, setText] = useState('');

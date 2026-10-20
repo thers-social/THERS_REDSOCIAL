@@ -32,7 +32,7 @@ describe('límites', () => {
     assert.equal(MAX_IMAGE_BYTES, 5 * 1024 * 1024);
     assert.equal(MAX_VIDEO_BYTES, 25 * 1024 * 1024);
     assert.equal(MAX_VIDEO_SECONDS, 60);
-    assert.equal(MAX_POST_IMAGES, 4);
+    assert.equal(MAX_POST_IMAGES, 10);
     assert.equal(MAX_MESSAGE_IMAGES, 1);
   });
 });
