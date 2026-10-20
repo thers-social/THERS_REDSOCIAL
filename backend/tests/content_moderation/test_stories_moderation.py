@@ -5,10 +5,15 @@ import io
 import os
 
 import pytest
+from flask import current_app
 from sqlalchemy import text
 
 from app.application.content_moderation.process_jobs import process_next
+from app.domain.content_moderation import jobs, subjects
 from app.extensions import db
+from app.infrastructure.persistence.repositories.content_moderation_repository import (
+    SQLAlchemyContentModerationRepository,
+)
 from app.infrastructure.content_moderation.fake_classifiers import FakeImageClassifier
 from tests.content_moderation.conftest import make_account, now, png
 from tests.test_messages import _auth_headers
@@ -28,13 +33,39 @@ def private_on(app):
     app.config["STORIES_PRIVATE_STORAGE"] = False
 
 
-def _publish(client, token, content="hola"):
+def _post_story(client, token, content="hola"):
     return client.post(
         "/api/stories",
         data={"image": (io.BytesIO(png()), "foto.png"), "content": content},
         content_type="multipart/form-data",
         headers=_auth_headers(token),
     )
+
+
+class _Held:
+    """La respuesta de publicar, tal como la veía la autora cuando la historia quedaba en revisión."""
+
+    def __init__(self, response):
+        self.status_code = response.status_code
+        story = response.get_json()["story"]
+        self._body = {"story": {**story, "image": {**story["image"], "url": None}, "moderation_status": "pending"}}
+
+    def get_json(self):
+        return self._body
+
+
+def _publish(client, token, content="hola"):
+    """Publica una historia. Hoy nacen `approved` (2026-10-20); con la moderación encendida este
+    ayudante la deja además en revisión, como estaban las historias anteriores a ese cambio, para
+    seguir probando la cola, el trabajador y las apelaciones, que siguen funcionando."""
+    response = _post_story(client, token, content)
+    if not current_app.config.get("MODERATION_ENABLED"):
+        return response
+    story_id = response.get_json()["story"]["id"]
+    db.session.execute(text("UPDATE stories SET moderation_status = 'pending' WHERE id = :i"), {"i": story_id})
+    SQLAlchemyContentModerationRepository().enqueue(jobs.KIND_IMAGE, subjects.STORY, story_id)
+    db.session.commit()
+    return _Held(response)
 
 
 def _follow(client, token, target_id):
@@ -78,6 +109,20 @@ class TestEverythingOffIsTheSameAsBefore:
             assert (row["moderation_status"], row["file_private"]) == ("approved", False)
             assert db.session.execute(text("SELECT count(*) FROM moderation_jobs")).scalar() == 0
             assert os.listdir(os.environ["UPLOAD_DIR"]) != []
+
+
+class TestPublishedWithoutReview:
+    def test_a_new_story_is_visible_at_once_even_with_moderation_on(self, app, client, moderation_on):
+        with app.app_context():
+            author, author_id, fan, _ = _people(client)
+
+            created = _post_story(client, author).get_json()["story"]
+
+            assert created["image"]["url"] and "moderation_status" not in created
+            assert _story_row()["moderation_status"] == "approved"
+            assert _their_stories(client, fan, author_id)[0]["image"]["url"]
+            assert len(_strip(client, fan)) == 1
+            assert db.session.execute(text("SELECT count(*) FROM moderation_jobs")).scalar() == 0
 
 
 class TestModeration:

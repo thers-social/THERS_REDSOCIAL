@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from app.application.media.attachments import discard_files
 from app.application.media.image_visibility import is_enabled as moderation_enabled
 from app.application.media.media_url import media_url
-from app.domain.content_moderation.status import APPROVED, initial_status
+from app.domain.content_moderation.status import APPROVED
 from app.domain.stories.rules import (
     AUDIENCE_CLOSE_FRIENDS,
     AUDIENCE_EVERYONE,
@@ -110,7 +110,10 @@ def create_story(author_id, content, prepared_image, story_repository, media_sto
     try:
         row = story_repository.create(
             author_id, text, key, width, height, now + STORY_TTL, audience=audience,
-            moderation_status=initial_status(moderation_enabled()), file_private=private_files,
+            # Decisión del propietario (2026-10-20): una historia se publica al instante, sin pasar
+            # por la cola de revisión aunque `MODERATION_ENABLED` esté encendido (ver API_CONTRACT §4.x).
+            # Puede reportarse (ADR-032). Las publicaciones y los reels no cambian.
+            moderation_status=APPROVED, file_private=private_files,
         )
     except Exception:
         discard_files([key], store)
