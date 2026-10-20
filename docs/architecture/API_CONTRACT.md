@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.78 (Propuesta) |
+| Versión | 0.79 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -70,6 +70,8 @@
 > **v0.60 — Tero, fase 7, automatizaciones con n8n (`ADR-041` §7, **ACEPTADO**):** `PATCH /api/users/me/privacy` acepta `weekly_summary_email` (booleano, apagado por defecto) y `GET` lo devuelve; dos rutas internas **firmadas con HMAC, no con JWT**, que solo usa n8n (§4.38); y el cierre de un reporte (`POST /api/moderation/reports/<id>/resolve`) ahora puede encargar un correo genérico a quien reportó (sin cambiar su respuesta). Variables nuevas, solo del servidor: `TERO_AUTOMATIONS_ENABLED`, `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, `N8N_TIMEOUT_SECONDS`, `N8N_MAX_RETRIES`. Una migración (`d7a3f1c8e254`: dos columnas en `users`).
 >
 > **v0.76 — interacciones de Reels (`ADR-055`, **PROPUESTO**, detrás de `VIDEOS_ENABLED`):** 7 rutas nuevas en §4.40 (`GET /api/videos/saved`, `POST`/`DELETE` de `like` y `save`, `GET`/`POST` de `comments` y `DELETE` de un comentario). Cada Reel añade `likes_count`, `comments_count`, `liked_by_me`, `saved_by_me` y `author.is_following`. Migración `d4f7b1c3e9a5`.
+>
+> **v0.79 — hasta 10 fotos por publicación (`ADR-039`, decisión del propietario, 2026-10-20):** `POST /api/posts` acepta hasta **10** archivos en el campo `images` (antes 4); con 11 o más responde `400 {"msg": "Puedes adjuntar como máximo 10 imágenes"}` y no guarda nada. El techo HTTP de esa petición multipart sube a 52 MiB (10 imágenes de 5 MiB más el sobrecoste del formato). Mensajes (1 imagen), historias y fotos de reseñas no cambian. Sin migración. Los clientes muestran varias fotos como carrusel.
 >
 > **v0.78 — los Reels se publican sin revisión y la subida es pública (decisión del propietario, 2026-10-20, ADR pendiente de redactar):** un Reel queda `approved` en cuanto Mux lo deja `ready` (`moderation_decided_by = 'auto'`) y ya no entra a la cola del panel; lo ven de inmediato quienes pueden verlo. `POST /api/videos/uploads` ya **no depende** de `MODERATION_ENABLED`, de `MODERATION_CLASSIFIER` ni de `VIDEO_UPLOAD_ALLOWLIST`: puede subir cualquier cuenta con sesión y perfil completo (el límite de 10 reservas al día se mantiene). **Esto retira la condición de seguridad infantil de `ADR-044` §3 para la subida pública de video; queda asumido por el propietario y sin ratificar por el equipo.** Siguen vigentes los reportes (`ADR-032`/`ADR-038`), la retención desde el panel y las apelaciones. Sin endpoints nuevos ni migración. Los Reels que ya estaban retenidos siguen su curso.
 >
