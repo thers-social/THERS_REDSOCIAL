@@ -192,7 +192,7 @@ def _clean_tables(app):
                 "account_deletion_codes, "
                 "user_identities, notifications, messages, mentions, muted_keywords, "
                 "sessions, two_factor_recovery_codes, rate_limit_buckets, data_exports, user_restrictions, muted_topics, "
-                "media_attachments, audio_attachments, video_attachments, comments, likes, follows, saved_posts, group_members, group_chats, posts, reports, saved_places, place_reviews, place_reports, place_plan_members, place_plans, place_managers, place_claims, place_review_replies, place_reservations, place_reservation_settings, place_opening_hours, place_closures, place_quote_lines, place_quotes, place_quote_items, place_visit_counts, tero_usage, tero_pending_actions, story_views, stories, ai_usage, domain_events, mux_webhook_events, pending_external_deletions, videos, moderation_appeals, moderation_results, moderation_jobs, admin_audit_log, places, users"
+                "media_attachments, audio_attachments, video_attachments, comments, likes, follows, saved_posts, group_members, group_chats, posts, reports, saved_places, place_reviews, place_reports, place_plan_members, place_plans, place_managers, place_claims, place_review_replies, place_reservations, place_reservation_settings, place_opening_hours, place_closures, place_quote_lines, place_quotes, place_quote_items, place_visit_counts, tero_usage, tero_pending_actions, story_views, stories, ai_usage, domain_events, mux_webhook_events, pending_external_deletions, video_comments, video_likes, video_saves, videos, moderation_appeals, moderation_results, moderation_jobs, admin_audit_log, places, users"
             )
         )
         db.session.commit()

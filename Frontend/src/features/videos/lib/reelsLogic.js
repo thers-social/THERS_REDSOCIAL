@@ -97,3 +97,72 @@ export function mergeVideos(current, incoming) {
   const seen = new Set(current.map((v) => v.id));
   return [...current, ...incoming.filter((v) => !seen.has(v.id))];
 }
+
+// --- Interfaz de pantalla completa (ADR-055) ------------------------------------------------------
+
+/** 1.2K, 3.4M… para los contadores del carril de acciones. */
+export function formatCount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n < 1000) return String(Math.floor(n));
+  const compact = (divisor, suffix) => {
+    const scaled = Math.floor((n / divisor) * 10) / 10;
+    return `${Number.isInteger(scaled) ? scaled : scaled.toFixed(1)}${suffix}`;
+  };
+  return n < 1_000_000 ? compact(1000, "K") : compact(1_000_000, "M");
+}
+
+/** 0:07, 1:05 — tiempo de la barra de progreso. */
+export function formatClock(seconds) {
+  const total = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** Fracción 0–1 reproducida; 0 si aún no se conoce la duración. */
+export function progressFraction(currentTime, duration) {
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  return Math.min(1, Math.max(0, currentTime / duration));
+}
+
+/** Tiempo al que salta un desplazamiento (flechas del teclado), dentro de [0, duración]. */
+export function seekTarget(currentTime, delta, duration) {
+  const upper = Number.isFinite(duration) && duration > 0 ? duration : Infinity;
+  return Math.min(upper, Math.max(0, currentTime + delta));
+}
+
+/** Resultado optimista de dar o quitar «me gusta»: cambia el estado y el contador una vez. */
+export function withLike(video, liked) {
+  if (!!video.liked_by_me === liked) return video;
+  return { ...video, liked_by_me: liked, likes_count: Math.max(0, (video.likes_count || 0) + (liked ? 1 : -1)) };
+}
+
+export function withSaved(video, saved) {
+  return { ...video, saved_by_me: saved };
+}
+
+/** Índice del Reel que ocupa la pantalla: el más visible, y solo si pasa del umbral. */
+export function mostVisibleIndex(entries, threshold = 0.6) {
+  let best = -1;
+  let bestRatio = 0;
+  for (const { index, ratio } of entries) {
+    if (ratio >= threshold && ratio > bestRatio) {
+      best = index;
+      bestRatio = ratio;
+    }
+  }
+  return best;
+}
+
+/** Enlace para compartir un Reel. */
+export function reelUrl(origin, id) {
+  return `${origin}/videos?v=${encodeURIComponent(id)}`;
+}
+
+/** Mensaje de error al comentar. */
+export function commentErrorMessage(error) {
+  const status = error?.response?.status;
+  if (status === 429) return "Estás comentando muy rápido. Espera un momento.";
+  if (status === 404) return "Este Reel ya no está disponible.";
+  if (status === 400 && error?.response?.data?.msg) return error.response.data.msg;
+  return "No se pudo publicar el comentario.";
+}

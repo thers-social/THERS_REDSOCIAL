@@ -12,8 +12,10 @@ function isAppleWebKit() {
   return /iP(hone|ad|od)/.test(ua) || (/Safari/.test(ua) && !/Chrome|Chromium|Edg|Android/.test(ua));
 }
 
-export default function ReelPlayer({ hlsUrl, caption, width, height, onExpired }) {
-  const videoRef = useRef(null);
+export default function ReelPlayer({ hlsUrl, caption, width, height, onExpired, videoRef: externalRef, muted = true, className = "" }) {
+  const ownRef = useRef(null);
+  // La pantalla de Reels maneja el <video> desde fuera (pausa, barra de progreso); sin ella, uno propio.
+  const videoRef = externalRef || ownRef;
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -61,26 +63,28 @@ export default function ReelPlayer({ hlsUrl, caption, width, height, onExpired }
     };
     // `onExpired` cambia de identidad entre renders y no debe reiniciar la reproducción.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hlsUrl]);
+  }, [hlsUrl, videoRef]);
 
   if (failed) {
     return (
-      <p className="rounded-th-card border border-th-border px-4 py-6 text-center text-body-md text-th-fg-muted">
+      <p className="flex h-full w-full items-center justify-center px-4 py-6 text-center text-body-md text-white/80">
         No se pudo reproducir este Reel.
       </p>
     );
   }
 
+  // Sin `controls`: la barra, la pausa y el sonido son de la pantalla de Reels (ReelSlide).
   return (
     <video
       ref={videoRef}
-      controls
       playsInline
+      loop
+      muted={muted}
       preload="metadata"
       aria-label={caption || "Reel"}
       width={width || undefined}
       height={height || undefined}
-      className="w-full max-h-[70vh] rounded-th-card bg-black object-contain"
+      className={`h-full w-full bg-black object-contain ${className}`}
     />
   );
 }

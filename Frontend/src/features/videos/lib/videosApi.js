@@ -56,3 +56,48 @@ export function uploadToMux(uploadUrl, file, onProgress) {
 export async function deleteVideo(id) {
   await api.delete(`/videos/${id}`, authConfig());
 }
+
+// --- Interacciones (ADR-055) ---------------------------------------------------------------------
+
+/** Un Reel (con su token de reproducción nuevo). Sirve para abrir un enlace compartido. */
+export async function fetchVideo(id, signal) {
+  const { data } = await api.get(`/videos/${id}`, authConfig({ signal }));
+  return data.video;
+}
+
+/** Los Reels que guardaste. `{videos, has_more}`. */
+export async function fetchSaved({ limit = 10, offset = 0 } = {}, signal) {
+  const { data } = await api.get("/videos/saved", authConfig({ params: { limit, offset }, signal }));
+  return data;
+}
+
+/** Da o quita «me gusta». Devuelve `{liked, likes_count}`. */
+export async function setLike(id, liked) {
+  const { data } = liked
+    ? await api.post(`/videos/${id}/like`, null, authConfig())
+    : await api.delete(`/videos/${id}/like`, authConfig());
+  return data;
+}
+
+/** Guarda o quita de guardados. Devuelve `{saved}`. */
+export async function setSave(id, saved) {
+  const { data } = saved
+    ? await api.post(`/videos/${id}/save`, null, authConfig())
+    : await api.delete(`/videos/${id}/save`, authConfig());
+  return data;
+}
+
+/** Comentarios del Reel, del más antiguo al más reciente. `{comments, has_more}`. */
+export async function fetchComments(id, { limit = 20, offset = 0 } = {}, signal) {
+  const { data } = await api.get(`/videos/${id}/comments`, authConfig({ params: { limit, offset }, signal }));
+  return data;
+}
+
+export async function postComment(id, content) {
+  const { data } = await api.post(`/videos/${id}/comments`, { content }, authConfig());
+  return data.comment;
+}
+
+export async function deleteComment(videoId, commentId) {
+  await api.delete(`/videos/${videoId}/comments/${commentId}`, authConfig());
+}
