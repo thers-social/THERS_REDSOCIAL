@@ -87,10 +87,10 @@ def present_video(row, viewer_id, signer=None, engagement=None):
 
 
 def create_upload(
-    owner_id, caption, idempotency_key, repository, mux, allowlist, cors_origin, human_review_only=False
+    owner_id, caption, idempotency_key, repository, mux, allowlist, cors_origin
 ):
     username = repository.get_owner_username(owner_id)
-    if not rules.may_upload(username, allowlist, human_review_only):
+    if not rules.may_upload(username, allowlist):
         raise rules.VideoUploadNotAllowedError()
     caption = rules.normalize_caption(caption)
     key = rules.normalize_idempotency_key(idempotency_key)

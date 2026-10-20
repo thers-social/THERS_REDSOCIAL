@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.77 (Propuesta) |
+| Versión | 0.78 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -70,6 +70,8 @@
 > **v0.60 — Tero, fase 7, automatizaciones con n8n (`ADR-041` §7, **ACEPTADO**):** `PATCH /api/users/me/privacy` acepta `weekly_summary_email` (booleano, apagado por defecto) y `GET` lo devuelve; dos rutas internas **firmadas con HMAC, no con JWT**, que solo usa n8n (§4.38); y el cierre de un reporte (`POST /api/moderation/reports/<id>/resolve`) ahora puede encargar un correo genérico a quien reportó (sin cambiar su respuesta). Variables nuevas, solo del servidor: `TERO_AUTOMATIONS_ENABLED`, `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, `N8N_TIMEOUT_SECONDS`, `N8N_MAX_RETRIES`. Una migración (`d7a3f1c8e254`: dos columnas en `users`).
 >
 > **v0.76 — interacciones de Reels (`ADR-055`, **PROPUESTO**, detrás de `VIDEOS_ENABLED`):** 7 rutas nuevas en §4.40 (`GET /api/videos/saved`, `POST`/`DELETE` de `like` y `save`, `GET`/`POST` de `comments` y `DELETE` de un comentario). Cada Reel añade `likes_count`, `comments_count`, `liked_by_me`, `saved_by_me` y `author.is_following`. Migración `d4f7b1c3e9a5`.
+>
+> **v0.78 — los Reels se publican sin revisión y la subida es pública (decisión del propietario, 2026-10-20, ADR pendiente de redactar):** un Reel queda `approved` en cuanto Mux lo deja `ready` (`moderation_decided_by = 'auto'`) y ya no entra a la cola del panel; lo ven de inmediato quienes pueden verlo. `POST /api/videos/uploads` ya **no depende** de `MODERATION_ENABLED`, de `MODERATION_CLASSIFIER` ni de `VIDEO_UPLOAD_ALLOWLIST`: puede subir cualquier cuenta con sesión y perfil completo (el límite de 10 reservas al día se mantiene). **Esto retira la condición de seguridad infantil de `ADR-044` §3 para la subida pública de video; queda asumido por el propietario y sin ratificar por el equipo.** Siguen vigentes los reportes (`ADR-032`/`ADR-038`), la retención desde el panel y las apelaciones. Sin endpoints nuevos ni migración. Los Reels que ya estaban retenidos siguen su curso.
 >
 > **v0.77 — las historias se publican sin revisión (decisión del propietario, 2026-10-20, ADR pendiente de redactar):** `POST /api/stories` crea la historia `approved` aunque `MODERATION_ENABLED` esté encendido y no la manda a la cola del panel (`ADR-044`): las seguidoras y seguidores la ven de inmediato y puede seguir reportándose (`ADR-032`). Sin endpoints nuevos ni migración. Las historias que ya estaban `pending` siguen su curso (expiran a las 24 h). Las publicaciones y los reels no cambian.
 >
@@ -2752,7 +2754,7 @@ Todas exigen `Authorization: Bearer <token>`. Una historia dura **24 horas** (`e
 
 ## 4.40 Reels con Mux (`ADR-043`, `ADR-043-A`) — v0.65
 
-**PROPUESTO, sin ratificar.** Todas las rutas responden `404 {"msg": "Recurso no encontrado"}` con `VIDEOS_ENABLED` apagado, antes de autenticar. **Cambio 2026-10-18 (D3, decisión del propietario, ADR pendiente de redactar):** `POST /api/videos/uploads` deja de limitarse a `VIDEO_UPLOAD_ALLOWLIST` cuando `MODERATION_ENABLED` está encendido y `MODERATION_CLASSIFIER` no es `fake` (todo queda retenido hasta que una persona lo aprueba). Con la moderación apagada o con el clasificador simulado, sigue valiendo solo la lista; el resto recibe `404`.
+**PROPUESTO, sin ratificar.** Todas las rutas responden `404 {"msg": "Recurso no encontrado"}` con `VIDEOS_ENABLED` apagado, antes de autenticar. **Cambio 2026-10-20 (D3, decisión del propietario, ADR pendiente de redactar; sustituye al del 2026-10-18):** `POST /api/videos/uploads` está abierto a toda cuenta con sesión y perfil completo, sin depender de `MODERATION_ENABLED`, `MODERATION_CLASSIFIER` ni `VIDEO_UPLOAD_ALLOWLIST`; y un Reel se publica (`approved`) en cuanto Mux lo deja `ready`, sin revisión humana. Hasta el 2026-10-19 la apertura exigía que todo quedara retenido hasta que una persona lo aprobara (`ADR-044` §3, seguridad infantil).
 
 | Método y ruta | Auth | Qué hace |
 |---|---|---|
