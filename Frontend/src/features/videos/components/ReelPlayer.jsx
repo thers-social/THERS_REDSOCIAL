@@ -7,6 +7,11 @@ import { useEffect, useRef, useState } from "react";
  * (no entra en el paquete principal). El token de la URL caduca: si la reproducción falla, se avisa a
  * quien lo usa con `onExpired` para pedir una URL nueva en vez de reintentar con la caducada.
  */
+function isAppleWebKit() {
+  const ua = navigator.userAgent;
+  return /iP(hone|ad|od)/.test(ua) || (/Safari/.test(ua) && !/Chrome|Chromium|Edg|Android/.test(ua));
+}
+
 export default function ReelPlayer({ hlsUrl, caption, width, height, onExpired }) {
   const videoRef = useRef(null);
   const [failed, setFailed] = useState(false);
@@ -19,13 +24,20 @@ export default function ReelPlayer({ hlsUrl, caption, width, height, onExpired }
     let cancelled = false;
 
     async function attach() {
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Solo Safari/iOS: Chrome y Edge recientes también dicen poder reproducir HLS nativo, pero ahí
+      // falla en silencio (video negro, sin evento de error útil). Con hls.js hay errores controlables.
+      if (isAppleWebKit() && video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = hlsUrl;
         return;
       }
       const { default: Hls } = await import("hls.js");
       if (cancelled) return;
       if (!Hls.isSupported()) {
+        // Sin MSE (navegador antiguo): último recurso, el reproductor nativo si lo hubiera.
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = hlsUrl;
+          return;
+        }
         setFailed(true);
         return;
       }
