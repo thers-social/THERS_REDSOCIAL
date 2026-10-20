@@ -120,6 +120,8 @@ export const en: Record<MessageKey, string> = {
   'post.like': 'Like',
   'post.unlike': 'Remove like',
   'post.comments': 'Comments: {count}',
+  'post.likesCount': '{count} likes',
+  'post.viewComments': 'View all {count} comments',
   'post.share': 'Share post',
   'post.save': 'Save post',
   'post.error.save': "Couldn't save",

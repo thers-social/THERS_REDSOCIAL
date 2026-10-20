@@ -8,22 +8,22 @@ import { Avatar } from './Avatar';
 
 type Props = { name: string; uri?: string | null; size?: number };
 
+const hasPhoto = (uri: string | null | undefined): uri is string => !!uri;
+
 /**
  * Foto de perfil que se agranda al tocarla, como en Instagram: círculo grande sobre un fondo oscuro.
- * Se cierra tocando en cualquier parte o con «Atrás». Sin foto (solo la inicial) no hay nada que
- * agrandar, así que se dibuja un avatar normal y no un botón que no hace nada.
+ * Se cierra tocando en cualquier parte o con «Atrás». Sin foto también se agranda: se muestra la
+ * inicial sobre el color de la marca, igual que en el avatar pequeño (2026-10-20).
  */
 export function ZoomableAvatar({ name, uri, size = 88 }: Props) {
   const [open, setOpen] = useState(false);
-
-  if (!uri) return <Avatar name={name} uri={uri} size={size} />;
 
   return (
     <>
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityRole="imagebutton"
-        accessibilityLabel={`Ver la foto de ${name} en grande`}
+        accessibilityLabel={hasPhoto(uri) ? `Ver la foto de ${name} en grande` : `Ver el avatar de ${name} en grande`}
       >
         <Avatar name={name} uri={uri} size={size} />
       </Pressable>
@@ -40,7 +40,7 @@ function AvatarViewer({
 }: {
   visible: boolean;
   name: string;
-  uri: string;
+  uri: string | null | undefined;
   onClose: () => void;
 }) {
   const { width } = useWindowDimensions();
@@ -69,13 +69,17 @@ function AvatarViewer({
         accessibilityLabel="Cerrar la foto"
       >
         <Animated.View style={{ transform: [{ scale }] }}>
-          <Image
-            source={{ uri }}
-            style={[styles.photo, { width: diameter, height: diameter, borderRadius: diameter / 2 }]}
-            resizeMode="cover"
-            accessibilityIgnoresInvertColors
-            accessibilityLabel={`Foto de ${name}`}
-          />
+          {hasPhoto(uri) ? (
+            <Image
+              source={{ uri }}
+              style={[styles.photo, { width: diameter, height: diameter, borderRadius: diameter / 2 }]}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+              accessibilityLabel={`Foto de ${name}`}
+            />
+          ) : (
+            <Avatar name={name} size={diameter} />
+          )}
         </Animated.View>
       </Pressable>
     </Modal>

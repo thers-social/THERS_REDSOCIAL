@@ -8,6 +8,7 @@ import { themedStyles } from '@shared/design/theme';
 import { Icon } from '@shared/ui/Icon';
 
 import { frameAspect, pageIndex } from './carousel';
+import { CHAT_MEDIA_SIZE } from './chatMediaSize';
 
 export type PublicImage = { url: string; width: number; height: number };
 
@@ -17,6 +18,8 @@ type Props = {
   label?: string;
   /** Más pequeñas, para dentro de una burbuja de chat. */
   compact?: boolean;
+  /** Estilo Instagram: de borde a borde, sin esquinas redondeadas ni margen, en un marco de 4:5 a 1.91:1. */
+  bleed?: boolean;
 };
 
 /**
@@ -25,7 +28,7 @@ type Props = {
  * lista no salte. Una sola foto conserva su proporción; varias (hasta 10) van en un carrusel que se
  * desliza con el dedo, como en Instagram, con un contador y unos puntos.
  */
-export function ImageGridView({ images, label = 'Imagen', compact = false }: Props) {
+export function ImageGridView({ images, label = 'Imagen', compact = false, bleed = false }: Props) {
   const [open, setOpen] = useState<number | null>(null);
   const [page, setPage] = useState(0);
   const [frameWidth, setFrameWidth] = useState(0);
@@ -41,13 +44,17 @@ export function ImageGridView({ images, label = 'Imagen', compact = false }: Pro
   return (
     <>
       {count === 1 ? (
-        <View style={[styles.grid, compact && styles.compact]}>
+        <View style={[styles.grid, compact && styles.compact, bleed && styles.bleed]}>
           <Pressable
             onPress={() => setOpen(0)}
             style={[
               styles.cell,
               // Sin `width` la celda mide 0: la foto sola ocupa todo el ancho.
-              { width: '100%', aspectRatio: images[0].width / Math.max(1, images[0].height), maxHeight: compact ? 280 : 420 },
+              compact
+                ? { width: '100%', aspectRatio: 1 }
+                : bleed
+                  ? { width: '100%', aspectRatio: frameAspect(images[0]) }
+                  : { width: '100%', aspectRatio: images[0].width / Math.max(1, images[0].height), maxHeight: compact ? 280 : 420 },
             ]}
             accessibilityRole="imagebutton"
             accessibilityLabel={`${label} 1 de 1. Tocar para verla en grande`}
@@ -57,7 +64,7 @@ export function ImageGridView({ images, label = 'Imagen', compact = false }: Pro
         </View>
       ) : (
         <View
-          style={[styles.grid, compact && styles.compact]}
+          style={[styles.grid, compact && styles.compact, bleed && styles.bleed]}
           onLayout={(event) => setFrameWidth(event.nativeEvent.layout.width)}
         >
           <ScrollView
@@ -66,7 +73,7 @@ export function ImageGridView({ images, label = 'Imagen', compact = false }: Pro
             showsHorizontalScrollIndicator={false}
             onScroll={onCarouselScroll}
             scrollEventThrottle={16}
-            style={{ aspectRatio: frameAspect(images[0]), width: '100%' }}
+            style={{ aspectRatio: compact ? 1 : frameAspect(images[0]), width: '100%' }}
             accessibilityLabel={`${label}: ${count} fotos`}
           >
             {images.map((image, index) => (
@@ -132,7 +139,9 @@ export function ImageGridView({ images, label = 'Imagen', compact = false }: Pro
 
 const styles = themedStyles(() => ({
   grid: { marginTop: space[2], borderRadius: radius.card, overflow: 'hidden' },
-  compact: { maxWidth: 240, marginTop: 0, borderRadius: radius.input - 2 },
+  // Adjunto de un chat: siempre el mismo cuadrado de 260 px, sea cual sea la foto.
+  compact: { width: CHAT_MEDIA_SIZE, height: CHAT_MEDIA_SIZE, marginTop: 0, borderRadius: radius.card },
+  bleed: { marginTop: 0, borderRadius: 0 },
   cell: { overflow: 'hidden', backgroundColor: colors.bgSubtle },
   image: { width: '100%', height: '100%' },
   counter: {
