@@ -4,6 +4,10 @@
 #   GET    /api/videos/mine        los tuyos, con su estado
 #   GET    /api/videos/<id>        uno (con token de reproducción firmado, por espectador)
 #   DELETE /api/videos/<id>        borrar uno tuyo (el asset de Mux se borra por cola, con reintentos)
+#   GET    /api/videos/saved                       tus Reels guardados (ADR-055)
+#   POST/DELETE /api/videos/<id>/like|save         me gusta / guardar, idempotentes (ADR-055)
+#   GET/POST /api/videos/<id>/comments             comentarios (ADR-055)
+#   DELETE /api/videos/<id>/comments/<comment_id>  borrar uno (su autor o la persona dueña del Reel)
 #   POST   /api/webhooks/mux       eventos de Mux (firma HMAC; sin JWT)
 #
 # Todo responde 404 mientras `VIDEOS_ENABLED` esté apagado (por defecto), también el webhook.
@@ -121,6 +125,85 @@ def delete_one(video_id):
         return jsonify(uc.delete_video(video_id, get_jwt_identity(), _repository)), 200
     except rules.VideoNotFoundError:
         return _not_found()
+
+
+# --- Interacciones (ADR-055) -------------------------------------------------------------------------
+
+
+@videos_bp.route("/videos/saved", methods=["GET"])
+@jwt_required()
+def saved():
+    try:
+        return jsonify(uc.list_saved(
+            get_jwt_identity(), request.args.get("limit"), request.args.get("offset"),
+            _repository, _signer(),
+        )), 200
+    except rules.VideoInvalidError as error:
+        return jsonify({"msg": error.message}), 400
+
+
+@videos_bp.route("/videos/<uuid:video_id>/like", methods=["POST", "DELETE"])
+@jwt_required()
+@profile_completed_required
+def like(video_id):
+    try:
+        return jsonify(uc.set_like(video_id, get_jwt_identity(), request.method == "POST", _repository)), 200
+    except rules.VideoNotFoundError:
+        return _not_found()
+
+
+@videos_bp.route("/videos/<uuid:video_id>/save", methods=["POST", "DELETE"])
+@jwt_required()
+@profile_completed_required
+def save(video_id):
+    try:
+        return jsonify(uc.set_save(video_id, get_jwt_identity(), request.method == "POST", _repository)), 200
+    except rules.VideoNotFoundError:
+        return _not_found()
+
+
+@videos_bp.route("/videos/<uuid:video_id>/comments", methods=["GET"])
+@jwt_required()
+def list_comments(video_id):
+    try:
+        return jsonify(uc.list_comments(
+            video_id, get_jwt_identity(), request.args.get("limit"), request.args.get("offset"),
+            _repository,
+        )), 200
+    except rules.VideoNotFoundError:
+        return _not_found()
+    except rules.VideoInvalidError as error:
+        return jsonify({"msg": error.message}), 400
+
+
+@videos_bp.route("/videos/<uuid:video_id>/comments", methods=["POST"])
+@jwt_required()
+@profile_completed_required
+def create_comment(video_id):
+    author_id = get_jwt_identity()
+    data = request.get_json(silent=True) or {}
+    try:
+        rate_limit_guard.enforce(policy.VIDEO_COMMENT, f"user:{author_id}", _rate_limit_repository)
+    except RateLimitExceededError as error:
+        return rate_limited_response(error)
+    try:
+        comment = uc.create_comment(video_id, author_id, data.get("content"), _repository)
+    except rules.VideoNotFoundError:
+        return _not_found()
+    except rules.VideoInvalidError as error:
+        return jsonify({"msg": error.message}), 400
+    return jsonify({"comment": comment}), 201
+
+
+@videos_bp.route("/videos/<uuid:video_id>/comments/<uuid:comment_id>", methods=["DELETE"])
+@jwt_required()
+def delete_comment(video_id, comment_id):
+    try:
+        return jsonify(uc.delete_comment(video_id, comment_id, get_jwt_identity(), _repository)), 200
+    except rules.VideoNotFoundError:
+        return _not_found()
+    except rules.VideoCommentNotFoundError:
+        return jsonify({"msg": "Comentario no encontrado"}), 404
 
 
 @videos_bp.route("/webhooks/mux", methods=["POST"])

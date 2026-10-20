@@ -201,6 +201,10 @@ MODERATION_APPEAL = RateLimitRule("moderation_appeal", 10, _HOUR, clear_on_succe
 # persona. Un secreto filtrado no puede convertirse en una avalancha de correos.
 INTERNAL_NOTICE = RateLimitRule("internal_notice", 20, _HOUR, clear_on_success=False)
 
+# Comentar en Reels (ADR-055): por cuenta. Cada comentario es una fila nueva, así que se cuenta cada
+# intento; 20 por minuto deja conversar y frena el relleno automático.
+VIDEO_COMMENT = RateLimitRule("video_comment", 20, _MINUTE, clear_on_success=False)
+
 # Reservar una subida de video (ADR-043-A): 10 por día y cuenta. Cuenta cada intento, también los que
 # fallan en Mux (cada reserva puede crear una subida que cuesta).
 VIDEO_UPLOAD = RateLimitRule("video_upload", 10, 24 * _HOUR, clear_on_success=False)

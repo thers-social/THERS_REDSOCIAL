@@ -2669,6 +2669,65 @@ class Video(db.Model):
     ready_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
 
+class VideoLike(db.Model):
+    __tablename__ = "video_likes"
+
+    # Me gusta de un Reel (ADR-055). Una fila por (video, persona): la clave primaria hace idempotente
+    # el «me gusta» repetido.
+    video_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("videos.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (db.Index("ix_video_likes_user_id", "user_id"),)
+
+
+class VideoSave(db.Model):
+    __tablename__ = "video_saves"
+
+    # Reels guardados (ADR-055). Privado: solo lo ve quien guardó.
+    video_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("videos.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (db.Index("ix_video_saves_user_id_created_at", "user_id", "created_at"),)
+
+
+class VideoComment(db.Model):
+    __tablename__ = "video_comments"
+
+    # Comentario de un Reel (ADR-055). Sin edición ni respuestas anidadas en esta primera versión.
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    video_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("videos.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    content = db.Column(db.String(1000), nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        db.CheckConstraint("length(btrim(content)) > 0", name="ck_video_comments_content_not_blank"),
+        db.Index("ix_video_comments_video_id_created_at", "video_id", "created_at"),
+    )
+
+
 class MuxWebhookEvent(db.Model):
     __tablename__ = "mux_webhook_events"
 

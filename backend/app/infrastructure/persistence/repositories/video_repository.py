@@ -169,6 +169,119 @@ class SQLAlchemyVideoRepository:
         ).mappings().all()
         return [dict(r) for r in rows]
 
+    def list_saved(self, viewer_id, limit, offset):
+        """Reels que `viewer_id` guardó y todavía puede ver, del más recién guardado al más antiguo."""
+        rows = db.session.execute(
+            text(
+                f"SELECT {_COLUMNS} FROM video_saves s JOIN videos v ON v.id = s.video_id "
+                "JOIN users u ON u.id = v.owner_id "
+                "WHERE s.user_id = CAST(:viewer AS uuid) AND (" + _VISIBLE_TO_VIEWER + ") "
+                "ORDER BY s.created_at DESC, v.id LIMIT :limit OFFSET :offset"
+            ),
+            {"viewer": str(viewer_id), "block": BLOCK, "limit": limit + 1, "offset": offset},
+        ).mappings().all()
+        return [dict(r) for r in rows[:limit]], len(rows) > limit
+
+    # --- Interacciones (ADR-055) --------------------------------------------------------------
+
+    def engagement(self, video_ids, viewer_id):
+        """Contadores y estado del espectador de varios videos a la vez (sin N+1)."""
+        ids = [str(i) for i in video_ids]
+        if not ids:
+            return {}
+        rows = db.session.execute(
+            text(
+                "SELECT v.id, "
+                "(SELECT count(*) FROM video_likes l WHERE l.video_id = v.id) AS likes_count, "
+                "(SELECT count(*) FROM video_comments c WHERE c.video_id = v.id) AS comments_count, "
+                "EXISTS (SELECT 1 FROM video_likes l WHERE l.video_id = v.id "
+                "        AND l.user_id = CAST(:viewer AS uuid)) AS liked_by_me, "
+                "EXISTS (SELECT 1 FROM video_saves s WHERE s.video_id = v.id "
+                "        AND s.user_id = CAST(:viewer AS uuid)) AS saved_by_me, "
+                "EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = CAST(:viewer AS uuid) "
+                "        AND f.followed_id = v.owner_id AND f.status = 'accepted') AS following_author "
+                "FROM videos v WHERE v.id = ANY(CAST(:ids AS uuid[]))"
+            ),
+            {"viewer": str(viewer_id), "ids": ids},
+        ).mappings().all()
+        return {str(r["id"]): dict(r) for r in rows}
+
+    def add_like(self, video_id, user_id):
+        db.session.execute(
+            text("INSERT INTO video_likes (video_id, user_id) VALUES (:v, :u) ON CONFLICT DO NOTHING"),
+            {"v": str(video_id), "u": str(user_id)},
+        )
+
+    def remove_like(self, video_id, user_id):
+        db.session.execute(
+            text("DELETE FROM video_likes WHERE video_id = :v AND user_id = :u"),
+            {"v": str(video_id), "u": str(user_id)},
+        )
+
+    def add_save(self, video_id, user_id):
+        db.session.execute(
+            text("INSERT INTO video_saves (video_id, user_id) VALUES (:v, :u) ON CONFLICT DO NOTHING"),
+            {"v": str(video_id), "u": str(user_id)},
+        )
+
+    def remove_save(self, video_id, user_id):
+        db.session.execute(
+            text("DELETE FROM video_saves WHERE video_id = :v AND user_id = :u"),
+            {"v": str(video_id), "u": str(user_id)},
+        )
+
+    def add_comment(self, video_id, author_id, content):
+        return dict(db.session.execute(
+            text(
+                "INSERT INTO video_comments (video_id, author_id, content) VALUES (:v, :a, :c) "
+                "RETURNING id, video_id, author_id, content, created_at"
+            ),
+            {"v": str(video_id), "a": str(author_id), "c": content},
+        ).mappings().one())
+
+    def list_comments(self, video_id, viewer_id, limit, offset):
+        """Del más antiguo al más reciente. No muestra comentarios de personas con bloqueo en ningún
+        sentido con quien mira."""
+        rows = db.session.execute(
+            text(
+                "SELECT c.id, c.video_id, c.author_id, c.content, c.created_at, "
+                "u.username AS author_username, u.name AS author_name, "
+                "u.avatar_path AS author_avatar_path "
+                "FROM video_comments c JOIN users u ON u.id = c.author_id "
+                "WHERE c.video_id = :v AND u.suspended_at IS NULL AND NOT EXISTS ("
+                "  SELECT 1 FROM user_restrictions r WHERE r.kind = :block AND ("
+                "    (r.owner_id = CAST(:viewer AS uuid) AND r.target_id = c.author_id) "
+                "    OR (r.owner_id = c.author_id AND r.target_id = CAST(:viewer AS uuid)))) "
+                "ORDER BY c.created_at, c.id LIMIT :limit OFFSET :offset"
+            ),
+            {"v": str(video_id), "viewer": str(viewer_id), "block": BLOCK,
+             "limit": limit + 1, "offset": offset},
+        ).mappings().all()
+        return [dict(r) for r in rows[:limit]], len(rows) > limit
+
+    def get_comment_with_author(self, comment_id):
+        return _row(db.session.execute(
+            text(
+                "SELECT c.id, c.video_id, c.author_id, c.content, c.created_at, "
+                "u.username AS author_username, u.name AS author_name, "
+                "u.avatar_path AS author_avatar_path "
+                "FROM video_comments c JOIN users u ON u.id = c.author_id WHERE c.id = :id"
+            ),
+            {"id": str(comment_id)},
+        ).mappings().first())
+
+    def delete_comment(self, comment_id, video_id, actor_id, video_owner_id):
+        """Lo borra quien lo escribió o la persona dueña del Reel. `True` si borró una fila."""
+        result = db.session.execute(
+            text(
+                "DELETE FROM video_comments WHERE id = :id AND video_id = :v "
+                "AND (author_id = CAST(:actor AS uuid) OR CAST(:actor AS uuid) = CAST(:owner AS uuid))"
+            ),
+            {"id": str(comment_id), "v": str(video_id), "actor": str(actor_id),
+             "owner": str(video_owner_id)},
+        )
+        return result.rowcount == 1
+
     # --- Borrado ------------------------------------------------------------------------------
 
     def delete(self, video_id, owner_id):

@@ -45,8 +45,10 @@ def _iso(value):
 # --- Presentación ----------------------------------------------------------------------------------
 
 
-def present_video(row, viewer_id, signer=None):
-    """Forma pública. Nunca expone ids de Mux ni el estado interno a terceros."""
+def present_video(row, viewer_id, signer=None, engagement=None):
+    """Forma pública. Nunca expone ids de Mux ni el estado interno a terceros. `engagement` (ADR-055)
+    trae contadores y el estado del espectador; sin él, valen cero y `false`."""
+    engagement = engagement or {}
     is_owner = str(row["owner_id"]) == str(viewer_id)
     watchable = row["status"] == rules.READY and row["moderation_status"] == "approved"
     playback = None
@@ -59,7 +61,12 @@ def present_video(row, viewer_id, signer=None):
         "author": {
             "id": str(row["owner_id"]), "username": row["owner_username"],
             "name": row["owner_name"], "avatar_url": media_url(row["owner_avatar_path"]),
+            "is_following": bool(engagement.get("following_author", False)),
         },
+        "likes_count": int(engagement.get("likes_count", 0)),
+        "comments_count": int(engagement.get("comments_count", 0)),
+        "liked_by_me": bool(engagement.get("liked_by_me", False)),
+        "saved_by_me": bool(engagement.get("saved_by_me", False)),
         "caption": row["caption"],
         "duration_ms": row["duration_ms"],
         "width": row["width"],
@@ -115,7 +122,13 @@ def get_video(video_id, viewer_id, repository, signer):
     row = repository.get_visible(video_id, viewer_id)
     if row is None:
         raise rules.VideoNotFoundError()
-    return present_video(row, viewer_id, signer)
+    return _present_all([row], viewer_id, repository, signer)[0]
+
+
+def _present_all(rows, viewer_id, repository, signer):
+    """Presenta varios videos con una sola consulta de contadores."""
+    stats = repository.engagement([r["id"] for r in rows], viewer_id)
+    return [present_video(r, viewer_id, signer, stats.get(str(r["id"]))) for r in rows]
 
 
 def _page(limit_raw, offset_raw):
@@ -138,11 +151,89 @@ def list_videos(viewer_id, author_raw, limit_raw, offset_raw, repository, signer
             raise rules.VideoInvalidError("author debe ser un identificador válido")
     limit, offset = _page(limit_raw, offset_raw)
     rows, has_more = repository.list_visible(viewer_id, author, limit, offset)
-    return {"videos": [present_video(r, viewer_id, signer) for r in rows], "has_more": has_more}
+    return {"videos": _present_all(rows, viewer_id, repository, signer), "has_more": has_more}
+
+
+def list_saved(viewer_id, limit_raw, offset_raw, repository, signer):
+    limit, offset = _page(limit_raw, offset_raw)
+    rows, has_more = repository.list_saved(viewer_id, limit, offset)
+    return {"videos": _present_all(rows, viewer_id, repository, signer), "has_more": has_more}
 
 
 def list_mine(owner_id, repository, signer):
-    return {"videos": [present_video(r, owner_id, signer) for r in repository.list_mine(owner_id, 30)]}
+    return {"videos": _present_all(repository.list_mine(owner_id, 30), owner_id, repository, signer)}
+
+
+# --- Interacciones (ADR-055) ----------------------------------------------------------------------
+
+
+def _interactable(video_id, viewer_id, repository):
+    """El video si se puede ver Y está publicado (listo y aprobado). Si no, el mismo 404 de siempre:
+    no se da «me gusta», no se guarda ni se comenta lo que no se puede ver o aún no se publicó."""
+    row = repository.get_visible(video_id, viewer_id)
+    if row is None or row["status"] != rules.READY or row["moderation_status"] != "approved":
+        raise rules.VideoNotFoundError()
+    return row
+
+
+def _counts(video_id, viewer_id, repository):
+    return repository.engagement([video_id], viewer_id)[str(video_id)]
+
+
+def set_like(video_id, viewer_id, liked, repository):
+    _interactable(video_id, viewer_id, repository)
+    (repository.add_like if liked else repository.remove_like)(video_id, viewer_id)
+    repository.commit()
+    stats = _counts(video_id, viewer_id, repository)
+    return {"liked": stats["liked_by_me"], "likes_count": int(stats["likes_count"])}
+
+
+def set_save(video_id, viewer_id, saved, repository):
+    _interactable(video_id, viewer_id, repository)
+    (repository.add_save if saved else repository.remove_save)(video_id, viewer_id)
+    repository.commit()
+    return {"saved": _counts(video_id, viewer_id, repository)["saved_by_me"]}
+
+
+def present_comment(row, viewer_id, video_owner_id):
+    return {
+        "id": str(row["id"]),
+        "video_id": str(row["video_id"]),
+        "content": row["content"],
+        "created_at": _iso(row["created_at"]),
+        "author": {
+            "id": str(row["author_id"]), "username": row["author_username"],
+            "name": row["author_name"], "avatar_url": media_url(row["author_avatar_path"]),
+        },
+        # Quien lo escribió o la persona dueña del Reel pueden borrarlo.
+        "can_delete": str(viewer_id) in (str(row["author_id"]), str(video_owner_id)),
+    }
+
+
+def list_comments(video_id, viewer_id, limit_raw, offset_raw, repository):
+    video = _interactable(video_id, viewer_id, repository)
+    limit, offset = _page(limit_raw, offset_raw)
+    rows, has_more = repository.list_comments(video_id, viewer_id, limit, offset)
+    return {"comments": [present_comment(r, viewer_id, video["owner_id"]) for r in rows],
+            "has_more": has_more}
+
+
+def create_comment(video_id, viewer_id, content, repository):
+    video = _interactable(video_id, viewer_id, repository)
+    content = rules.normalize_comment(content)
+    created = repository.add_comment(video_id, viewer_id, content)
+    repository.commit()
+    row = repository.get_comment_with_author(created["id"])
+    return present_comment(row, viewer_id, video["owner_id"])
+
+
+def delete_comment(video_id, comment_id, viewer_id, repository):
+    video = _interactable(video_id, viewer_id, repository)
+    if not repository.delete_comment(comment_id, video_id, viewer_id, video["owner_id"]):
+        repository.rollback()
+        raise rules.VideoCommentNotFoundError()
+    repository.commit()
+    return {"deleted": True}
 
 
 def delete_video(video_id, owner_id, repository):

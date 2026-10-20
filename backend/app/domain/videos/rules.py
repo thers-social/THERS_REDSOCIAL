@@ -71,6 +71,25 @@ def normalize_caption(value):
     return text
 
 
+MAX_COMMENT = 1000
+
+
+class VideoCommentNotFoundError(Exception):
+    """El comentario no existe en ese video."""
+
+
+def normalize_comment(value):
+    """El texto de un comentario, recortado. No vacío y de hasta `MAX_COMMENT` caracteres."""
+    if not isinstance(value, str):
+        raise VideoInvalidError("El comentario debe ser texto")
+    text = value.strip()
+    if not text:
+        raise VideoInvalidError("El comentario no puede estar vacío")
+    if len(text) > MAX_COMMENT:
+        raise VideoInvalidError(f"El comentario puede tener como máximo {MAX_COMMENT} caracteres")
+    return text
+
+
 def normalize_idempotency_key(value):
     if value is None or value == "":
         return None

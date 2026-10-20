@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.75 (Propuesta) |
+| Versión | 0.76 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -68,6 +68,8 @@
 > **v0.61 — notas de voz en mensajes (`ADR-042`, **PROPUESTO**):** `POST /api/users/<id>/messages` acepta el campo multipart **`audio`** (un archivo; con audio el texto puede ir vacío); cada mensaje lleva `audio: {url, duration_ms}` (o `null`) y las conversaciones `last_message.has_audio` (§4.39). Interruptor del servidor `VOICE_MESSAGES_ENABLED` (apagado por defecto). Una migración (`a5c9e2f7b136`: tabla `audio_attachments`).
 >
 > **v0.60 — Tero, fase 7, automatizaciones con n8n (`ADR-041` §7, **ACEPTADO**):** `PATCH /api/users/me/privacy` acepta `weekly_summary_email` (booleano, apagado por defecto) y `GET` lo devuelve; dos rutas internas **firmadas con HMAC, no con JWT**, que solo usa n8n (§4.38); y el cierre de un reporte (`POST /api/moderation/reports/<id>/resolve`) ahora puede encargar un correo genérico a quien reportó (sin cambiar su respuesta). Variables nuevas, solo del servidor: `TERO_AUTOMATIONS_ENABLED`, `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, `N8N_TIMEOUT_SECONDS`, `N8N_MAX_RETRIES`. Una migración (`d7a3f1c8e254`: dos columnas en `users`).
+>
+> **v0.76 — interacciones de Reels (`ADR-055`, **PROPUESTO**, detrás de `VIDEOS_ENABLED`):** 7 rutas nuevas en §4.40 (`GET /api/videos/saved`, `POST`/`DELETE` de `like` y `save`, `GET`/`POST` de `comments` y `DELETE` de un comentario). Cada Reel añade `likes_count`, `comments_count`, `liked_by_me`, `saved_by_me` y `author.is_following`. Migración `d4f7b1c3e9a5`.
 >
 > **v0.65 — Reels con Mux (`ADR-043`, `ADR-043-A`, **PROPUESTO**, `VIDEOS_ENABLED` apagado por defecto):** 6 rutas nuevas (§4.40). Apagado, todas responden `404`, también el webhook. **La subida pública sigue bloqueada por D3**: solo suben las cuentas de `VIDEO_UPLOAD_ALLOWLIST` (la apertura al público exige cambiar código, no una variable). El panel de moderación acepta `?type=video` (cola, detalle, decisión, apelaciones); `preview-url` de un video devuelve un HLS firmado de 5 minutos. Variables solo del servidor: `VIDEOS_ENABLED`, `VIDEO_UPLOAD_ALLOWLIST`, `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_WEBHOOK_SECRET`, `MUX_SIGNING_KEY_ID`, `MUX_SIGNING_PRIVATE_KEY`, `MUX_CORS_ORIGIN`. Comando nuevo: `flask videos-sweep`. **El adaptador HTTP de Mux no se ha probado contra Mux real** (no hay cuenta).
 >
@@ -2757,6 +2759,12 @@ Todas exigen `Authorization: Bearer <token>`. Una historia dura **24 horas** (`e
 | `GET /api/videos/mine` | JWT | Los tuyos, con `status`, `moderation_status` y `failure_reason` |
 | `GET /api/videos/<id>` | JWT | Uno. Su dueño lo ve en cualquier estado; los demás solo si es visible. `404` indistinguible |
 | `DELETE /api/videos/<id>` | JWT | Borra el tuyo; el asset de Mux se borra por cola con reintentos |
+| `GET /api/videos/saved?limit&offset` | JWT | Tus Reels guardados que todavía puedes ver, del más reciente al más antiguo. Mismo formato que `GET /api/videos` (ADR-055) |
+| `POST` / `DELETE /api/videos/<id>/like` | JWT + perfil completo | Da o quita «me gusta». Idempotente. `200 {liked, likes_count}`. `404` si el Reel no existe, no es visible o aún no está publicado (`ready` y `approved`) |
+| `POST` / `DELETE /api/videos/<id>/save` | JWT + perfil completo | Guarda o quita de guardados (privado). Idempotente. `200 {saved}`. Mismos `404` |
+| `GET /api/videos/<id>/comments?limit&offset` | JWT | Comentarios del más antiguo al más reciente: `{comments: [{id, video_id, content, created_at, author, can_delete}], has_more}`. Oculta los de personas con bloqueo en cualquier sentido. `limit` 1–30 |
+| `POST /api/videos/<id>/comments` `{content}` | JWT + perfil completo | `201 {comment}`. `content` 1–1000 caracteres tras recortar (`400` si no). `429` a partir de 20 por minuto |
+| `DELETE /api/videos/<id>/comments/<comment_id>` | JWT | Lo borra su autor o la persona dueña del Reel. `404` si no existe o no es tuyo para borrar |
 | `POST /api/webhooks/mux` | firma `Mux-Signature: t=<unix>,v1=<HMAC-SHA256>` | Eventos de Mux. Firma estricta y reciente (±300 s) o `400`; idempotente por id de evento; tolera orden alterado y llegar antes que el video. `404` sin `MUX_WEBHOOK_SECRET` |
 
 El cliente sube el archivo directo a `upload_url` con `PUT` (sin enviar el JWT de THERS). Duración máxima 60 s (se comprueba al llegar `video.asset.ready`; si se pasa, el video queda `blocked` y el asset se borra). Nunca se publica una reproducción que no sea `signed`.
