@@ -62,44 +62,46 @@ const primitives = {
 
 /** Semánticos, tema oscuro -- el nivel que las pantallas deben consumir. */
 const darkPalette = {
-  bg: primitives.obsidian900,
-  bgSubtle: primitives.obsidian850,
-  surface: primitives.obsidian800,
-  surfaceRaised: primitives.obsidian750,
+  // Paleta oscura de la web (`Frontend/src/shared/design/tokens.css` §9.1, shell "social"): neutros
+  // zinc y el violeta de marca #7c3aed.
+  bg: '#0f0f11',
+  bgSubtle: '#18181b',
+  surface: '#18181b',
+  surfaceRaised: '#27272a',
   /** Superficies inmersivas (Reels, visores): negro OLED. */
   immersive: primitives.void,
 
-  border: primitives.obsidian700,
-  borderSubtle: primitives.obsidian750,
-  borderStrong: primitives.obsidian600,
+  border: '#27272a',
+  borderSubtle: '#1f1f23',
+  borderStrong: '#3f3f46',
 
   /** Relleno de acciones primarias; el texto blanco sobre él cumple contraste AA. */
-  brand: primitives.violet500,
-  brandHover: primitives.violet600,
+  brand: '#7c3aed',
+  brandHover: '#7e22ce',
   /** Violeta legible como TEXTO sobre fondos oscuros (el relleno `brand` no lo es). */
-  brandText: primitives.violet400,
-  brandSoft: primitives.violet900,
-  brandSoftStrong: primitives.violet800,
+  brandText: '#d2bbff',
+  brandSoft: 'rgba(124, 58, 237, 0.16)',
+  brandSoftStrong: 'rgba(124, 58, 237, 0.28)',
   /** Burbujas propias del chat y de Tero: un violeta más oscuro que `brand`, con texto blanco AAA. */
   bubbleMine: '#4c1d95',
   onBrand: primitives.white,
   /** Texto secundario sobre un relleno `brand` (p. ej. la hora de una burbuja propia). */
   onBrandMuted: primitives.violet300,
 
-  fg: primitives.gray100,
+  fg: '#ffffff',
   fgSecondary: primitives.gray300,
-  fgMuted: primitives.gray400,
-  fgDisabled: primitives.gray500,
+  fgMuted: '#9ca3af',
+  fgDisabled: '#71717a',
 
   dangerAccent: '#dc2626',
   dangerPressed: '#b91c1c',
   dangerFg: '#fca5a5',
-  dangerSurface: '#2a1215',
+  dangerSurface: 'rgba(220, 38, 38, 0.16)',
   dangerBorder: '#7f1d1d',
 
   successAccent: '#10b981',
   successFg: '#6ee7b7',
-  successSurface: '#0d2a21',
+  successSurface: 'rgba(16, 185, 129, 0.14)',
 
   /** Telón de modales y hojas inferiores. */
   scrim: 'rgba(0, 0, 0, 0.65)',
