@@ -9,8 +9,6 @@
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.domain.content_moderation import jobs as moderation_jobs
-from app.domain.content_moderation import subjects
 from app.domain.content_moderation.jobs import backoff_seconds
 from app.domain.restrictions.kinds import BLOCK
 from app.domain.videos import rules
@@ -115,21 +113,15 @@ class SQLAlchemyVideoRepository:
                                 ", mux_asset_id = :a", {"a": asset_id})
 
     def mark_ready(self, video_id, playback_id, duration_ms, width, height):
-        """`ready` y, en la MISMA transacción, el trabajo de moderación (el video sigue `pending`)."""
-        changed = self._transition(
+        """`ready` y publicado: decisión del propietario (2026-10-20), un Reel se ve en cuanto Mux lo
+        deja listo, sin cola de revisión (`moderation_status = 'approved'`, decidido por la política).
+        Se puede seguir reportando y quitando desde el panel."""
+        return self._transition(
             video_id, (rules.PROCESSING,), rules.READY,
-            ", mux_playback_id = :p, duration_ms = :d, width = :w, height = :h, ready_at = now()",
+            ", mux_playback_id = :p, duration_ms = :d, width = :w, height = :h, ready_at = now(), "
+            "moderation_status = 'approved', moderation_decided_by = 'auto', moderation_decided_at = now()",
             {"p": playback_id, "d": duration_ms, "w": width, "h": height},
         )
-        if changed:
-            from app.infrastructure.persistence.repositories.content_moderation_repository import (
-                SQLAlchemyContentModerationRepository,
-            )
-
-            SQLAlchemyContentModerationRepository().enqueue(
-                moderation_jobs.KIND_IMAGE, subjects.VIDEO, video_id
-            )
-        return changed
 
     def mark_blocked(self, video_id, reason):
         return self._transition(video_id, (rules.PROCESSING, rules.READY), rules.BLOCKED,

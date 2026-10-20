@@ -6,10 +6,12 @@
 
 import { ImageSelectionError, prepareImage } from "@shared/lib/imageAttachments";
 
-// Apagado salvo que valga exactamente "true": cuesta por uso y la imagen sale a un tercero. El servidor
-// tiene su propio interruptor (TERO_IMAGES_ENABLED); con este encendido y el servidor apagado, Tero
-// responde «todavía no puede ver imágenes».
-export const TERO_IMAGES_ENABLED = import.meta.env.VITE_TERO_IMAGES_ENABLED === "true";
+// Encendido salvo que valga exactamente "false", igual que VITE_TERO_ENABLED (2026-10-20, decisión del
+// propietario: un build sin la variable dejaba la web sin el botón de imagen). Cuesta por uso y la imagen
+// sale a un tercero, pero el que manda es el servidor: su interruptor (TERO_IMAGES_ENABLED) sigue
+// APAGADO por defecto, y con él apagado Tero responde «todavía no puede ver imágenes». La interfaz avisa
+// de la privacidad al adjuntar.
+export const TERO_IMAGES_ENABLED = import.meta.env.VITE_TERO_IMAGES_ENABLED !== "false";
 
 /** Lado mayor al que se reduce antes de enviarla: lo que el servidor entrega al modelo como máximo. */
 export const TERO_IMAGE_MAX_SIDE = 1280;

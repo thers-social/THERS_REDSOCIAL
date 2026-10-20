@@ -1,13 +1,13 @@
 # Reglas de producto de los Reels (ADR-043, ADR-043-A). Solo tipos nativos: domain/ no importa Flask
 # ni SQLAlchemy (BACKEND_ARCHITECTURE.md §7/§17).
 
-# --- D3 de ADR-043: subida PÚBLICA de video, solo con revisión humana obligatoria -------------------
+# --- D3 de ADR-043: subida PÚBLICA de video -------------------------------------------------------------
 #
-# Decisión del propietario (2026-10-18): cualquier cuenta puede subir video. La condición de
-# seguridad infantil (ADR-044 §3) se mantiene: la subida pública SOLO se permite si la moderación
-# está encendida y NO hay clasificador automático (`MODERATION_CLASSIFIER` distinto de `fake`), es
-# decir, si el servidor deja TODO retenido hasta que una persona lo apruebe (falla cerrado). Con el
-# clasificador simulado o con la moderación apagada vuelve a valer la lista de cuentas de prueba.
+# Decisión del propietario (2026-10-18): cualquier cuenta puede subir video. Hasta el 2026-10-19 esa
+# apertura exigía, por seguridad infantil (ADR-044 §3), que todo quedara retenido para revisión humana.
+# Decisión del propietario (2026-10-20): los Reels se publican sin revisión y la subida queda abierta a
+# toda cuenta con sesión; ya no depende de `MODERATION_ENABLED` ni de `MODERATION_CLASSIFIER`. Queda
+# registrado como asumido por el propietario; pendiente de ADR y de ratificación del equipo.
 # Esta constante no es un interruptor de configuración a propósito: cambiarla exige CÓDIGO revisado.
 PUBLIC_UPLOAD_ALLOWED = True
 
@@ -107,12 +107,12 @@ def parse_allowlist(raw):
     )
 
 
-def may_upload(username, allowlist, human_review_only=False):
-    """Regla D3. Abierta al público solo si `PUBLIC_UPLOAD_ALLOWED` Y la moderación retiene todo para
-    revisión humana (`human_review_only`); si no, solo la lista de cuentas de prueba."""
+def may_upload(username, allowlist):
+    """Regla D3. Abierta a toda cuenta con nombre de usuario mientras `PUBLIC_UPLOAD_ALLOWED`; si se
+    cerrara esa constante, vuelve a valer la lista de cuentas de prueba."""
     if not username:
         return False
-    if PUBLIC_UPLOAD_ALLOWED and human_review_only:
+    if PUBLIC_UPLOAD_ALLOWED:
         return True
     return username.lower() in allowlist
 

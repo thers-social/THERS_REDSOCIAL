@@ -10,5 +10,9 @@
  */
 export const VIDEO_ENABLED = process.env.EXPO_PUBLIC_VIDEO_ENABLED === 'true';
 
-/** Preguntar a Tero con una imagen (la imagen sale a Anthropic y cuesta por uso). */
-export const TERO_IMAGES_ENABLED = process.env.EXPO_PUBLIC_TERO_IMAGES_ENABLED === 'true';
+/**
+ * Preguntar a Tero con una imagen (la imagen sale a Anthropic y cuesta por uso). Encendido salvo que valga
+ * exactamente `false` (2026-10-20): una build sin la variable dejaba la app sin el botón. El que manda es el
+ * servidor (`TERO_IMAGES_ENABLED`, apagado por defecto).
+ */
+export const TERO_IMAGES_ENABLED = process.env.EXPO_PUBLIC_TERO_IMAGES_ENABLED !== 'false';

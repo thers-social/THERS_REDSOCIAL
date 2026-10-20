@@ -81,6 +81,21 @@ def _setup_video(client):
     return token, owner_id, video["id"], upload_id
 
 
+def _hold(video_id):
+    """Deja un Reel listo en revisión, como estaban antes del cambio del 2026-10-20 (se publican
+    solos); sirve para seguir probando la cola, el panel y las apelaciones, que siguen vigentes."""
+    from app.domain.content_moderation import jobs, subjects
+    from app.infrastructure.persistence.repositories.content_moderation_repository import (
+        SQLAlchemyContentModerationRepository,
+    )
+
+    db.session.execute(
+        text("UPDATE videos SET moderation_status = 'pending', moderation_decided_by = NULL, "
+             "moderation_decided_at = NULL WHERE id = :i"), {"i": str(video_id)})
+    SQLAlchemyContentModerationRepository().enqueue(jobs.KIND_IMAGE, subjects.VIDEO, video_id)
+    db.session.commit()
+
+
 def _approve(video_id):
     db.session.execute(text("UPDATE videos SET moderation_status = 'approved' WHERE id = :i"), {"i": str(video_id)})
     db.session.commit()
@@ -102,47 +117,37 @@ class TestFlagAndD3:
             app.config["MUX_WEBHOOK_SECRET"] = None
             assert _webhook(client, _event("video.asset.ready", {}), secret="anything").status_code == 404
 
-    def test_an_account_outside_the_test_list_cannot_upload_and_mux_is_never_called(
-        self, app, client, reels
-    ):
+    def test_an_account_outside_the_test_list_can_upload_now(self, app, client, reels):
         with app.app_context():
             token, _ = make_account(client, "otra")
             r = _upload(client, token)
-            assert r.status_code == 404 and reels.uploads == []
-            assert db.session.execute(text("SELECT count(*) FROM videos")).scalar() == 0
+            assert r.status_code == 201 and len(reels.uploads) == 1
+            assert db.session.execute(text("SELECT count(*) FROM videos")).scalar() == 1
 
-    def test_an_empty_list_means_nobody(self, app, client, reels):
+    def test_without_a_session_nobody_uploads(self, app, client, reels):
+        with app.app_context():
+            assert client.post("/api/videos/uploads", json={}).status_code == 401
+            assert reels.uploads == []
+
+    def test_an_empty_list_no_longer_blocks_anyone(self, app, client, reels):
+        """La lista de cuentas de prueba ya no limita la subida (decisión del 2026-10-20)."""
         with app.app_context():
             app.config["VIDEO_UPLOAD_ALLOWLIST"] = ""
             token, _ = make_account(client, "autora")
-            assert _upload(client, token).status_code == 404
-
-    def test_public_upload_is_closed_without_human_review(self, app, client, reels):
-        """D3: sin moderación encendida, o con el clasificador simulado, solo vale la lista. Ninguna
-        variable de configuración abre la subida por sí sola."""
-        with app.app_context():
-            app.config.update(
-                VIDEO_PUBLIC_UPLOAD=True, PUBLIC_UPLOAD_ALLOWED=True, VIDEOS_PUBLIC=True,
-                MODERATION_ENABLED=False, MODERATION_CLASSIFIER="none",
-            )
-            token, _ = make_account(client, "otra")
-            assert _upload(client, token).status_code == 404
-            app.config.update(MODERATION_ENABLED=True, MODERATION_CLASSIFIER="fake")
-            assert _upload(client, token).status_code == 404
-
-    def test_public_upload_opens_only_when_everything_is_held_for_a_person(self, app, client, reels):
-        with app.app_context():
-            app.config.update(MODERATION_ENABLED=True, MODERATION_CLASSIFIER="none")
-            token, _ = make_account(client, "otra")
             assert _upload(client, token).status_code in (200, 201)
-        assert rules.may_upload("otra", frozenset(), human_review_only=True) is True
-        assert rules.may_upload("otra", frozenset(), human_review_only=False) is False
-        assert rules.may_upload(None, frozenset(), human_review_only=True) is False
+
+    def test_any_account_can_upload_whatever_the_moderation_settings(self, app, client, reels):
+        """Decisión del propietario (2026-10-20): la subida es pública y no depende de la moderación."""
+        with app.app_context():
+            token, _ = make_account(client, "otra")
+            for enabled, classifier in ((False, "none"), (True, "fake"), (True, "none")):
+                app.config.update(MODERATION_ENABLED=enabled, MODERATION_CLASSIFIER=classifier)
+                assert _upload(client, token).status_code in (200, 201)
+        assert rules.may_upload("otra", frozenset()) is True
+        assert rules.may_upload(None, frozenset()) is False
 
     def test_the_list_is_case_insensitive_and_exact(self, app, client, reels):
-        assert rules.may_upload("Autora", rules.parse_allowlist(" Autora , otra ")) is True
-        assert rules.may_upload("autor", rules.parse_allowlist("autora")) is False
-        assert rules.may_upload(None, rules.parse_allowlist("autora")) is False
+        assert rules.parse_allowlist(" Autora , otra ") == frozenset({"autora", "otra"})
         assert rules.parse_allowlist(None) == frozenset()
 
 
@@ -244,7 +249,7 @@ class TestWebhookSecurity:
 
 
 class TestWebhookLifecycle:
-    def test_upload_to_ready_and_the_video_stays_hidden_until_approved(self, app, client, reels):
+    def test_upload_to_ready_and_the_video_is_published_at_once(self, app, client, reels):
         with app.app_context():
             token, _, video_id, upload_id = _setup_video(client)
 
@@ -255,9 +260,10 @@ class TestWebhookLifecycle:
             row = _video(video_id)
             assert (row["status"], row["mux_playback_id"], row["duration_ms"], row["width"], row["height"]) == (
                 "ready", "pb_xxxxxxxx", 30000, 1080, 1920)
-            assert row["moderation_status"] == "pending"
-            job = db.session.execute(text("SELECT subject_type, kind, status FROM moderation_jobs")).one()
-            assert tuple(job) == ("video", "classify_image", "queued")
+            assert row["moderation_status"] == "approved" and row["moderation_decided_by"] == "auto"
+            assert db.session.execute(text("SELECT count(*) FROM moderation_jobs")).scalar() == 0
+            viewer, _ = make_account(client, "lectora")
+            assert client.get(f"/api/videos/{video_id}", headers=_auth_headers(viewer)).get_json()["video"]["playback"]
 
     def test_a_repeated_event_changes_nothing(self, app, client, reels):
         with app.app_context():
@@ -276,7 +282,7 @@ class TestWebhookLifecycle:
             assert _video(video_id)["status"] == "ready"
             _webhook(client, _event("video.upload.asset_created", {"id": upload_id, "asset_id": "a1"}))
             assert _video(video_id)["status"] == "ready"
-            assert db.session.execute(text("SELECT count(*) FROM moderation_jobs")).scalar() == 1
+            assert db.session.execute(text("SELECT count(*) FROM moderation_jobs")).scalar() == 0
 
     def test_an_event_that_arrives_before_the_video_is_deferred_and_resolved_later(self, app, client, reels):
         with app.app_context():
@@ -542,6 +548,7 @@ class TestModerationOfVideos:
         with app.app_context():
             _, _, video_id, upload_id = _setup_video(client)
             _to_ready(client, video_id, upload_id)
+            _hold(video_id)
 
             process_next(repository, None, settings, "w", now())
 
@@ -555,6 +562,7 @@ class TestModerationOfVideos:
         with app.app_context():
             _, _, video_id, upload_id = _setup_video(client)
             _to_ready(client, video_id, upload_id)
+            _hold(video_id)
             process_next(repository, None, settings, "w", now())
             h = _auth_headers(staff)
 
@@ -569,6 +577,7 @@ class TestModerationOfVideos:
         with app.app_context():
             owner, _, video_id, upload_id = _setup_video(client)
             _to_ready(client, video_id, upload_id)
+            _hold(video_id)
             r = client.get(f"/api/moderation/media/{video_id}/preview-url?type=video", headers=_auth_headers(owner))
             assert r.status_code == 404
 
@@ -576,6 +585,7 @@ class TestModerationOfVideos:
         with app.app_context():
             _, _, video_id, upload_id = _setup_video(client)
             _to_ready(client, video_id, upload_id)
+            _hold(video_id)
             viewer, _ = make_account(client, "lectora")
             assert client.get(f"/api/videos/{video_id}", headers=_auth_headers(viewer)).status_code == 404
 
@@ -589,16 +599,18 @@ class TestModerationOfVideos:
         with app.app_context():
             owner, _, video_id, upload_id = _setup_video(client)
             _to_ready(client, video_id, upload_id)
+            _hold(video_id)
             process_next(repository, None, settings, "w", now())
             r = client.post("/api/appeals", json={"attachment_id": video_id, "type": "video", "reason": "error"},
                             headers=_auth_headers(owner))
             assert r.status_code == 201
 
-    def test_moderation_does_not_need_the_flag_for_videos_to_stay_hidden(self, app, client, reels):
-        """Sin MODERATION_ENABLED nadie aprueba: el video se queda `pending` y oculto (falla cerrado)."""
+    def test_a_video_held_by_staff_stays_hidden_even_without_the_flag(self, app, client, reels):
+        """Un Reel que el panel retuvo sigue oculto aunque `MODERATION_ENABLED` esté apagado."""
         with app.app_context():
             _, _, video_id, upload_id = _setup_video(client)
             _to_ready(client, video_id, upload_id)
+            _hold(video_id)
             viewer, _ = make_account(client, "lectora")
             assert client.get(f"/api/videos/{video_id}", headers=_auth_headers(viewer)).status_code == 404
 

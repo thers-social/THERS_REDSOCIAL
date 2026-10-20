@@ -55,8 +55,10 @@ export default function Places() {
     setOrigin(geo.point);
     setRadius(DEFAULT_RADIUS_METERS);
     setPending(null);
-    setFocus({ ...geo.point, key: `geo-${geo.point.lat}-${geo.point.lng}` });
-  }, [geo.point]);
+    // El mapa se centra en la lectura exacta (solo vive en el teléfono); la consulta usa el punto redondeado.
+    const here = geo.exact ?? geo.point;
+    setFocus({ ...here, key: `geo-${here.lat}-${here.lng}` });
+  }, [geo.point, geo.exact]);
 
   // «Mis negocios» solo aparece si la persona gestiona algún lugar (ADR-040 fase 6).
   const [manages, setManages] = useState(false);
@@ -135,7 +137,7 @@ export default function Places() {
             places={results.places}
             center={DEFAULT_CENTER}
             focus={focus}
-            userPoint={geo.point}
+            userPoint={geo.exact ?? geo.point}
             onSelect={open}
             onViewportChange={setPending}
             onFailed={() => setMapFailed(true)}

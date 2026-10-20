@@ -120,6 +120,8 @@ export const es = {
   'post.like': 'Me gusta',
   'post.unlike': 'Quitar me gusta',
   'post.comments': 'Comentarios: {count}',
+  'post.likesCount': '{count} Me gusta',
+  'post.viewComments': 'Ver los {count} comentarios',
   'post.share': 'Compartir publicación',
   'post.save': 'Guardar publicación',
   'post.error.save': 'No se pudo guardar',

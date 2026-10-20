@@ -2,7 +2,7 @@
 # domain/ no importa Flask ni SQLAlchemy (BACKEND_ARCHITECTURE.md §7/§17).
 
 #: Límites de producto, explícitos y revisables (no son parámetros de despliegue).
-MAX_POST_IMAGES = 4
+MAX_POST_IMAGES = 10
 MAX_MESSAGE_IMAGES = 1
 
 

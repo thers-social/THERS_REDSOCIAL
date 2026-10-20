@@ -37,9 +37,9 @@ describe('errores', () => {
 });
 
 describe('el interruptor', () => {
-  it('está apagado salvo que VITE_TERO_IMAGES_ENABLED valga exactamente "true"', () => {
-    assert.match(read('src/features/tero/lib/teroImage.js'), /VITE_TERO_IMAGES_ENABLED === "true"/);
-    assert.match(read('.env.example'), /^VITE_TERO_IMAGES_ENABLED=false$/m);
+  it('está encendido salvo que VITE_TERO_IMAGES_ENABLED valga exactamente "false"', () => {
+    assert.match(read('src/features/tero/lib/teroImage.js'), /VITE_TERO_IMAGES_ENABLED !== "false"/);
+    assert.match(read('.env.example'), /^VITE_TERO_IMAGES_ENABLED=true$/m);
   });
 
   it('el botón de imagen solo existe con el interruptor encendido', () => {

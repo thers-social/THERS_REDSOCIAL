@@ -22,6 +22,7 @@ import { ReportModal } from '@features/safety/ReportModal';
 import { colors, fontSize, radius, space } from '@shared/design/tokens';
 import { themedStyles } from '@shared/design/theme';
 import { formatClock } from '@shared/lib/time';
+import { CHAT_MEDIA_SIZE } from '@shared/media/chatMediaSize';
 import { ImageGridView } from '@shared/media/ImageGridView';
 import { MediaAttachmentBar } from '@shared/media/MediaAttachmentBar';
 import { MAX_MESSAGE_IMAGES } from '@shared/media/mediaRules';
@@ -310,20 +311,28 @@ export function ChatScreen({ kind, id: userId, name, username, avatar }: Props) 
                 </View>
               )
             }
-            renderItem={({ item }) => (
-              <Bubble
-                message={item}
-                mine={item.sender_id === user.id}
-                // En un grupo cada mensaje trae a su autor; en un directo es siempre la otra persona.
-                avatarName={isGroup ? (item.sender?.name ?? 'Alguien') : displayName}
-                avatarUri={isGroup ? (item.sender?.avatar_url ?? null) : avatar || null}
-                showName={isGroup}
-                // Foto de quien habla -> su perfil (en un grupo, el autor del mensaje; en un directo, la otra persona).
-                onAvatarPress={() => openProfile(isGroup ? (item.sender?.id ?? item.sender_id) : userId)}
-                onLongPress={() => openMessageMenu(item)}
-                onRetry={() => item.client_id && chat.retry(item.client_id)}
-              />
-            )}
+            renderItem={({ item, index }) => {
+              // La lista está invertida: el mensaje anterior en el tiempo es el siguiente del arreglo.
+              const older = data[index + 1];
+              const newer = data[index - 1];
+              return (
+                <Bubble
+                  message={item}
+                  mine={item.sender_id === user.id}
+                  // En un grupo cada mensaje trae a su autor; en un directo es siempre la otra persona.
+                  avatarName={isGroup ? (item.sender?.name ?? 'Alguien') : displayName}
+                  avatarUri={isGroup ? (item.sender?.avatar_url ?? null) : avatar || null}
+                  showName={isGroup}
+                  startsRun={!sameRun(older, item)}
+                  endsRun={!sameRun(item, newer)}
+                  stamp={timeSeparator(older, item)}
+                  // Foto de quien habla -> su perfil (en un grupo, el autor del mensaje; en un directo, la otra persona).
+                  onAvatarPress={() => openProfile(isGroup ? (item.sender?.id ?? item.sender_id) : userId)}
+                  onLongPress={() => openMessageMenu(item)}
+                  onRetry={() => item.client_id && chat.retry(item.client_id)}
+                />
+              );
+            }}
           />
 
           {chat.error && chat.state === 'ready' ? (
@@ -400,12 +409,40 @@ export function ChatScreen({ kind, id: userId, name, username, avatar }: Props) 
   );
 }
 
+/** Mensajes seguidos de la misma persona, a menos de 5 minutos, forman una tanda (formato TikTok). */
+const RUN_WINDOW_MS = 5 * 60 * 1000;
+/** Pasado este silencio entre dos mensajes se pone la hora en el centro. */
+const STAMP_GAP_MS = 15 * 60 * 1000;
+
+function sameRun(a: LocalMessage | undefined, b: LocalMessage | undefined): boolean {
+  if (!a || !b || a.sender_id !== b.sender_id) return false;
+  return Math.abs(new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) < RUN_WINDOW_MS;
+}
+
+/** La hora centrada que separa tandas: vacía si el mensaje sigue de cerca al anterior. */
+function timeSeparator(older: LocalMessage | undefined, message: LocalMessage): string | null {
+  const now = new Date(message.created_at);
+  if (older && now.getTime() - new Date(older.created_at).getTime() < STAMP_GAP_MS) return null;
+  const clock = formatClock(message.created_at);
+  return now.toDateString() === new Date().toDateString()
+    ? clock
+    : `${now.getDate()}/${now.getMonth() + 1} ${clock}`;
+}
+
+/**
+ * Un mensaje al estilo de los directos de TikTok: burbujas redondeadas (las tuyas en el color de la marca,
+ * las demás en gris), sin la hora dentro, la foto de la otra persona solo en el último mensaje de su tanda y
+ * una hora centrada entre conversaciones separadas en el tiempo. Foto y video van sin burbuja.
+ */
 function Bubble({
   message,
   mine,
   avatarName,
   avatarUri,
   showName = false,
+  startsRun,
+  endsRun,
+  stamp,
   onAvatarPress,
   onLongPress,
   onRetry,
@@ -414,8 +451,14 @@ function Bubble({
   mine: boolean;
   avatarName: string;
   avatarUri: string | null;
-  /** En un grupo se escribe el nombre de quien habla sobre su mensaje. */
+  /** En un grupo se escribe el nombre de quien habla sobre su primer mensaje. */
   showName?: boolean;
+  /** Primer mensaje de la tanda de esa persona. */
+  startsRun: boolean;
+  /** Último mensaje de la tanda: ahí va la foto de la otra persona. */
+  endsRun: boolean;
+  /** Hora centrada sobre este mensaje, o `null`. */
+  stamp: string | null;
   /** Tocar la foto de quien habla abre su perfil. */
   onAvatarPress?: () => void;
   onLongPress: () => void;
@@ -423,74 +466,112 @@ function Bubble({
 }) {
   const failed = message.local === 'failed';
   const sending = message.local === 'sending';
-  // Con foto o video la burbuja es un marco fino alrededor de la imagen, no un bloque grueso de color.
   const hasMedia = Boolean(message.images?.length || message.video || message.localMedia);
+  // Solo foto o video, sin texto ni otro adjunto: se ven sin burbuja de color.
+  const mediaOnly = hasMedia && !message.content && !message.audio && !message.place && !message.post;
+  // Foto o video CON texto: el texto va aparte, en una burbuja debajo.
+  const split = hasMedia && Boolean(message.content) && !message.audio && !message.place && !message.post;
+
+  const press = {
+    onLongPress,
+    onPress: failed ? onRetry : undefined,
+    delayLongPress: 300,
+    accessibilityRole: 'button' as const,
+    accessibilityLabel:
+      message.audio && !message.content
+        ? voiceAccessibilityLabel({ mine, name: avatarName, durationMs: message.audio.duration_ms })
+        : `${mine ? 'Tú' : avatarName}: ${message.content}`,
+    accessibilityHint: failed ? 'No se envió. Toca para reintentar.' : 'Mantén pulsado para ver opciones',
+  };
+  const nameLabel = showName && !mine && startsRun ? <Text style={styles.senderName}>{avatarName}</Text> : null;
+  // Foto y video (ADR-039, ADR-046). Un video aún sin confirmar no tiene miniatura.
+  const mediaBlock = (
+    <>
+      <ImageGridView images={message.images} label={mine ? 'Tu foto' : `Foto de ${avatarName}`} compact />
+      {message.video ? (
+        <VideoPlayerView video={message.video} compact accessibilityLabel={mine ? 'Tu video' : `Video de ${avatarName}`} />
+      ) : message.localMedia?.kind === 'video' ? (
+        <View style={styles.pendingVideo}>
+          <Text style={styles.pendingVideoText}>{failed ? 'No se envió el video' : 'Enviando video…'}</Text>
+        </View>
+      ) : null}
+    </>
+  );
+  const textBlock = <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{message.content}</Text>;
+  const noteBlock =
+    failed || sending || message.edited ? (
+      <Text style={[styles.meta, mine && styles.metaMine]}>
+        {failed ? 'No se envió · toca para reintentar' : sending ? 'Enviando…' : 'editado'}
+      </Text>
+    ) : null;
 
   return (
-    <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs]}>
+    <>
+      {stamp ? <Text style={styles.stamp}>{stamp}</Text> : null}
+      <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs, startsRun ? styles.runStart : styles.runNext]}>
       {!mine ? (
-        <Pressable
-          onPress={onAvatarPress}
-          disabled={!onAvatarPress}
-          accessibilityRole="button"
-          accessibilityLabel={`Ver el perfil de ${avatarName}`}
-        >
-          <Avatar name={avatarName} uri={avatarUri} size={28} />
-        </Pressable>
+        endsRun ? (
+          <Pressable
+            onPress={onAvatarPress}
+            disabled={!onAvatarPress}
+            accessibilityRole="button"
+            accessibilityLabel={`Ver el perfil de ${avatarName}`}
+          >
+            <Avatar name={avatarName} uri={avatarUri} size={28} />
+          </Pressable>
+        ) : (
+          <View style={styles.avatarSpace} />
+        )
       ) : null}
-      <Pressable
-        onLongPress={onLongPress}
-        onPress={failed ? onRetry : undefined}
-        delayLongPress={300}
-        style={[
-          styles.bubble,
-          mine ? styles.bubbleMine : styles.bubbleTheirs,
-          hasMedia && styles.bubbleMedia,
-          failed && styles.bubbleFailed,
-          sending && styles.bubbleSending,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={
-          message.audio && !message.content
-            ? voiceAccessibilityLabel({ mine, name: avatarName, durationMs: message.audio.duration_ms })
-            : `${mine ? 'Tú' : avatarName}: ${message.content}`
-        }
-        accessibilityHint={failed ? 'No se envió. Toca para reintentar.' : 'Mantén pulsado para ver opciones'}
-      >
-        {showName && !mine ? <Text style={styles.senderName}>{avatarName}</Text> : null}
-        {message.audio ? (
-          <VoiceBubble
-            url={message.audio.url}
-            durationMs={message.audio.duration_ms}
-            mine={mine}
-            name={avatarName}
-          />
-        ) : null}
-        {/* Foto y video (ADR-039, ADR-046). Un video aún sin confirmar no tiene miniatura. */}
-        <ImageGridView images={message.images} label={mine ? 'Tu foto' : `Foto de ${avatarName}`} compact />
-        {message.video ? (
-          <VideoPlayerView video={message.video} compact accessibilityLabel={mine ? 'Tu video' : `Video de ${avatarName}`} />
-        ) : message.localMedia?.kind === 'video' ? (
-          <View style={styles.pendingVideo}>
-            <Text style={styles.pendingVideoText}>{failed ? 'No se envió el video' : 'Enviando video…'}</Text>
-          </View>
-        ) : null}
-        {message.place ? <SharedPlaceCard place={message.place} mine={mine} /> : null}
-        {message.post ? <SharedPostCard post={message.post} mine={mine} /> : null}
-        {message.content || (!message.place && !message.post && !message.audio && !message.images?.length && !message.video && !message.localMedia) ? (
-          <Text style={[styles.bubbleText, mine && styles.bubbleTextMine, hasMedia && styles.mediaText]}>
-            {message.content}
-          </Text>
-        ) : null}
-        <Text style={[styles.meta, mine && styles.metaMine, hasMedia && styles.mediaMeta]}>
-          {failed
-            ? 'No se envió · toca para reintentar'
-            : sending
-              ? 'Enviando…'
-              : `${formatClock(message.created_at)}${message.edited ? ' · editado' : ''}`}
-        </Text>
-      </Pressable>
-    </View>
+      {split ? (
+        // Foto o video con texto: el texto va en su propia burbuja debajo, no dentro del cuadro del adjunto.
+        <View style={[styles.stack, mine ? styles.stackMine : styles.stackTheirs]}>
+          {nameLabel}
+          <Pressable {...press} style={[styles.splitMedia, sending && styles.bubbleSending]}>
+            {mediaBlock}
+          </Pressable>
+          <Pressable
+            {...press}
+            style={[
+              styles.splitText,
+              mine ? styles.bubbleMine : styles.bubbleTheirs,
+              failed && styles.bubbleFailed,
+              sending && styles.bubbleSending,
+            ]}
+          >
+            {textBlock}
+            {noteBlock}
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          {...press}
+          style={[
+            styles.bubble,
+            mine ? styles.bubbleMine : styles.bubbleTheirs,
+            mediaOnly && styles.bubbleMediaOnly,
+            failed && styles.bubbleFailed,
+            sending && styles.bubbleSending,
+          ]}
+        >
+          {nameLabel}
+          {message.audio ? (
+            <VoiceBubble
+              url={message.audio.url}
+              durationMs={message.audio.duration_ms}
+              mine={mine}
+              name={avatarName}
+            />
+          ) : null}
+          {mediaBlock}
+          {message.place ? <SharedPlaceCard place={message.place} mine={mine} /> : null}
+          {message.post ? <SharedPostCard post={message.post} mine={mine} /> : null}
+          {message.content || (!message.place && !message.post && !message.audio && !hasMedia) ? textBlock : null}
+          {noteBlock}
+        </Pressable>
+      )}
+      </View>
+    </>
   );
 }
 
@@ -503,15 +584,25 @@ const styles = themedStyles(() => ({
   start: { textAlign: 'center', fontSize: fontSize.labelMd, color: colors.fgMuted, padding: space[3] },
   offline: { paddingHorizontal: space[3], paddingTop: space[2] },
   sendError: { paddingHorizontal: space[3] },
-  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: space[2], gap: space[2] },
+  // Formato TikTok: burbujas muy redondeadas, tuyas en el color de la marca y ajenas en gris, sin hora dentro.
+  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: space[2] },
+  runStart: { marginTop: space[3] },
+  runNext: { marginTop: 2 },
+  avatarSpace: { width: 28 },
+  stamp: { alignSelf: 'center', fontSize: fontSize.labelMd, color: colors.fgMuted, marginVertical: space[3] },
   rowMine: { justifyContent: 'flex-end' },
   rowTheirs: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '78%', borderRadius: radius.card, paddingHorizontal: space[3], paddingVertical: space[2] },
-  bubbleMine: { backgroundColor: colors.bubbleMine, borderBottomRightRadius: radius.xs },
-  bubbleMedia: { padding: 3 },
-  mediaText: { paddingHorizontal: space[2], paddingTop: space[1] },
-  mediaMeta: { paddingHorizontal: space[2], paddingBottom: 2 },
-  bubbleTheirs: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderBottomLeftRadius: radius.xs },
+  bubble: { maxWidth: '78%', borderRadius: 20, paddingHorizontal: space[3], paddingVertical: space[2] },
+  bubbleMine: { backgroundColor: colors.brand },
+  bubbleMediaOnly: { backgroundColor: 'transparent', borderWidth: 0, padding: 0, maxWidth: CHAT_MEDIA_SIZE },
+  // Foto o video con texto: dos piezas apiladas, el adjunto arriba y el texto en su burbuja.
+  // Ancho fijo (el del adjunto): el texto se ajusta a él y nada se sale de la pantalla.
+  stack: { width: CHAT_MEDIA_SIZE, gap: 2 },
+  splitMedia: { width: CHAT_MEDIA_SIZE },
+  splitText: { maxWidth: '100%', borderRadius: 20, paddingHorizontal: space[3], paddingVertical: space[2] },
+  stackMine: { alignItems: 'flex-end' },
+  stackTheirs: { alignItems: 'flex-start' },
+  bubbleTheirs: { backgroundColor: colors.surfaceRaised },
   bubbleFailed: { backgroundColor: colors.dangerSurface, borderWidth: 1, borderColor: colors.dangerBorder },
   bubbleSending: { opacity: 0.7 },
   senderName: { fontSize: fontSize.labelMd, fontWeight: '700', color: colors.brandText, marginBottom: 2 },
@@ -521,9 +612,9 @@ const styles = themedStyles(() => ({
   metaMine: { color: colors.onBrandMuted },
   attachBar: { paddingHorizontal: space[3], paddingTop: space[2], borderTopWidth: 1, borderTopColor: colors.borderSubtle },
   pendingVideo: {
-    width: 200,
-    height: 110,
-    borderRadius: radius.input,
+    width: CHAT_MEDIA_SIZE,
+    height: CHAT_MEDIA_SIZE,
+    borderRadius: radius.card,
     backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
@@ -544,10 +635,10 @@ const styles = themedStyles(() => ({
     flex: 1,
     minHeight: 44,
     maxHeight: 120,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.input,
-    paddingHorizontal: space[3],
+    borderWidth: 0,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.pill,
+    paddingHorizontal: space[4],
     paddingVertical: space[2],
     fontSize: fontSize.bodyLg,
     color: colors.fg,
@@ -555,7 +646,7 @@ const styles = themedStyles(() => ({
   send: {
     minHeight: 44,
     minWidth: 72,
-    borderRadius: radius.input,
+    borderRadius: radius.pill,
     backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',

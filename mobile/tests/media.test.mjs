@@ -32,7 +32,7 @@ describe('límites', () => {
     assert.equal(MAX_IMAGE_BYTES, 5 * 1024 * 1024);
     assert.equal(MAX_VIDEO_BYTES, 25 * 1024 * 1024);
     assert.equal(MAX_VIDEO_SECONDS, 60);
-    assert.equal(MAX_POST_IMAGES, 4);
+    assert.equal(MAX_POST_IMAGES, 10);
     assert.equal(MAX_MESSAGE_IMAGES, 1);
   });
 });
@@ -130,9 +130,9 @@ describe('los interruptores', () => {
 
   it('video y Tero con imágenes están apagados salvo que valgan exactamente "true"', () => {
     assert.match(config, /EXPO_PUBLIC_VIDEO_ENABLED === 'true'/);
-    assert.match(config, /EXPO_PUBLIC_TERO_IMAGES_ENABLED === 'true'/);
+    assert.match(config, /EXPO_PUBLIC_TERO_IMAGES_ENABLED !== 'false'/);
     assert.match(read('.env.example'), /^EXPO_PUBLIC_VIDEO_ENABLED=false$/m);
-    assert.match(read('.env.example'), /^EXPO_PUBLIC_TERO_IMAGES_ENABLED=false$/m);
+    assert.match(read('.env.example'), /^EXPO_PUBLIC_TERO_IMAGES_ENABLED=true$/m);
   });
 
   it('el botón de video y el de imagen para Tero solo existen con su interruptor', () => {

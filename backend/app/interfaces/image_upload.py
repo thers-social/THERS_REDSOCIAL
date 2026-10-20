@@ -23,8 +23,8 @@ from app.domain.media.video import (
 from app.infrastructure.media.image_processor import MAX_UPLOAD_BYTES, process_attachment
 from app.infrastructure.media.video_processor import process_video
 
-#: 4 imágenes de 5 MiB más el sobrecoste del formato multipart.
-MULTIPART_LIMIT_BYTES = 22 * 1024 * 1024
+#: Sobrecoste del formato multipart (cabeceras de cada parte y campos de texto).
+_MULTIPART_OVERHEAD_BYTES = 2 * 1024 * 1024
 #: Techo cuando la petición lleva un video (25 MiB, ADR-046). Imágenes y video son excluyentes, así que
 #: basta con el mayor de los dos más el sobrecoste del multipart.
 MULTIPART_LIMIT_WITH_VIDEO_BYTES = 28 * 1024 * 1024
@@ -33,11 +33,18 @@ _TRUE = {"true", "1"}
 _FALSE = {"false", "0", ""}
 
 
-def read_request_data():
+def read_request_data(max_images=None):
     """`(data, files)`: el cuerpo como diccionario y la lista de archivos del campo
-    `images` (vacía con JSON). `data` es `None` si no llegó nada utilizable."""
+    `images` (vacía con JSON). `data` es `None` si no llegó nada utilizable.
+
+    `max_images`: cuántas imágenes admite la ruta. El techo HTTP de esa petición es el mayor entre el
+    de un video y el de `max_images` imágenes de 5 MiB más el sobrecoste del multipart (10 fotos de una
+    publicación no caben en 28 MiB). Las rutas que no lo indican conservan el techo de siempre."""
     if request.mimetype == "multipart/form-data":
-        request.max_content_length = MULTIPART_LIMIT_WITH_VIDEO_BYTES
+        limit = MULTIPART_LIMIT_WITH_VIDEO_BYTES
+        if max_images:
+            limit = max(limit, max_images * MAX_UPLOAD_BYTES + _MULTIPART_OVERHEAD_BYTES)
+        request.max_content_length = limit
         data = request.form.to_dict()
         # En multipart todo llega como texto: `is_sensitive` se convierte aquí.
         if "is_sensitive" in data:

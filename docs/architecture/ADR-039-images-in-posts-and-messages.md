@@ -14,7 +14,7 @@
 
 | Tema | Decisión |
 |---|---|
-| Alcance | Hasta **4 imágenes** por publicación y **1** por mensaje. Sin video ni GIF animado. |
+| Alcance | Hasta **10 imágenes** por publicación (eran 4 hasta el 2026-10-20, decisión del propietario) y **1** por mensaje. Sin video ni GIF animado. Varias fotos se muestran en un **carrusel** (deslizar en la app, flechas en la web), no en cuadrícula. El techo HTTP de una publicación multipart sube a 10 × 5 MiB + 2 MiB (52 MiB); mensajes, lugares e historias conservan el suyo. |
 | Contrato | Los mismos endpoints (`POST /api/posts`, `POST /api/users/<id>/messages`) aceptan **`multipart/form-data`** con el campo `images`, además del JSON de siempre. **No se rompe ningún cliente existente.** |
 | Texto | Con imagen, el texto puede ir **vacío**. Sin imagen sigue siendo obligatorio. |
 | Tabla | Una sola, **`media_attachments`** (`post_id` o `message_id`, exactamente uno por `CHECK`), con `owner_id`, `storage_key` único, `width`, `height` y `position`. Todas las claves foráneas son `ON DELETE CASCADE`. |

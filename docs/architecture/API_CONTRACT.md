@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.78 (Propuesta) |
+| Versión | 0.80 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -71,7 +71,11 @@
 >
 > **v0.76 — interacciones de Reels (`ADR-055`, **PROPUESTO**, detrás de `VIDEOS_ENABLED`):** 7 rutas nuevas en §4.40 (`GET /api/videos/saved`, `POST`/`DELETE` de `like` y `save`, `GET`/`POST` de `comments` y `DELETE` de un comentario). Cada Reel añade `likes_count`, `comments_count`, `liked_by_me`, `saved_by_me` y `author.is_following`. Migración `d4f7b1c3e9a5`.
 >
-> **v0.78 — llamadas y videollamadas 1 a 1 con LiveKit Cloud (decisión del equipo, 2026-10-20, **sin ADR redactado**; detrás de `CALLS_ENABLED`):** 7 rutas nuevas en §4.48 (`POST /api/calls`, `GET /api/calls/incoming`, `GET /api/calls/<id>` y `accept`/`decline`/`cancel`/`end`). Migración `e5a8c2d4f6b1` (tabla `calls`). Variables solo del servidor: `CALLS_ENABLED`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `CALL_RING_SECONDS`. Sin tiempo real: el cliente consulta el estado. Suena solo con la app o la web abiertas (sin push de llamada). **No probado contra LiveKit real ni en un teléfono.**
+> **v0.80 — llamadas y videollamadas 1 a 1 con LiveKit Cloud (decisión del equipo, 2026-10-20, **sin ADR redactado**; detrás de `CALLS_ENABLED`):** 7 rutas nuevas en §4.48 (`POST /api/calls`, `GET /api/calls/incoming`, `GET /api/calls/<id>` y `accept`/`decline`/`cancel`/`end`). Migración `e5a8c2d4f6b1` (tabla `calls`). Variables solo del servidor: `CALLS_ENABLED`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `CALL_RING_SECONDS`. Sin tiempo real: el cliente consulta el estado. Suena solo con la app o la web abiertas (sin push de llamada). **No probado contra LiveKit real ni en un teléfono.**
+>
+> **v0.79 — hasta 10 fotos por publicación (`ADR-039`, decisión del propietario, 2026-10-20):** `POST /api/posts` acepta hasta **10** archivos en el campo `images` (antes 4); con 11 o más responde `400 {"msg": "Puedes adjuntar como máximo 10 imágenes"}` y no guarda nada. El techo HTTP de esa petición multipart sube a 52 MiB (10 imágenes de 5 MiB más el sobrecoste del formato). Mensajes (1 imagen), historias y fotos de reseñas no cambian. Sin migración. Los clientes muestran varias fotos como carrusel.
+>
+> **v0.78 — los Reels se publican sin revisión y la subida es pública (decisión del propietario, 2026-10-20, ADR pendiente de redactar):** un Reel queda `approved` en cuanto Mux lo deja `ready` (`moderation_decided_by = 'auto'`) y ya no entra a la cola del panel; lo ven de inmediato quienes pueden verlo. `POST /api/videos/uploads` ya **no depende** de `MODERATION_ENABLED`, de `MODERATION_CLASSIFIER` ni de `VIDEO_UPLOAD_ALLOWLIST`: puede subir cualquier cuenta con sesión y perfil completo (el límite de 10 reservas al día se mantiene). **Esto retira la condición de seguridad infantil de `ADR-044` §3 para la subida pública de video; queda asumido por el propietario y sin ratificar por el equipo.** Siguen vigentes los reportes (`ADR-032`/`ADR-038`), la retención desde el panel y las apelaciones. Sin endpoints nuevos ni migración. Los Reels que ya estaban retenidos siguen su curso.
 >
 > **v0.77 — las historias se publican sin revisión (decisión del propietario, 2026-10-20, ADR pendiente de redactar):** `POST /api/stories` crea la historia `approved` aunque `MODERATION_ENABLED` esté encendido y no la manda a la cola del panel (`ADR-044`): las seguidoras y seguidores la ven de inmediato y puede seguir reportándose (`ADR-032`). Sin endpoints nuevos ni migración. Las historias que ya estaban `pending` siguen su curso (expiran a las 24 h). Las publicaciones y los reels no cambian.
 >
@@ -2754,7 +2758,7 @@ Todas exigen `Authorization: Bearer <token>`. Una historia dura **24 horas** (`e
 
 ## 4.40 Reels con Mux (`ADR-043`, `ADR-043-A`) — v0.65
 
-**PROPUESTO, sin ratificar.** Todas las rutas responden `404 {"msg": "Recurso no encontrado"}` con `VIDEOS_ENABLED` apagado, antes de autenticar. **Cambio 2026-10-18 (D3, decisión del propietario, ADR pendiente de redactar):** `POST /api/videos/uploads` deja de limitarse a `VIDEO_UPLOAD_ALLOWLIST` cuando `MODERATION_ENABLED` está encendido y `MODERATION_CLASSIFIER` no es `fake` (todo queda retenido hasta que una persona lo aprueba). Con la moderación apagada o con el clasificador simulado, sigue valiendo solo la lista; el resto recibe `404`.
+**PROPUESTO, sin ratificar.** Todas las rutas responden `404 {"msg": "Recurso no encontrado"}` con `VIDEOS_ENABLED` apagado, antes de autenticar. **Cambio 2026-10-20 (D3, decisión del propietario, ADR pendiente de redactar; sustituye al del 2026-10-18):** `POST /api/videos/uploads` está abierto a toda cuenta con sesión y perfil completo, sin depender de `MODERATION_ENABLED`, `MODERATION_CLASSIFIER` ni `VIDEO_UPLOAD_ALLOWLIST`; y un Reel se publica (`approved`) en cuanto Mux lo deja `ready`, sin revisión humana. Hasta el 2026-10-19 la apertura exigía que todo quedara retenido hasta que una persona lo aprobara (`ADR-044` §3, seguridad infantil).
 
 | Método y ruta | Auth | Qué hace |
 |---|---|---|
@@ -2787,7 +2791,7 @@ Exigen sesión (`401`) y `STORIES_ENABLED` (apagado → `404`).
 
 **Publicaciones con audiencia (`ADR-054`) — v0.74.** `POST /api/posts` acepta `audience` (`everyone` por defecto, o `close_friends`; en JSON o en el formulario multipart): `400` si es otro valor o si es `close_friends` con `STORIES_ENABLED` apagado. El `post` devuelto lleva `audience`. Una publicación `close_friends` solo la ven su autora y las personas de su lista (además de cumplir cuentas privadas y bloqueos): en `GET /api/posts` (feed, perfil, explorar, guardados) no aparece para las demás, y `GET`/`POST` de sus comentarios, `POST`/`DELETE .../like`, `POST .../save` y los reportes responden `404 Post no encontrado`. Quitar a alguien de la lista le oculta también lo ya publicado. Las menciones de esa publicación y de sus comentarios solo se resuelven para personas de la lista.
 
-## 4.48 Llamadas y videollamadas 1 a 1 (LiveKit) — v0.78
+## 4.48 Llamadas y videollamadas 1 a 1 (LiveKit) — v0.80
 
 Exigen sesión (`401`). Con `CALLS_ENABLED` apagado o sin las tres variables de LiveKit, `POST /api/calls` y `accept` responden `503 {"code": "calls_disabled"}`; `GET /api/calls/incoming` responde `{"call": null}` (para que un cliente que consulta no llene de errores a quien no las usa). El audio y el video **no pasan por la API**: van directo a LiveKit con el token que entrega el servidor.
 
