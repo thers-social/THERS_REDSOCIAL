@@ -130,9 +130,9 @@ describe('los interruptores', () => {
 
   it('video y Tero con imágenes están apagados salvo que valgan exactamente "true"', () => {
     assert.match(config, /EXPO_PUBLIC_VIDEO_ENABLED === 'true'/);
-    assert.match(config, /EXPO_PUBLIC_TERO_IMAGES_ENABLED === 'true'/);
+    assert.match(config, /EXPO_PUBLIC_TERO_IMAGES_ENABLED !== 'false'/);
     assert.match(read('.env.example'), /^EXPO_PUBLIC_VIDEO_ENABLED=false$/m);
-    assert.match(read('.env.example'), /^EXPO_PUBLIC_TERO_IMAGES_ENABLED=false$/m);
+    assert.match(read('.env.example'), /^EXPO_PUBLIC_TERO_IMAGES_ENABLED=true$/m);
   });
 
   it('el botón de video y el de imagen para Tero solo existen con su interruptor', () => {

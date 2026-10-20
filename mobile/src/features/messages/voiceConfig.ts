@@ -8,5 +8,8 @@
  */
 export const VOICE_ENABLED = process.env.EXPO_PUBLIC_VOICE_ENABLED === 'true';
 
-/** Dictado para Tero (`ADR-042` §1.2): independiente del anterior. */
-export const TERO_VOICE_ENABLED = process.env.EXPO_PUBLIC_TERO_VOICE_ENABLED === 'true';
+/**
+ * Dictado para Tero (`ADR-042` §1.2): independiente del anterior. Encendido salvo que valga exactamente
+ * `false` (2026-10-20): lo hace el teléfono, THERS no recibe el audio.
+ */
+export const TERO_VOICE_ENABLED = process.env.EXPO_PUBLIC_TERO_VOICE_ENABLED !== 'false';

@@ -100,8 +100,8 @@ describe('privacidad y control', () => {
     assert.match(button, /ExpoSpeechRecognitionModule\.abort\(\)/);
   });
 
-  it('está apagado salvo que EXPO_PUBLIC_TERO_VOICE_ENABLED valga exactamente "true"', () => {
-    assert.match(read('src/features/messages/voiceConfig.ts'), /EXPO_PUBLIC_TERO_VOICE_ENABLED === 'true'/);
+  it('está encendido salvo que EXPO_PUBLIC_TERO_VOICE_ENABLED valga exactamente "false"', () => {
+    assert.match(read('src/features/messages/voiceConfig.ts'), /EXPO_PUBLIC_TERO_VOICE_ENABLED !== 'false'/);
     assert.match(screen, /TERO_VOICE_ENABLED \? \(\s*<TeroDictationButton/);
   });
 

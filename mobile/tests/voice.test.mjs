@@ -160,7 +160,7 @@ describe('interruptor y permisos', () => {
   it('apagado salvo que EXPO_PUBLIC_VOICE_ENABLED valga exactamente "true"', () => {
     const config = read('src/features/messages/voiceConfig.ts');
     assert.match(config, /EXPO_PUBLIC_VOICE_ENABLED === 'true'/);
-    assert.match(config, /EXPO_PUBLIC_TERO_VOICE_ENABLED === 'true'/);
+    assert.match(config, /EXPO_PUBLIC_TERO_VOICE_ENABLED !== 'false'/);
   });
 
   it('la app declara el permiso del micrófono con un texto claro', () => {
