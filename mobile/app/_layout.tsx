@@ -4,18 +4,23 @@ import {
   SpaceGrotesk_700Bold,
   useFonts,
 } from '@expo-google-fonts/space-grotesk';
+import { registerGlobals } from '@livekit/react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@features/auth/context/AuthContext';
+import { CallProvider } from '@features/calls/CallContext';
 import { PushBridge } from '@features/push/usePushNotifications';
 import { PostsProvider } from '@features/posts/PostsContext';
 import { TeroProvider } from '@features/tero/context/TeroContext';
 import { colors, setColorScheme } from '@shared/design/tokens';
 import { LanguageProvider } from '@shared/i18n';
 import { BrandSplash } from '@shared/ui/BrandSplash';
+
+// LiveKit (llamadas): registra los globales de WebRTC una sola vez, antes de usar cualquier sala.
+registerGlobals();
 
 /**
  * Layout raíz. Monta los proveedores una sola vez para toda la app.
@@ -56,13 +61,16 @@ export default function RootLayout() {
               <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
               {/* Notificaciones push (ADR-053): registra el teléfono y atiende los toques. */}
               <PushBridge />
-              <Stack
-                key={scheme}
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: colors.bg },
-                }}
-              />
+              {/* Llamadas y videollamadas 1 a 1: la llamada se dibuja por encima de la navegación. */}
+              <CallProvider>
+                <Stack
+                  key={scheme}
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: colors.bg },
+                  }}
+                />
+              </CallProvider>
             </TeroProvider>
           </PostsProvider>
         </AuthProvider>

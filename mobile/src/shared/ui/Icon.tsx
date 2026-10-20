@@ -38,6 +38,7 @@ export type IconName =
   | 'pin'
   | 'locate'
   | 'phone'
+  | 'video'
   | 'mic'
   | 'play'
   | 'pause'
@@ -80,6 +81,12 @@ export function Icon({ name, size = 24, color, filled = false }: Props) {
     >
       {name === 'home' ? (
         <Path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" {...stroke} />
+      ) : null}
+      {name === 'video' ? (
+        <>
+          <Rect x="2" y="6" width="14" height="12" rx="3" {...line} />
+          <Path d="m16 10.5 5-3v9l-5-3z" {...line} />
+        </>
       ) : null}
       {name === 'check' ? <Path d="m5 12.5 4.5 4.5L19 7" {...line} /> : null}
       {name === 'reels' ? (

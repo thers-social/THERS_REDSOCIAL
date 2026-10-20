@@ -11,6 +11,7 @@ import CreateCapsuleFlow from "@features/feed/components/CreateCapsuleFlow";
 import { mapNotification } from "@features/feed/lib/mapNotification";
 
 import { TERO_ENABLED } from "@features/tero/config";
+import { CallProvider } from "@features/calls";
 
 // Tero (ADR-041): solo se descarga si el interruptor está encendido; con VITE_TERO_ENABLED
 // apagado no pesa nada en el bundle de la app.
@@ -490,6 +491,7 @@ export default function AppShell() {
   const shellVariant = shellVariantFor(location.pathname);
 
   return (
+    <CallProvider>
     <ShellFrame
       variant={shellVariant}
       currentUser={currentUser}
@@ -549,5 +551,6 @@ export default function AppShell() {
         </Suspense>
       )}
     </ShellFrame>
+    </CallProvider>
   );
 }

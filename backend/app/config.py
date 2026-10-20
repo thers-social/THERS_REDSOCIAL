@@ -313,6 +313,15 @@ Config.FCM_SERVICE_ACCOUNT_FILE = (os.environ.get("FCM_SERVICE_ACCOUNT_FILE") or
 Config.FCM_SERVICE_ACCOUNT_JSON = (os.environ.get("FCM_SERVICE_ACCOUNT_JSON") or "").strip() or None
 # Videos cortos en publicaciones y mensajes (ADR-046). Apagado por defecto: re-codificar video cuesta CPU.
 Config.VIDEO_UPLOADS_ENABLED = _flag_env("VIDEO_UPLOADS_ENABLED")
+# Llamadas y videollamadas 1 a 1 por LiveKit Cloud. Apagado por defecto: sin CALLS_ENABLED y sin las tres
+# variables de LiveKit, todo `/api/calls` responde 503 `calls_disabled`. LIVEKIT_API_SECRET es un SECRETO
+# del servidor (nunca va al cliente ni al repositorio); LIVEKIT_URL es la URL pública `wss://...`.
+Config.CALLS_ENABLED = _flag_env("CALLS_ENABLED")
+Config.LIVEKIT_URL = (os.environ.get("LIVEKIT_URL") or "").strip() or None
+Config.LIVEKIT_API_KEY = (os.environ.get("LIVEKIT_API_KEY") or "").strip() or None
+Config.LIVEKIT_API_SECRET = (os.environ.get("LIVEKIT_API_SECRET") or "").strip() or None
+# Cuánto suena una llamada antes de darse por perdida.
+Config.CALL_RING_SECONDS = int(_positive_float_env("CALL_RING_SECONDS", 30.0))
 # Moderación de contenido (ADR-044). Apagada por defecto: con ella apagada todo se publica como
 # siempre. Encendida, lo nuevo espera revisión y solo se ve `approved`. NO encender para el público
 # sin cola atendida (ADR-044, decisión D5 de la matriz de aprobación).

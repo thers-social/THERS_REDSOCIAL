@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import Icon from "@shared/components/Icon";
 import Spinner from "@shared/components/Spinner";
 import { api, getErrorMessage } from "@shared/lib/api";
@@ -96,7 +97,11 @@ export default function SuggestedPeopleCard() {
             const status = statuses[person.id] ?? null;
             return (
               <li key={person.id} className="flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
+                <Link
+                  to={`/user/${person.id}`}
+                  aria-label={`Ver el perfil de ${person.name}`}
+                  className="flex min-w-0 items-center gap-2 rounded-th-card th-focus-ring"
+                >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-th-pill bg-th-surface-raised text-label-md font-bold text-th-fg-muted">
                     {initialsOf(person)}
                   </span>
@@ -106,7 +111,7 @@ export default function SuggestedPeopleCard() {
                     </p>
                     <p className="truncate text-label-md text-th-fg-muted">@{person.username}</p>
                   </div>
-                </div>
+                </Link>
 
                 <button
                   type="button"

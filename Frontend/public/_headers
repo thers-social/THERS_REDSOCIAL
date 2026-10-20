@@ -7,7 +7,9 @@
   Referrer-Policy: strict-origin-when-cross-origin
   # geolocation=(self): THERS Places pide la ubicación SOLO cuando la persona pulsa «Usar mi ubicación»
   # (ADR-040 §6). Con `geolocation=()` el navegador la bloquearía siempre en la web desplegada.
-  Permissions-Policy: camera=(), microphone=(), geolocation=(self), payment=()
+  # camera/microphone=(self): las llamadas y videollamadas 1 a 1 (LiveKit) piden el micrófono y la cámara SOLO
+  # cuando la persona llama o contesta. Con `()` el navegador los bloquearía siempre en la web desplegada.
+  Permissions-Policy: camera=(self), microphone=(self), geolocation=(self), payment=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   # CSP en modo SOLO INFORME: no bloquea nada, solo reporta en la consola del navegador.
   # Revisar violaciones en staging (Google Fonts, Google Identity, imágenes del bucket) y,
