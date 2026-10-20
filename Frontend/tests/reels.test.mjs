@@ -17,11 +17,22 @@ import {
   validateCaption,
   validateDuration,
   validateFile,
+  commentErrorMessage,
+  formatClock,
+  formatCount,
+  mostVisibleIndex,
+  progressFraction,
+  reelUrl,
+  seekTarget,
+  withLike,
+  withSaved,
 } from '../src/features/videos/lib/reelsLogic.js';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf-8');
 const page = read('src/features/videos/pages/Reels.jsx');
 const player = read('src/features/videos/components/ReelPlayer.jsx');
+const slide = read('src/features/videos/components/ReelSlide.jsx');
+const comments = read('src/features/videos/components/ReelComments.jsx');
 const api = read('src/features/videos/lib/videosApi.js');
 const videosRoute = read('src/features/feed/pages/Videos.jsx');
 
@@ -147,7 +158,108 @@ describe('seguridad y comportamiento de la pantalla', () => {
 
   it('la ruta /videos usa Reels y no dibuja nada que el servidor no haya entregado', () => {
     assert.match(videosRoute, /<Reels \/>/);
-    assert.match(page, /canPlay\(video\) \?/);
-    assert.ok(!/storage_key|mux_/.test(page + player + api), 'no debe leer identificadores de Mux');
+    assert.match(slide, /near && playable \?/);
+    assert.match(slide, /const playable = canPlay\(video\)/);
+    assert.ok(!/storage_key|mux_/.test(page + player + slide + comments + api), 'no debe leer identificadores de Mux');
+  });
+});
+
+describe('Reels de pantalla completa (ADR-055)', () => {
+  it('abrevia los contadores', () => {
+    assert.equal(formatCount(0), '0');
+    assert.equal(formatCount(999), '999');
+    assert.equal(formatCount(1000), '1K');
+    assert.equal(formatCount(1250), '1.2K');
+    assert.equal(formatCount(15_300), '15.3K');
+    assert.equal(formatCount(2_000_000), '2M');
+    assert.equal(formatCount(undefined), '0');
+    assert.equal(formatCount(-4), '0');
+  });
+
+  it('da formato al reloj de la barra de progreso', () => {
+    assert.equal(formatClock(0), '0:00');
+    assert.equal(formatClock(7.9), '0:07');
+    assert.equal(formatClock(65), '1:05');
+    assert.equal(formatClock(NaN), '0:00');
+  });
+
+  it('calcula la fracción reproducida sin salirse de 0–1', () => {
+    assert.equal(progressFraction(15, 60), 0.25);
+    assert.equal(progressFraction(90, 60), 1);
+    assert.equal(progressFraction(-3, 60), 0);
+    assert.equal(progressFraction(5, NaN), 0);
+    assert.equal(progressFraction(5, 0), 0);
+  });
+
+  it('adelantar y atrasar se queda dentro del video', () => {
+    assert.equal(seekTarget(10, 5, 60), 15);
+    assert.equal(seekTarget(3, -5, 60), 0);
+    assert.equal(seekTarget(58, 5, 60), 60);
+    assert.equal(seekTarget(10, 5, NaN), 15);
+  });
+
+  it('el me gusta optimista cambia estado y contador una sola vez', () => {
+    const video = { liked_by_me: false, likes_count: 4 };
+    const liked = withLike(video, true);
+    assert.deepEqual([liked.liked_by_me, liked.likes_count], [true, 5]);
+    assert.equal(withLike(liked, true), liked, 'repetir no suma de nuevo');
+    const unliked = withLike(liked, false);
+    assert.deepEqual([unliked.liked_by_me, unliked.likes_count], [false, 4]);
+    assert.equal(withLike({ liked_by_me: false, likes_count: 0 }, false).likes_count, 0);
+    assert.equal(withSaved({ saved_by_me: false }, true).saved_by_me, true);
+  });
+
+  it('el Reel activo es el más visible y solo si pasa del umbral', () => {
+    assert.equal(mostVisibleIndex([{ index: 0, ratio: 0.3 }, { index: 1, ratio: 0.7 }]), 1);
+    assert.equal(mostVisibleIndex([{ index: 0, ratio: 0.5 }, { index: 1, ratio: 0.5 }]), -1);
+    assert.equal(mostVisibleIndex([{ index: 2, ratio: 0.6 }, { index: 3, ratio: 0.9 }]), 3);
+    assert.equal(mostVisibleIndex([]), -1);
+  });
+
+  it('el enlace para compartir lleva el id codificado', () => {
+    assert.equal(reelUrl('https://staging.thersweb.com', 'abc-123'), 'https://staging.thersweb.com/videos?v=abc-123');
+  });
+
+  it('explica los errores al comentar', () => {
+    assert.match(commentErrorMessage({ response: { status: 429 } }), /muy rápido/);
+    assert.match(commentErrorMessage({ response: { status: 404 } }), /ya no está disponible/);
+    assert.equal(commentErrorMessage({ response: { status: 400, data: { msg: 'vacío' } } }), 'vacío');
+    assert.match(commentErrorMessage(new Error('red')), /No se pudo publicar/);
+  });
+
+  it('un Reel ocupa todo el escenario y se engancha al desplazarse', () => {
+    assert.match(page, /snap-y snap-mandatory/);
+    assert.match(slide + page, /snap-start snap-always/);
+    assert.match(page, /IntersectionObserver/);
+  });
+
+  it('solo el Reel activo suena y los lejanos no montan reproductor', () => {
+    assert.match(page, /near=\{Math\.abs\(index - active\) <= 1\}/);
+    assert.match(slide, /if \(active\) \{/);
+    assert.match(slide, /el\.pause\(\)/);
+  });
+
+  it('ofrece pausa, barra para adelantar y atrasar, silencio, me gusta, guardar, comentar y compartir', () => {
+    assert.match(slide, /type="range"/);
+    assert.match(slide, /aria-label="Posición del video"/);
+    assert.match(slide, /togglePlay/);
+    assert.match(slide, /aria-label="Comentarios"|label="Comentarios"/);
+    assert.match(slide, /icon="bookmark"/);
+    assert.match(slide, /icon="share"/);
+    assert.match(slide, /Activar sonido/);
+  });
+
+  it('el doble toque da me gusta pero nunca lo quita', () => {
+    assert.match(slide, /if \(!video\.liked_by_me\) onLike\(video\)/);
+  });
+
+  it('revierte el me gusta si el servidor falla', () => {
+    assert.match(page, /withLike\(v, !next\)/);
+  });
+
+  it('los comentarios se piden por la API de Reels y limitan el texto', () => {
+    assert.match(comments, /MAX_COMMENT = 1000/);
+    assert.match(comments, /fetchComments\(videoId/);
+    assert.match(api, /`\/videos\/\$\{id\}\/comments`/);
   });
 });
