@@ -9,7 +9,7 @@ import type { PickedMedia } from './mediaRules';
  * selección y el aviso de «ocupado» mientras el sistema abre el selector. Las fotos y el video son
  * excluyentes (el servidor lo exige igual): con un video no se pueden añadir fotos, y viceversa.
  *
- * `maxImages`: cuántas fotos se permiten (4 en publicaciones, 1 en mensajes).
+ * `maxImages`: cuántas fotos se permiten (10 en publicaciones, 1 en mensajes).
  */
 export function useMediaAttachments({ maxImages }: { maxImages: number }) {
   const [items, setItems] = useState<PickedMedia[]>([]);

@@ -123,7 +123,7 @@ def create():
     author_id = get_jwt_identity()
 
     # JSON (como siempre) o multipart con imágenes en el campo `images` (ADR-039).
-    data, files = read_request_data()
+    data, files = read_request_data(max_images=MAX_POST_IMAGES)
     # Video corto (ADR-046): campo `video` de la misma petición multipart (un solo archivo).
     video_upload = read_video_upload()
     if not data and not files and video_upload is None:

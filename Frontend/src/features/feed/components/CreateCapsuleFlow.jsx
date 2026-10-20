@@ -12,14 +12,14 @@ import useVideoAttachment from "@shared/hooks/useVideoAttachment";
 import { VIDEO_ENABLED } from "@shared/lib/videoAttachments";
 
 // POST /api/posts (ADR-004-posts-minimal-model.md) acepta `content`, desde
-// ADR-030 `is_sensitive` y, desde ADR-039, hasta 4 imágenes -- mood/ubicación
+// ADR-030 `is_sensitive` y, desde ADR-039, hasta 10 imágenes -- mood/ubicación
 // que este composer ofrecía antes no tienen dónde persistirse todavía, así que
 // se quitan del formulario en vez de dejar que la persona los llene y se pierdan
 // en silencio (peor que no mostrarlos). Vuelven cuando cada uno tenga su propio
 // ADR/columna. Los hashtags no necesitan campo: se escriben en el texto
 // (`#viajes`) y es ahí donde los reconocen los temas silenciados.
 const MAX_CONTENT_LENGTH = 2000;
-const MAX_IMAGES = 4;
+const MAX_IMAGES = 10;
 const MAX_IMAGE_SIDE = 1600;
 
 export default function CreateCapsuleFlow({ currentUser, onClose, onSubmit }) {

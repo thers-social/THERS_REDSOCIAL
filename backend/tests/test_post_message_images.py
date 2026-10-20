@@ -113,20 +113,20 @@ class TestPostImages:
 
         assert (image["width"], image["height"]) == (100, 50)
 
-    def test_up_to_four_images_keep_their_order(self, client):
+    def test_up_to_ten_images_keep_their_order(self, client):
         token, *_ = _setup(client)
-        sizes = [(10, 10), (20, 10), (30, 10), (40, 10)]
+        sizes = [(10 * n, 10) for n in range(1, 11)]
 
         response = _post(client, token, "x", [_upload(_png(w, h)) for w, h in sizes])
 
         assert response.status_code == 201
         widths = [image["width"] for image in response.get_json()["post"]["images"]]
-        assert widths == [10, 20, 30, 40]
+        assert widths == [10 * n for n in range(1, 11)]
 
-    def test_more_than_four_images_is_rejected_and_stores_nothing(self, client):
+    def test_more_than_ten_images_is_rejected_and_stores_nothing(self, client):
         token, *_ = _setup(client)
 
-        response = _post(client, token, "x", [_upload(_png()) for _ in range(5)])
+        response = _post(client, token, "x", [_upload(_png()) for _ in range(11)])
 
         assert response.status_code == 400
         assert _stored_files() == []

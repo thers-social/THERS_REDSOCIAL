@@ -8,7 +8,7 @@ import type { PublicVideo } from '@shared/media/VideoPlayerView';
  * Fuente única: `docs/architecture/API_CONTRACT.md` §4.3 (publicaciones), §4.4
  * (me gusta), §4.5 (comentarios), §4.6 (seguidos). Se verificaron además contra
  * los presentadores reales del backend (`post_presenter.py`,
- * `comment_presenter.py`). Una publicación puede llevar hasta 4 fotos (`ADR-039`) o un video corto
+ * `comment_presenter.py`). Una publicación puede llevar hasta 10 fotos (`ADR-039`) o un video corto
  * (`ADR-046`), nunca las dos cosas.
  */
 

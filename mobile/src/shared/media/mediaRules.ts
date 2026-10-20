@@ -11,7 +11,7 @@
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
 export const MAX_VIDEO_SECONDS = 60;
-export const MAX_POST_IMAGES = 4;
+export const MAX_POST_IMAGES = 10;
 export const MAX_MESSAGE_IMAGES = 1;
 /** Tope de lo que se manda a Tero (la imagen viaja en base64 dentro del JSON). */
 export const MAX_TERO_IMAGE_BYTES = 3 * 1024 * 1024;

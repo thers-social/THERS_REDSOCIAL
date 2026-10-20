@@ -16,7 +16,7 @@ export async function fetchPosts(signal?: AbortSignal): Promise<Post[]> {
 }
 
 /**
- * Publica. Sin archivos manda JSON, como siempre; con fotos (campo `images`, hasta 4) o con un video
+ * Publica. Sin archivos manda JSON, como siempre; con fotos (campo `images`, hasta 10) o con un video
  * (campo `video`, `ADR-046`) manda `multipart/form-data`. El texto puede ir vacío si hay archivos.
  */
 export async function createPost(
