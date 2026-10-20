@@ -106,6 +106,9 @@ def create_app():
 
     from app.interfaces.routes.message_routes import messages_bp
     app.register_blueprint(messages_bp, url_prefix="/api")
+    # Llamadas y videollamadas 1 a 1 por LiveKit: apagadas por defecto (CALLS_ENABLED).
+    from app.interfaces.routes.call_routes import calls_bp
+    app.register_blueprint(calls_bp, url_prefix="/api")
     from app.interfaces.routes.group_routes import groups_bp
     app.register_blueprint(groups_bp, url_prefix="/api")
 

@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.77 (Propuesta) |
+| Versión | 0.78 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -70,6 +70,8 @@
 > **v0.60 — Tero, fase 7, automatizaciones con n8n (`ADR-041` §7, **ACEPTADO**):** `PATCH /api/users/me/privacy` acepta `weekly_summary_email` (booleano, apagado por defecto) y `GET` lo devuelve; dos rutas internas **firmadas con HMAC, no con JWT**, que solo usa n8n (§4.38); y el cierre de un reporte (`POST /api/moderation/reports/<id>/resolve`) ahora puede encargar un correo genérico a quien reportó (sin cambiar su respuesta). Variables nuevas, solo del servidor: `TERO_AUTOMATIONS_ENABLED`, `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, `N8N_TIMEOUT_SECONDS`, `N8N_MAX_RETRIES`. Una migración (`d7a3f1c8e254`: dos columnas en `users`).
 >
 > **v0.76 — interacciones de Reels (`ADR-055`, **PROPUESTO**, detrás de `VIDEOS_ENABLED`):** 7 rutas nuevas en §4.40 (`GET /api/videos/saved`, `POST`/`DELETE` de `like` y `save`, `GET`/`POST` de `comments` y `DELETE` de un comentario). Cada Reel añade `likes_count`, `comments_count`, `liked_by_me`, `saved_by_me` y `author.is_following`. Migración `d4f7b1c3e9a5`.
+>
+> **v0.78 — llamadas y videollamadas 1 a 1 con LiveKit Cloud (decisión del equipo, 2026-10-20, **sin ADR redactado**; detrás de `CALLS_ENABLED`):** 7 rutas nuevas en §4.48 (`POST /api/calls`, `GET /api/calls/incoming`, `GET /api/calls/<id>` y `accept`/`decline`/`cancel`/`end`). Migración `e5a8c2d4f6b1` (tabla `calls`). Variables solo del servidor: `CALLS_ENABLED`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `CALL_RING_SECONDS`. Sin tiempo real: el cliente consulta el estado. Suena solo con la app o la web abiertas (sin push de llamada). **No probado contra LiveKit real ni en un teléfono.**
 >
 > **v0.77 — las historias se publican sin revisión (decisión del propietario, 2026-10-20, ADR pendiente de redactar):** `POST /api/stories` crea la historia `approved` aunque `MODERATION_ENABLED` esté encendido y no la manda a la cola del panel (`ADR-044`): las seguidoras y seguidores la ven de inmediato y puede seguir reportándose (`ADR-032`). Sin endpoints nuevos ni migración. Las historias que ya estaban `pending` siguen su curso (expiran a las 24 h). Las publicaciones y los reels no cambian.
 >
@@ -2785,3 +2787,20 @@ Exigen sesión (`401`) y `STORIES_ENABLED` (apagado → `404`).
 
 **Publicaciones con audiencia (`ADR-054`) — v0.74.** `POST /api/posts` acepta `audience` (`everyone` por defecto, o `close_friends`; en JSON o en el formulario multipart): `400` si es otro valor o si es `close_friends` con `STORIES_ENABLED` apagado. El `post` devuelto lleva `audience`. Una publicación `close_friends` solo la ven su autora y las personas de su lista (además de cumplir cuentas privadas y bloqueos): en `GET /api/posts` (feed, perfil, explorar, guardados) no aparece para las demás, y `GET`/`POST` de sus comentarios, `POST`/`DELETE .../like`, `POST .../save` y los reportes responden `404 Post no encontrado`. Quitar a alguien de la lista le oculta también lo ya publicado. Las menciones de esa publicación y de sus comentarios solo se resuelven para personas de la lista.
 
+## 4.48 Llamadas y videollamadas 1 a 1 (LiveKit) — v0.78
+
+Exigen sesión (`401`). Con `CALLS_ENABLED` apagado o sin las tres variables de LiveKit, `POST /api/calls` y `accept` responden `503 {"code": "calls_disabled"}`; `GET /api/calls/incoming` responde `{"call": null}` (para que un cliente que consulta no llene de errores a quien no las usa). El audio y el video **no pasan por la API**: van directo a LiveKit con el token que entrega el servidor.
+
+| Ruta | Descripción |
+|---|---|
+| `POST /api/calls` | Cuerpo `{user_id, kind}` con `kind` `audio` o `video`. `201 {call, access}`. `400` cuerpo inválido o eres tú, `403` si la persona no acepta mensajes tuyos (`who_can_message`), `404` si no existe o te bloqueó, `409` si tú bloqueaste a esa cuenta, `409 {"code": "busy"}` si tú o la otra persona ya estáis en una llamada, `429` límite de 30 por hora, `503 calls_disabled`. Exige perfil completo. |
+| `GET /api/calls/incoming` | `{call}`: la llamada que está sonando para ti, o `null`. Un cliente la consulta cada pocos segundos. |
+| `GET /api/calls/<uuid>` | `{call}`. Solo quien llama o recibe (`404` para cualquier otra persona). Una llamada que sonó más de `CALL_RING_SECONDS` (30 por defecto) pasa a `missed`; una contestada hace más de 4 horas, a `ended`. |
+| `POST /api/calls/<uuid>/accept` | Solo la persona llamada. `200 {call, access}` y la llamada pasa a `active`. `409 {"code": "call_state"}` si ya no suena. |
+| `POST /api/calls/<uuid>/decline` | Solo la persona llamada. `200 {call}` con `declined`. |
+| `POST /api/calls/<uuid>/cancel` | Solo quien llama, mientras suena. `200 {call}` con `cancelled`. |
+| `POST /api/calls/<uuid>/end` | Cualquiera de las dos. Idempotente. `200 {call}` con `ended` (o `cancelled` si quien llamó cuelga mientras suena). |
+
+`call`: `{id, kind, status, direction, caller, callee, created_at, answered_at, ended_at}`; `status` es `ringing`, `active`, `declined`, `cancelled`, `missed` o `ended`; `direction` es `outgoing` si la inició quien consulta, `incoming` si no; `caller` y `callee` son `{id, name, username, avatar_url}`.
+
+`access`: `{token, url, room}`. `token` es un JWT de LiveKit firmado en el servidor (HS256), de una sola sala, con `canPublish`/`canSubscribe`, válido 2 horas. `url` es la URL pública `wss://...` del proyecto. **El API secret de LiveKit nunca viaja al cliente.**

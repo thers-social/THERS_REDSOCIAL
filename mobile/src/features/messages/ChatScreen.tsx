@@ -5,6 +5,7 @@ import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@features/auth/context/AuthContext';
+import { useCalls } from '@features/calls/CallContext';
 import { MAX_MESSAGE_LENGTH } from './api';
 import type { ChatTarget } from './api';
 import type { LocalMessage } from './chatState';
@@ -29,6 +30,7 @@ import { VideoPlayerView } from '@shared/media/VideoPlayerView';
 import { ActionSheet } from '@shared/ui/ActionSheet';
 import type { SheetAction } from '@shared/ui/ActionSheet';
 import { Avatar } from '@shared/ui/Avatar';
+import { Icon } from '@shared/ui/Icon';
 import { Banner } from '@shared/ui/Banner';
 import { EditTextModal } from '@shared/ui/EditTextModal';
 import { Screen } from '@shared/ui/Screen';
@@ -49,6 +51,7 @@ type Props = ChatTarget & {
  */
 export function ChatScreen({ kind, id: userId, name, username, avatar }: Props) {
   const isGroup = kind === 'group';
+  const { enabled: callsEnabled, inCall, startCall } = useCalls();
   const router = useRouter();
   const openProfile = useOpenProfile();
   const { user } = useAuth();
@@ -205,18 +208,44 @@ export function ChatScreen({ kind, id: userId, name, username, avatar }: Props) 
       scroll={false}
       headerRight={
         chat.state === 'unavailable' ? null : (
-          <Pressable
-            onPress={() =>
-              isGroup
-                ? router.push({ pathname: '/group/info/[groupId]', params: { groupId: userId, name: displayName } })
-                : setHeaderMenu(true)
-            }
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel={isGroup ? 'Información del grupo' : 'Más opciones de la conversación'}
-          >
-            <Text style={styles.headerMenu}>⋯</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            {callsEnabled && !isGroup ? (
+              <>
+                <Pressable
+                  onPress={() => startCall(userId, 'audio')}
+                  disabled={inCall}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Llamar a ${displayName}`}
+                  style={inCall ? styles.headerActionOff : null}
+                >
+                  <Icon name="phone" size={22} color={colors.fgMuted} />
+                </Pressable>
+                <Pressable
+                  onPress={() => startCall(userId, 'video')}
+                  disabled={inCall}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Videollamada con ${displayName}`}
+                  style={inCall ? styles.headerActionOff : null}
+                >
+                  <Icon name="video" size={22} color={colors.fgMuted} />
+                </Pressable>
+              </>
+            ) : null}
+            <Pressable
+              onPress={() =>
+                isGroup
+                  ? router.push({ pathname: '/group/info/[groupId]', params: { groupId: userId, name: displayName } })
+                  : setHeaderMenu(true)
+              }
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={isGroup ? 'Información del grupo' : 'Más opciones de la conversación'}
+            >
+              <Text style={styles.headerMenu}>⋯</Text>
+            </Pressable>
+          </View>
         )
       }
     >
@@ -466,6 +495,8 @@ function Bubble({
 }
 
 const styles = themedStyles(() => ({
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: space[4] },
+  headerActionOff: { opacity: 0.4 },
   headerMenu: { fontSize: 26, color: colors.fgMuted, lineHeight: 28, paddingHorizontal: space[1] },
   list: { padding: space[3], flexGrow: 1 },
   flip: { transform: [{ scaleY: -1 }] },

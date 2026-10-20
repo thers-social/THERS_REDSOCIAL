@@ -2812,3 +2812,44 @@ class CloseFriend(db.Model):
         # clave primaria; este índice cubre el sentido inverso («¿en cuántas listas estoy?»).
         Index("ix_close_friends_friend", "friend_id"),
     )
+
+
+# --- Llamadas y videollamadas 1 a 1 (LiveKit) ---
+
+
+class Call(db.Model):
+    __tablename__ = "calls"
+
+    # Una llamada entre dos personas. El audio y el video no pasan por aquí (van por LiveKit); esta fila
+    # solo guarda quién llama a quién, de qué tipo y en qué estado está. CASCADE: al borrar cualquiera de
+    # las dos cuentas desaparece la fila.
+    id = db.Column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    caller_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    callee_id = db.Column(
+        PG_UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind = db.Column(db.String(8), nullable=False)
+    status = db.Column(db.String(12), nullable=False, server_default=text("'ringing'"))
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    answered_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    ended_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("caller_id <> callee_id", name="ck_calls_no_self_call"),
+        CheckConstraint("kind IN ('audio', 'video')", name="ck_calls_kind"),
+        CheckConstraint(
+            "status IN ('ringing', 'active', 'declined', 'cancelled', 'missed', 'ended')",
+            name="ck_calls_status",
+        ),
+        Index("ix_calls_callee_status", "callee_id", "status"),
+        Index("ix_calls_caller_status", "caller_id", "status"),
+    )
+
+    @property
+    def room_name(self):
+        # Una sala por llamada: el nombre sale del id, no hace falta guardarlo.
+        return f"call-{self.id}"

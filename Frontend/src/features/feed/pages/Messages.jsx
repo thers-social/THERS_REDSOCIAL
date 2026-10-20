@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useOutletContext, useSearchParams } from "react-router-dom";
-import { IoSearchOutline, IoArrowBack, IoImageOutline, IoVideocamOutline, IoSend, IoChatbubblesOutline, IoTrashOutline, IoPencilOutline, IoPeopleOutline, IoInformationCircleOutline } from "react-icons/io5";
+import { IoSearchOutline, IoArrowBack, IoImageOutline, IoVideocamOutline, IoSend, IoChatbubblesOutline, IoTrashOutline, IoPencilOutline, IoPeopleOutline, IoInformationCircleOutline, IoCallOutline } from "react-icons/io5";
 import Avatar from "@shared/components/Avatar";
 import ConfirmDialog from "@shared/components/ConfirmDialog";
 import ImageAttachmentPicker from "@shared/components/ImageAttachmentPicker";
@@ -20,6 +20,7 @@ import { extensionFor, sendErrorKind } from "@shared/lib/voice";
 import { ACCEPTED_IMAGE_TYPES } from "@shared/lib/imageAttachments";
 import { api, getErrorMessage } from "@shared/lib/api";
 import { getStoredToken } from "@features/auth";
+import { useCalls } from "@features/calls";
 import { useToast } from "@shared/components/Toast";
 import { useLanguage } from "@shared/i18n";
 import { formatRelativeTime } from "../lib/formatRelativeTime";
@@ -76,6 +77,7 @@ export default function Messages() {
   const { currentUser, conversations, groups = [], onReloadConversations } = useOutletContext();
   const toast = useToast();
   const { t } = useLanguage();
+  const { enabled: callsEnabled, inCall, startCall } = useCalls();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [activeId, setActiveId] = useState(null);
@@ -523,6 +525,28 @@ export default function Messages() {
                     )
                   )}
                 </div>
+                {callsEnabled && (
+                  <div className="ml-auto flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => startCall(active.user, "audio")}
+                      disabled={inCall}
+                      aria-label={`Llamar a ${active.user.name}`}
+                      className="rounded-full p-2 text-muted transition hover:text-pulse-600 disabled:opacity-50"
+                    >
+                      <IoCallOutline size={20} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startCall(active.user, "video")}
+                      disabled={inCall}
+                      aria-label={`Videollamada con ${active.user.name}`}
+                      className="rounded-full p-2 text-muted transition hover:text-pulse-600 disabled:opacity-50"
+                    >
+                      <IoVideocamOutline size={20} />
+                    </button>
+                  </div>
+                )}
 
                   </>
                 )}

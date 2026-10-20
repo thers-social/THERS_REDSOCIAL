@@ -15,7 +15,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "ios": {
       "supportsTablet": false,
@@ -67,7 +72,9 @@
         }
       ],
       "expo-video",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "@livekit/react-native-expo-plugin",
+      "@livekit/react-native-webrtc"
     ]
   }
 }

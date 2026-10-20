@@ -112,6 +112,10 @@ AUDIO_UPLOAD = RateLimitRule("audio_upload", 30, _HOUR, clear_on_success=False)
 #: cuenta cada envío con video, por cuenta, y el acierto no limpia el contador (el abuso es el acierto).
 VIDEO_UPLOAD = RateLimitRule("video_upload", 10, _HOUR, clear_on_success=False)
 
+#: `POST /api/calls`. Cada llamada hace sonar el dispositivo de otra persona y abre una sala en LiveKit
+#: (se paga por uso): el acierto es el abuso, por cuenta. 30 por hora cubre un uso normal.
+CALL_START = RateLimitRule("call_start", 30, _HOUR, clear_on_success=False)
+
 #: `POST /api/reports` con motivo `child_safety` (ADR-038). Límite PROPIO y más holgado que
 #: `REPORT_CREATE`: una persona que ya hizo varios reportes comunes no debe quedarse sin poder
 #: denunciar una explotación de menores. Sigue existiendo (no es ilimitado) para que no se use

@@ -188,7 +188,7 @@ def _clean_tables(app):
     with app.app_context():
         db.session.execute(
             db.text(
-                "TRUNCATE TABLE close_friends, push_devices, refresh_tokens, password_reset_tokens, email_verification_tokens, "
+                "TRUNCATE TABLE calls, close_friends, push_devices, refresh_tokens, password_reset_tokens, email_verification_tokens, "
                 "account_deletion_codes, "
                 "user_identities, notifications, messages, mentions, muted_keywords, "
                 "sessions, two_factor_recovery_codes, rate_limit_buckets, data_exports, user_restrictions, muted_topics, "
