@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.76 (Propuesta) |
+| Versión | 0.77 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -70,6 +70,8 @@
 > **v0.60 — Tero, fase 7, automatizaciones con n8n (`ADR-041` §7, **ACEPTADO**):** `PATCH /api/users/me/privacy` acepta `weekly_summary_email` (booleano, apagado por defecto) y `GET` lo devuelve; dos rutas internas **firmadas con HMAC, no con JWT**, que solo usa n8n (§4.38); y el cierre de un reporte (`POST /api/moderation/reports/<id>/resolve`) ahora puede encargar un correo genérico a quien reportó (sin cambiar su respuesta). Variables nuevas, solo del servidor: `TERO_AUTOMATIONS_ENABLED`, `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, `N8N_TIMEOUT_SECONDS`, `N8N_MAX_RETRIES`. Una migración (`d7a3f1c8e254`: dos columnas en `users`).
 >
 > **v0.76 — interacciones de Reels (`ADR-055`, **PROPUESTO**, detrás de `VIDEOS_ENABLED`):** 7 rutas nuevas en §4.40 (`GET /api/videos/saved`, `POST`/`DELETE` de `like` y `save`, `GET`/`POST` de `comments` y `DELETE` de un comentario). Cada Reel añade `likes_count`, `comments_count`, `liked_by_me`, `saved_by_me` y `author.is_following`. Migración `d4f7b1c3e9a5`.
+>
+> **v0.77 — las historias se publican sin revisión (decisión del propietario, 2026-10-20, ADR pendiente de redactar):** `POST /api/stories` crea la historia `approved` aunque `MODERATION_ENABLED` esté encendido y no la manda a la cola del panel (`ADR-044`): las seguidoras y seguidores la ven de inmediato y puede seguir reportándose (`ADR-032`). Sin endpoints nuevos ni migración. Las historias que ya estaban `pending` siguen su curso (expiran a las 24 h). Las publicaciones y los reels no cambian.
 >
 > **v0.65 — Reels con Mux (`ADR-043`, `ADR-043-A`, **PROPUESTO**, `VIDEOS_ENABLED` apagado por defecto):** 6 rutas nuevas (§4.40). Apagado, todas responden `404`, también el webhook. **La subida pública sigue bloqueada por D3**: solo suben las cuentas de `VIDEO_UPLOAD_ALLOWLIST` (la apertura al público exige cambiar código, no una variable). El panel de moderación acepta `?type=video` (cola, detalle, decisión, apelaciones); `preview-url` de un video devuelve un HLS firmado de 5 minutos. Variables solo del servidor: `VIDEOS_ENABLED`, `VIDEO_UPLOAD_ALLOWLIST`, `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_WEBHOOK_SECRET`, `MUX_SIGNING_KEY_ID`, `MUX_SIGNING_PRIVATE_KEY`, `MUX_CORS_ORIGIN`. Comando nuevo: `flask videos-sweep`. **El adaptador HTTP de Mux no se ha probado contra Mux real** (no hay cuenta).
 >
