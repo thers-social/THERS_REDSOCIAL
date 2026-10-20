@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Icon from "@shared/components/Icon";
+import { currentIndex, frameAspect, stepIndex } from "@shared/lib/imageCarousel";
 
 /**
  * Imágenes de una publicación o de un mensaje (ADR-039), con visor al tocarlas.
@@ -8,6 +9,9 @@ import Icon from "@shared/components/Icon";
  * `images`: `[{ url, width, height }]` tal como las entrega la API. Las
  * dimensiones reservan el espacio antes de que cargue la imagen, para que el
  * feed no salte al ir apareciendo las fotos (Core Web Vitals, CLS).
+ *
+ * Una foto conserva su proporción. Varias (hasta 10) van en un carrusel, como en Instagram: se
+ * desplazan con el dedo o el trackpad y con las flechas, y un contador y unos puntos dicen en cuál estás.
  *
  * `compact`: miniaturas más pequeñas, para dentro de una burbuja de chat.
  */
@@ -30,53 +34,33 @@ export default function ImageGrid({ images: allImages, alt = "Imagen adjunta", c
 
   const count = images.length;
   const maxWidth = compact ? "max-w-[16rem]" : "max-w-full";
+  const frame = `${compact ? "rounded-[13px]" : "rounded-2xl border border-th-border"} ${maxWidth}`;
 
   return (
     <>
-      <div
-        className={`grid gap-1 overflow-hidden ${
-          compact ? "rounded-[13px]" : "rounded-2xl border border-th-border"
-        } ${maxWidth} ${
-          count === 1 ? "grid-cols-1" : "grid-cols-2"
-        }`}
-      >
-        {images.map((image, index) => {
-          // Una sola imagen conserva su proporción (con tope de alto); varias se
-          // recortan a cuadrados parejos, y la primera de tres ocupa dos columnas.
-          const single = count === 1;
-          const wide = count === 3 && index === 0;
-          return (
-            <button
-              key={image.url}
-              type="button"
-              onClick={() => setOpenIndex(index)}
-              aria-label={`Ver ${alt.toLowerCase()} ${index + 1} de ${count} en grande`}
-              className={`block overflow-hidden bg-th-surface-subtle th-focus-ring ${
-                wide ? "col-span-2" : ""
-              }`}
-            >
-              <img
-                src={image.url}
-                alt={`${alt} ${index + 1} de ${count}`}
-                width={image.width}
-                height={image.height}
-                loading="lazy"
-                decoding="async"
-                style={single ? { aspectRatio: `${image.width} / ${image.height}` } : undefined}
-                className={`w-full object-cover ${
-                  single
-                    ? compact
-                      ? "max-h-64"
-                      : "max-h-[32rem]"
-                    : wide
-                      ? "aspect-video"
-                      : "aspect-square"
-                }`}
-              />
-            </button>
-          );
-        })}
-      </div>
+      {count === 1 ? (
+        <div className={`overflow-hidden ${frame}`}>
+          <button
+            type="button"
+            onClick={() => setOpenIndex(0)}
+            aria-label={`Ver ${alt.toLowerCase()} 1 de 1 en grande`}
+            className="block w-full overflow-hidden bg-th-surface-subtle th-focus-ring"
+          >
+            <img
+              src={images[0].url}
+              alt={`${alt} 1 de 1`}
+              width={images[0].width}
+              height={images[0].height}
+              loading="lazy"
+              decoding="async"
+              style={{ aspectRatio: `${images[0].width} / ${images[0].height}` }}
+              className={`w-full object-cover ${compact ? "max-h-64" : "max-h-[32rem]"}`}
+            />
+          </button>
+        </div>
+      ) : (
+        <Carousel images={images} alt={alt} className={frame} onOpen={setOpenIndex} />
+      )}
 
       {openIndex !== null && (
         <Lightbox
@@ -167,5 +151,105 @@ function Lightbox({ images, index, alt, onChange, onClose }) {
     </div>
     ,
     document.body,
+  );
+}
+
+function Carousel({ images, alt, className, onOpen }) {
+  const trackRef = useRef(null);
+  const frame = useRef(0);
+  const [index, setIndex] = useState(0);
+  const count = images.length;
+
+  // El índice sale del desplazamiento real, así que dedo, rueda, teclado y flechas quedan siempre de acuerdo.
+  const syncIndex = () => {
+    cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => {
+      const track = trackRef.current;
+      if (track) setIndex(currentIndex(track.scrollLeft, track.clientWidth, count));
+    });
+  };
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+
+  const goTo = (target) => {
+    const track = trackRef.current;
+    if (!track) return;
+    track.scrollTo({ left: target * track.clientWidth, behavior: "smooth" });
+  };
+  const step = (delta) => goTo(stepIndex(index, delta, count));
+
+  const onKeyDown = (event) => {
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      step(1);
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      step(-1);
+    }
+  };
+
+  const arrow =
+    "absolute top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow transition hover:bg-black/75 th-focus-ring md:flex";
+
+  return (
+    <div
+      role="group"
+      aria-roledescription="carrusel"
+      aria-label={`${alt}: ${count} fotos`}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className={`relative overflow-hidden bg-th-surface-subtle ${className}`}
+    >
+      <div
+        ref={trackRef}
+        onScroll={syncIndex}
+        style={{ aspectRatio: String(frameAspect(images)) }}
+        className="flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {images.map((image, i) => (
+          <button
+            key={image.url}
+            type="button"
+            onClick={() => onOpen(i)}
+            aria-label={`Ver ${alt.toLowerCase()} ${i + 1} de ${count} en grande`}
+            className="h-full w-full flex-none snap-center snap-always th-focus-ring"
+          >
+            <img
+              src={image.url}
+              alt={`${alt} ${i + 1} de ${count}`}
+              width={image.width}
+              height={image.height}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              className="h-full w-full object-cover"
+            />
+          </button>
+        ))}
+      </div>
+
+      <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white">
+        {index + 1}/{count}
+      </span>
+
+      {index > 0 && (
+        <button type="button" onClick={() => step(-1)} aria-label="Foto anterior" className={`${arrow} left-2`}>
+          <Icon name="chevron_left" size={22} />
+        </button>
+      )}
+      {index < count - 1 && (
+        <button type="button" onClick={() => step(1)} aria-label="Foto siguiente" className={`${arrow} right-2`}>
+          <Icon name="chevron_right" size={22} />
+        </button>
+      )}
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1" aria-hidden="true">
+        {images.map((image, i) => (
+          <span
+            key={image.url}
+            className={`h-1.5 rounded-full transition-all ${i === index ? "w-4 bg-white" : "w-1.5 bg-white/55"}`}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
