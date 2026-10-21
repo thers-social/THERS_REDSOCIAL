@@ -1,0 +1,111 @@
+---
+code: "ARC-002"
+title: "Mapa del Producto"
+status: "draft"
+version: "0.1"
+author: "Fernando Escalante"
+description: "Las piezas del producto THERS (web, app Android, API, base de datos y servicios externos) y cómo se hablan entre sí."
+---
+
+import Callout from '@ui/Callout'
+
+<Callout variant="nota" title="Estado de este documento">
+  Es una vista de conjunto escrita a partir del código y de `API_CONTRACT.md`. No sustituye a los documentos de arquitectura de `docs/architecture/`: ante cualquier diferencia, mandan ellos.
+</Callout>
+
+## Las cuatro aplicaciones del monorepo
+
+`ARC-001` describe tres sistemas. Desde que se creó la app móvil (`ADR-016`) el repositorio tiene **cuatro** aplicaciones independientes, sin código compartido:
+
+| Carpeta | Qué es | Tecnología |
+|---|---|---|
+| `backend/` | La API del producto | Flask, JWT, PostgreSQL |
+| `Frontend/` | La red social en el navegador | React 19, Vite, Tailwind v3 |
+| `mobile/` | La red social en Android | React Native, Expo, TypeScript |
+| `handbook/` | Esta documentación | React, Vite, MDX |
+
+## Cómo se conectan
+
+La web y la app son **clientes de la misma API**. Ninguna habla con la base de datos ni con los servicios externos pidiendo secretos: todo lo sensible vive en el servidor.
+
+export const Diagrama = () => (
+  <svg viewBox="0 0 760 420" role="img" aria-label="Diagrama de componentes: la web y la app Android consumen la API Flask, que usa PostgreSQL y servicios externos" style={{ width: '100%', height: 'auto', maxWidth: 760 }}>
+    <style>{`
+      .dg-box { fill: var(--color-surface-raised); stroke: var(--color-border-strong); stroke-width: 1.5; }
+      .dg-api { fill: var(--color-surface-raised); stroke: var(--color-primary); stroke-width: 2.5; }
+      .dg-ext { fill: var(--color-surface); stroke: var(--color-border-strong); stroke-width: 1.5; stroke-dasharray: 5 4; }
+      .dg-t { fill: var(--color-text-primary); font: 600 16px Inter, sans-serif; }
+      .dg-s { fill: var(--color-text-secondary); font: 400 13px Inter, sans-serif; }
+      .dg-l { stroke: var(--color-text-secondary); stroke-width: 1.5; fill: none; marker-end: url(#dg-arrow); }
+      .dg-a { fill: var(--color-text-secondary); }
+    `}</style>
+    <defs>
+      <marker id="dg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" className="dg-a" />
+      </marker>
+    </defs>
+
+    <rect className="dg-box" x="40" y="30" width="190" height="64" rx="10" />
+    <text className="dg-t" x="135" y="58" textAnchor="middle">Web</text>
+    <text className="dg-s" x="135" y="78" textAnchor="middle">Frontend/ · Cloudflare Pages</text>
+
+    <rect className="dg-box" x="530" y="30" width="190" height="64" rx="10" />
+    <text className="dg-t" x="625" y="58" textAnchor="middle">App Android</text>
+    <text className="dg-s" x="625" y="78" textAnchor="middle">mobile/ · APK (Expo)</text>
+
+    <rect className="dg-api" x="215" y="165" width="330" height="90" rx="12" />
+    <text className="dg-t" x="380" y="198" textAnchor="middle">API Flask · /api</text>
+    <text className="dg-s" x="380" y="218" textAnchor="middle">Render · JWT (15 min) + refresh (30 días)</text>
+    <text className="dg-s" x="380" y="236" textAnchor="middle">sin tiempo real: los clientes consultan (polling)</text>
+
+    <rect className="dg-box" x="285" y="330" width="190" height="64" rx="10" />
+    <text className="dg-t" x="380" y="358" textAnchor="middle">PostgreSQL</text>
+    <text className="dg-s" x="380" y="378" textAnchor="middle">usuarios, posts, llamadas…</text>
+
+    <rect className="dg-ext" x="590" y="150" width="150" height="46" rx="8" />
+    <text className="dg-t" x="665" y="178" textAnchor="middle">LiveKit Cloud</text>
+    <rect className="dg-ext" x="590" y="205" width="150" height="46" rx="8" />
+    <text className="dg-t" x="665" y="233" textAnchor="middle">Mux (Reels)</text>
+    <rect className="dg-ext" x="590" y="260" width="150" height="46" rx="8" />
+    <text className="dg-t" x="665" y="288" textAnchor="middle">Google Sign-In</text>
+    <rect className="dg-ext" x="590" y="315" width="150" height="46" rx="8" />
+    <text className="dg-t" x="665" y="343" textAnchor="middle">Correo (OTP)</text>
+
+    <path className="dg-l" d="M135,94 L135,130 L260,165" />
+    <path className="dg-l" d="M625,94 L625,125 L500,165" />
+    <path className="dg-l" d="M380,255 L380,330" />
+    <path className="dg-l" d="M545,210 L590,173" />
+    <path className="dg-l" d="M545,225 L590,228" />
+    <path className="dg-l" d="M545,240 L590,283" />
+    <path className="dg-l" d="M545,250 L590,338" />
+    <path className="dg-l" d="M625,94 L665,150" strokeDasharray="4 4" />
+
+    <text className="dg-s" x="150" y="140">HTTPS + JSON</text>
+    <text className="dg-s" x="505" y="130">HTTPS + JSON</text>
+    <text className="dg-s" x="748" y="128" textAnchor="end">audio / video</text>
+  </svg>
+)
+
+<Diagrama />
+
+Las líneas punteadas y los cuadros con borde discontinuo son **servicios de terceros**. La línea de la app hacia LiveKit existe porque el audio y el video de una llamada **no pasan por nuestra API** (ver `ARC-003`). Lo mismo ocurre con los Reels: la subida y la reproducción van a Mux.
+
+## Qué guarda la API y qué no
+
+- **Sí:** cuentas, sesiones, publicaciones, mensajes, notificaciones, relaciones de seguimiento, bloqueos y el estado de cada llamada.
+- **No:** el audio ni el video de las llamadas, ni los secretos de los clientes. Las variables `VITE_*` y `EXPO_PUBLIC_*` quedan **embebidas en el paquete** y nunca llevan un secreto.
+
+## Reglas que cruzan todo el producto
+
+- Toda ruta nueva se documenta en `API_CONTRACT.md` el mismo día del PR.
+- Los interruptores `*_ENABLED` del servidor (por ejemplo `CALLS_ENABLED`) dejan una función apagada por defecto hasta configurarla.
+- Los límites de uso (*rate limiting*) se aplican por política en el servidor, no en los clientes.
+- La web aún no usa el refresh token: su sesión dura 15 minutos. La app sí lo usa.
+
+## Documentos fuente
+
+- `docs/architecture/BACKEND_ARCHITECTURE.md`
+- `docs/architecture/FRONTEND_ARCHITECTURE.md`
+- `docs/architecture/API_CONTRACT.md`
+- `docs/architecture/DATABASE_ARCHITECTURE.md`
+- `docs/mobile/` (`ADR-016` y `ADR-017`)
