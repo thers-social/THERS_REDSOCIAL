@@ -3,7 +3,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `docs/architecture/API_CONTRACT.md` |
-| Versión | 0.80 (Propuesta) |
+| Versión | 0.81 (Propuesta) |
 | Estado | **Pendiente de ratificación formal del equipo** (proceso de decisiones de alto impacto, `HB-001` §11–12) |
 | Depende de | `BACKEND_ARCHITECTURE.md` (fuente directa del estado real del backend), `DATABASE_ARCHITECTURE.md` (modelo de datos disponible), `FRONTEND_ARCHITECTURE.md` (consumidor del contrato), `HB-001` §15.1 (exige documentar cada endpoint el mismo día del PR) |
 | Autoridad sobre este documento | `/docs` oficial > estructura real observada en el código > este documento (mismo orden que `CLAUDE.md` §3) |
@@ -70,6 +70,8 @@
 > **v0.60 — Tero, fase 7, automatizaciones con n8n (`ADR-041` §7, **ACEPTADO**):** `PATCH /api/users/me/privacy` acepta `weekly_summary_email` (booleano, apagado por defecto) y `GET` lo devuelve; dos rutas internas **firmadas con HMAC, no con JWT**, que solo usa n8n (§4.38); y el cierre de un reporte (`POST /api/moderation/reports/<id>/resolve`) ahora puede encargar un correo genérico a quien reportó (sin cambiar su respuesta). Variables nuevas, solo del servidor: `TERO_AUTOMATIONS_ENABLED`, `N8N_BASE_URL`, `N8N_WEBHOOK_SECRET`, `N8N_TIMEOUT_SECONDS`, `N8N_MAX_RETRIES`. Una migración (`d7a3f1c8e254`: dos columnas en `users`).
 >
 > **v0.76 — interacciones de Reels (`ADR-055`, **PROPUESTO**, detrás de `VIDEOS_ENABLED`):** 7 rutas nuevas en §4.40 (`GET /api/videos/saved`, `POST`/`DELETE` de `like` y `save`, `GET`/`POST` de `comments` y `DELETE` de un comentario). Cada Reel añade `likes_count`, `comments_count`, `liked_by_me`, `saved_by_me` y `author.is_following`. Migración `d4f7b1c3e9a5`.
+>
+> **v0.81 — buscar personas (decisión del propietario, 2026-10-21, ADR pendiente de redactar):** nuevo `GET /api/users/search?q=` (§4.15): busca cuentas por nombre o usuario, **tengan o no publicaciones**. Reutiliza el repositorio de búsqueda de Tero (ADR-041), con sus mismas exclusiones. Aditivo; sin migración.
 >
 > **v0.80 — llamadas y videollamadas 1 a 1 con LiveKit Cloud (decisión del equipo, 2026-10-20, **sin ADR redactado**; detrás de `CALLS_ENABLED`):** 7 rutas nuevas en §4.48 (`POST /api/calls`, `GET /api/calls/incoming`, `GET /api/calls/<id>` y `accept`/`decline`/`cancel`/`end`). Migración `e5a8c2d4f6b1` (tabla `calls`). Variables solo del servidor: `CALLS_ENABLED`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `CALL_RING_SECONDS`. Sin tiempo real: el cliente consulta el estado. Suena solo con la app o la web abiertas (sin push de llamada). **No probado contra LiveKit real ni en un teléfono.**
 >
@@ -1834,6 +1836,14 @@ Los posts con un tema silenciado se omiten de `GET /api/posts`; los propios nunc
 Hasta 5 cuentas reales que la persona **todavía no sigue** (ni le pidió seguir), sin la propia y **sin cuentas con un bloqueo en ningún sentido** (§4.14). Orden: más seguidores aceptados primero.
 
 **Response (200):** `{"suggestions": [{"id", "name", "username", "is_private"}]}`. Forma reducida: nunca email ni teléfono.
+
+#### `GET /api/users/search`
+
+Busca cuentas por **nombre o usuario** (coincidencia parcial, sin distinguir mayúsculas), **tengan o no publicaciones**. Auth: sí. Query: `q` (hasta 50 caracteres; un `@` inicial se ignora) y `limit` opcional (1–30, por defecto 20; `400` si no es un número).
+
+Excluye a quien mira, a las cuentas con un bloqueo en cualquier sentido (§4.14), a las de moderación y a las suspendidas. Las cuentas privadas **sí** aparecen, solo con la forma reducida (su contenido sigue protegido, `ADR-022`). Orden: primero quien empieza por lo escrito, luego más seguidores aceptados.
+
+**Response (200):** `{"users": [{"id", "name", "username", "is_private", "avatar_url"}]}`. Sin texto en `q` devuelve `{"users": []}`, no un error. Forma reducida: nunca email ni teléfono.
 
 ---
 
