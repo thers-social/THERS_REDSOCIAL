@@ -39,6 +39,12 @@ export async function fetchSuggestions(limit, signal) {
   return data.suggestions;
 }
 
+/** `GET /api/users/search?q=`: personas por nombre o usuario, tengan o no publicaciones. */
+export async function searchUsers(query, limit, signal) {
+  const { data } = await api.get("/users/search", authConfig({ params: { q: query, ...(limit ? { limit } : {}) }, signal }));
+  return data.users;
+}
+
 /** Seguir / dejar de seguir. Devuelve `{ following, follow_status }`. */
 export async function setFollow(userId, follow) {
   const { data } = follow

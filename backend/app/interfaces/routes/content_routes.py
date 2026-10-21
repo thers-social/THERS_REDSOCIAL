@@ -2,6 +2,7 @@
 # ADR-030-content-preferences.md):
 #   · GET/POST/DELETE /api/users/me/muted-topics   temas silenciados
 #   · GET /api/users/suggestions                   cuentas sugeridas
+#   · GET /api/users/search?q=                     buscar personas por nombre o usuario
 #
 # Lo demás de la pantalla ya existía y no se toca: las palabras ocultas son
 # `/api/users/me/muted-keywords` (ADR-024) y el filtro de contenido sensible es
@@ -35,11 +36,19 @@ from app.infrastructure.persistence.repositories.muted_topic_repository import (
 from app.infrastructure.persistence.repositories.suggestion_repository import (
     SQLAlchemySuggestionRepository,
 )
+from app.infrastructure.persistence.repositories.user_search_repository import (
+    SQLAlchemyUserSearchRepository,
+)
 
 content_bp = Blueprint("content", __name__)
 
 _muted_topic_repository = SQLAlchemyMutedTopicRepository()
 _suggestion_repository = SQLAlchemySuggestionRepository()
+_user_search_repository = SQLAlchemyUserSearchRepository()
+
+_MAX_SEARCH_LENGTH = 50
+_DEFAULT_SEARCH_LIMIT = 20
+_MAX_SEARCH_LIMIT = 30
 
 
 # ===========================================================================
@@ -124,15 +133,36 @@ def get_suggestions():
     # Forma reducida: nunca email/phone/etc. Mismo criterio que el autor de un
     # post (post_presenter.py). `is_private` para que el botón diga «Solicitar»
     # y no «Seguir» cuando corresponde.
-    return jsonify({
-        "suggestions": [
-            {
-                "id": str(user.id),
-                "name": user.name,
-                "username": user.username,
-                "is_private": user.is_private,
-                "avatar_url": media_url(user.avatar_path),
-            }
-            for user in users
-        ]
-    }), 200
+    return jsonify({"suggestions": [_person(user) for user in users]}), 200
+
+
+def _person(user):
+    return {
+        "id": str(user.id),
+        "name": user.name,
+        "username": user.username,
+        "is_private": user.is_private,
+        "avatar_url": media_url(user.avatar_path),
+    }
+
+
+# ===========================================================================
+# Buscar personas por nombre o usuario
+# ===========================================================================
+@content_bp.route("/users/search", methods=["GET"])
+@jwt_required()
+def search_users():
+    viewer_id = get_jwt_identity()
+    # `@diego` y `diego` buscan lo mismo. Sin texto no hay búsqueda: lista vacía, no error.
+    query = (request.args.get("q") or "").strip().lstrip("@").strip()[:_MAX_SEARCH_LENGTH]
+    if not query:
+        return jsonify({"users": []}), 200
+    try:
+        limit = min(max(int(request.args.get("limit", _DEFAULT_SEARCH_LIMIT)), 1), _MAX_SEARCH_LIMIT)
+    except ValueError:
+        return jsonify({"msg": "limit debe ser un número"}), 400
+
+    # Aparece cualquier persona por nombre o usuario, tenga o no publicaciones. Las exclusiones
+    # (uno mismo, bloqueos en cualquier sentido, moderación y suspendidas) viven en el repositorio.
+    users = _user_search_repository.search(viewer_id, query, limit)
+    return jsonify({"users": [_person(user) for user in users]}), 200

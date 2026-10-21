@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@features/auth/context/AuthContext';
-import { fetchSuggestions, followUser, unfollowUser } from '@features/posts/api';
+import { fetchSuggestions, followUser, searchUsers, unfollowUser } from '@features/posts/api';
 import type { SuggestedUser } from '@features/posts/api';
 import { PostCard } from '@features/posts/PostCard';
 import { messageOf, usePosts } from '@features/posts/PostsContext';
@@ -19,10 +19,10 @@ import { Screen } from '@shared/ui/Screen';
 import { StateMessage } from '@shared/ui/StateMessage';
 
 /**
- * Buscar. IMPORTANTE (igual que en la web): el servidor NO tiene un buscador, así
- * que se filtran las publicaciones que ya están cargadas (las 50 más recientes) y
- * la pantalla lo dice. Las personas sugeridas sí vienen del servidor
- * (`GET /api/users/suggestions`).
+ * Buscar. Las PERSONAS se buscan en el servidor por nombre o usuario, hayan publicado o no
+ * (`GET /api/users/search`). Las PUBLICACIONES siguen sin buscador de servidor (igual que en la
+ * web): se filtran las ya cargadas (las 50 más recientes) y la pantalla lo dice. Las personas
+ * sugeridas vienen de `GET /api/users/suggestions`.
  */
 export default function Search() {
   const { user } = useAuth();
@@ -53,7 +53,7 @@ export default function Search() {
                 style={styles.input}
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Buscar creadores, etiquetas o contenido…"
+                placeholder="Buscar personas, etiquetas o contenido…"
                 placeholderTextColor={colors.fgDisabled}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -63,15 +63,18 @@ export default function Search() {
               />
             </View>
             <Text style={styles.scope}>
-              Busca entre las {posts.posts.length} publicaciones cargadas. THERS todavía no tiene un
-              buscador de servidor.
+              Las personas se buscan por nombre o usuario. Las publicaciones, entre las{' '}
+              {posts.posts.length} cargadas.
             </Text>
 
             {searching ? (
-              <View style={styles.sortRow}>
-                <SortChip label="Recientes" active={sort === 'recent'} onPress={() => setSort('recent')} />
-                <SortChip label="Más me gusta" active={sort === 'likes'} onPress={() => setSort('likes')} />
-              </View>
+              <>
+                <PeopleResults query={query} />
+                <View style={styles.sortRow}>
+                  <SortChip label="Recientes" active={sort === 'recent'} onPress={() => setSort('recent')} />
+                  <SortChip label="Más me gusta" active={sort === 'likes'} onPress={() => setSort('likes')} />
+                </View>
+              </>
             ) : (
               <>
                 <Pressable
@@ -148,23 +151,12 @@ function SortChip({ label, active, onPress }: { label: string; active: boolean; 
   );
 }
 
-/** Personas sugeridas, con seguir/dejar de seguir (`POST`/`DELETE /api/users/<id>/follow`). */
-function Suggestions() {
-  const openProfile = useOpenProfile();
-  const [people, setPeople] = useState<SuggestedUser[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // `accepted`/`pending` por id; ausente = no sigue.
-  const [following, setFollowing] = useState<Record<string, 'accepted' | 'pending'>>({});
+type FollowState = Record<string, 'accepted' | 'pending'>;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchSuggestions(controller.signal)
-      .then(setPeople)
-      .catch((e) => {
-        if (!controller.signal.aborted) setError(messageOf(e));
-      });
-    return () => controller.abort();
-  }, []);
+/** Estado de seguir/dejar de seguir por persona (`POST`/`DELETE /api/users/<id>/follow`). */
+function useFollowToggle() {
+  // `accepted`/`pending` por id; ausente = no sigue (la lista no trae la relación).
+  const [following, setFollowing] = useState<FollowState>({});
 
   async function toggle(person: SuggestedUser) {
     const current = following[person.id];
@@ -184,6 +176,67 @@ function Suggestions() {
     }
   }
 
+  return { following, toggle };
+}
+
+/** Una persona: foto y nombre llevan al perfil; «Seguir» es su propio botón. */
+function PersonRow({
+  person,
+  state,
+  onToggle,
+}: {
+  person: SuggestedUser;
+  state: FollowState[string] | undefined;
+  onToggle: (person: SuggestedUser) => void;
+}) {
+  const openProfile = useOpenProfile();
+  return (
+    <View style={styles.person}>
+      <Pressable
+        onPress={() => openProfile(person.id)}
+        style={styles.personTap}
+        accessibilityRole="button"
+        accessibilityLabel={`Ver el perfil de ${person.name}`}
+      >
+        <Avatar name={person.name} uri={person.avatar_url} size={40} />
+        <View style={styles.personText}>
+          <Text style={styles.personName} numberOfLines={1}>
+            {person.name}
+          </Text>
+          <Text style={styles.personUser} numberOfLines={1}>
+            @{person.username}
+          </Text>
+        </View>
+      </Pressable>
+      <Pressable
+        onPress={() => onToggle(person)}
+        style={[styles.followBtn, state ? styles.followBtnOn : null]}
+        accessibilityRole="button"
+      >
+        <Text style={[styles.followText, state ? styles.followTextOn : null]}>
+          {state === 'accepted' ? 'Siguiendo' : state === 'pending' ? 'Solicitado' : person.is_private ? 'Solicitar' : 'Seguir'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Personas sugeridas, con seguir/dejar de seguir. */
+function Suggestions() {
+  const [people, setPeople] = useState<SuggestedUser[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { following, toggle } = useFollowToggle();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchSuggestions(controller.signal)
+      .then(setPeople)
+      .catch((e) => {
+        if (!controller.signal.aborted) setError(messageOf(e));
+      });
+    return () => controller.abort();
+  }, []);
+
   if (error) return <Text style={styles.suggestError}>No pudimos cargar las sugerencias.</Text>;
   if (people === null) return <StateMessage kind="loading" />;
   if (people.length === 0) return null;
@@ -191,39 +244,53 @@ function Suggestions() {
   return (
     <View style={styles.suggest}>
       <Text style={styles.suggestTitle}>Personas que quizá conozcas</Text>
-      {people.map((person) => {
-        const state = following[person.id];
-        return (
-          <View key={person.id} style={styles.person}>
-            {/* Foto y nombre llevan al perfil; «Seguir» sigue siendo su propio botón. */}
-            <Pressable
-              onPress={() => openProfile(person.id)}
-              style={styles.personTap}
-              accessibilityRole="button"
-              accessibilityLabel={`Ver el perfil de ${person.name}`}
-            >
-              <Avatar name={person.name} uri={person.avatar_url} size={40} />
-              <View style={styles.personText}>
-                <Text style={styles.personName} numberOfLines={1}>
-                  {person.name}
-                </Text>
-                <Text style={styles.personUser} numberOfLines={1}>
-                  @{person.username}
-                </Text>
-              </View>
-            </Pressable>
-            <Pressable
-              onPress={() => toggle(person)}
-              style={[styles.followBtn, state ? styles.followBtnOn : null]}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.followText, state ? styles.followTextOn : null]}>
-                {state === 'accepted' ? 'Siguiendo' : state === 'pending' ? 'Solicitado' : person.is_private ? 'Solicitar' : 'Seguir'}
-              </Text>
-            </Pressable>
-          </View>
-        );
-      })}
+      {people.map((person) => (
+        <PersonRow key={person.id} person={person} state={following[person.id]} onToggle={toggle} />
+      ))}
+    </View>
+  );
+}
+
+const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * Personas que coinciden con lo escrito, por nombre o @usuario, hayan publicado o no. Pide al
+ * servidor con una pequeña espera y descarta la respuesta de una consulta ya superada.
+ */
+function PeopleResults({ query }: { query: string }) {
+  const needle = query.trim();
+  const [people, setPeople] = useState<SuggestedUser[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const { following, toggle } = useFollowToggle();
+
+  useEffect(() => {
+    if (!needle) return undefined;
+    const controller = new AbortController();
+    setPeople(null);
+    setFailed(false);
+    const timer = setTimeout(() => {
+      searchUsers(needle, controller.signal)
+        .then(setPeople)
+        .catch(() => {
+          if (!controller.signal.aborted) setFailed(true);
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [needle]);
+
+  if (failed) return <Text style={styles.suggestError}>No pudimos buscar personas ahora.</Text>;
+  if (people === null) return <StateMessage kind="loading" message="Buscando personas…" />;
+  if (people.length === 0) return <Text style={styles.suggestError}>No hay personas con «{needle}».</Text>;
+
+  return (
+    <View style={styles.suggest}>
+      <Text style={styles.suggestTitle}>Personas</Text>
+      {people.map((person) => (
+        <PersonRow key={person.id} person={person} state={following[person.id]} onToggle={toggle} />
+      ))}
     </View>
   );
 }

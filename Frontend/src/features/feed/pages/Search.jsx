@@ -3,6 +3,7 @@ import { Link, useOutletContext, useSearchParams } from "react-router-dom";
 import Icon from "@shared/components/Icon";
 import Spinner from "@shared/components/Spinner";
 import CapsuleCard from "../components/CapsuleCard";
+import PeopleResults from "../components/PeopleResults";
 import SearchRail from "../components/SearchRail";
 import { PlaceSuggestions, VideoSuggestions } from "../components/SearchSuggestions";
 
@@ -35,6 +36,7 @@ import { PlaceSuggestions, VideoSuggestions } from "../components/SearchSuggesti
 
 const SCOPES = [
   { id: "all", label: "Todos los resultados", icon: null },
+  { id: "people", label: "Personas", icon: "group" },
   { id: "videos", label: "Videos", icon: "videocam" },
   { id: "capsules", label: "Cápsulas", icon: "history_toggle_off" },
   { id: "places", label: "Lugares", icon: "near_me" },
@@ -159,7 +161,7 @@ export default function Search() {
               type="search"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder="Buscar publicaciones, lugares, videos..."
+              placeholder="Buscar personas, publicaciones, lugares..."
               className="min-h-[48px] w-full rounded-th-input border border-th-border bg-th-surface-subtle py-2.5 pl-12 pr-11 text-body-md text-th-fg placeholder:text-th-fg-muted transition-colors th-focus-ring focus:bg-th-surface"
             />
             {draft && (
@@ -258,6 +260,8 @@ export default function Search() {
             <span aria-live="polite">
               {scopeParam === "places" || scopeParam === "videos"
                 ? "Sugerencias"
+                : scopeParam === "people"
+                ? "Personas"
                 : capsulesLoading
                 ? "Cargando…"
                 : `${results.length.toLocaleString("es")} ${
@@ -286,7 +290,24 @@ export default function Search() {
       {/* 3. Rejilla de 12 columnas */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="flex flex-col gap-6 lg:col-span-8">
-          {scopeParam === "places" ? (
+          {/* Personas: las busca el servidor por nombre o usuario, hayan publicado o no. En «Todos»
+              van arriba y recortadas; en «Personas» son lo único que se muestra. */}
+          {(scopeParam === "all" || scopeParam === "people") && (
+            <PeopleResults
+              query={queryParam}
+              limit={scopeParam === "people" ? 30 : 5}
+              showEmpty={scopeParam === "people"}
+            />
+          )}
+          {scopeParam === "people" ? (
+            !queryParam && (
+              <EmptyState
+                icon="group"
+                title="Busca a alguien"
+                description="Escribe un nombre o un @usuario para encontrar personas, aunque todavía no hayan publicado."
+              />
+            )
+          ) : scopeParam === "places" ? (
             <PlaceSuggestions query={queryParam} />
           ) : scopeParam === "videos" ? (
             <VideoSuggestions />

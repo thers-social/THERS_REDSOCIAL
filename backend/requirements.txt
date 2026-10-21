@@ -57,7 +57,7 @@ python-dotenv==1.2.3
 # y re-codifica cada imagen subida (descarta EXIF). boto3 es el cliente S3 para
 # Supabase Storage / Cloudflare R2 / S3. Ambos se importan solo desde
 # infrastructure/media/ (mismo principio que confina `resend` a infrastructure/email/).
-Pillow==12.3.0
+Pillow==13.0.0
 boto3==1.43.103
 
 # Notas de voz (ADR-042). PyAV trae ffmpeg empaquetado (unos 65 MB): decodifica por contenido y

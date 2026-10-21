@@ -148,3 +148,12 @@ export async function fetchSuggestions(signal?: AbortSignal, limit?: number): Pr
   });
   return suggestions;
 }
+
+/** Personas por nombre o usuario, hayan publicado o no (`GET /api/users/search`, contrato §4.15). */
+export async function searchUsers(query: string, signal?: AbortSignal, limit = 20): Promise<SuggestedUser[]> {
+  const { users } = await request<{ users: SuggestedUser[] }>(
+    `/users/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+    { authenticated: true, signal },
+  );
+  return users;
+}
