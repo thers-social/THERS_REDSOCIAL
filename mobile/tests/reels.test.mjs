@@ -15,6 +15,11 @@ import {
   uploadErrorMessage,
   validateCaption,
   validatePicked,
+  formatCount,
+  withLike,
+  withSaved,
+  reelUrl,
+  commentErrorMessage,
 } from '../src/features/videos/reelsLogic.ts';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf-8');
@@ -92,34 +97,62 @@ describe('errores, claves y listas', () => {
   });
 });
 
+describe('lógica de la pantalla completa (ADR-055)', () => {
+  it('formatea contadores compactos', () => {
+    assert.equal(formatCount(undefined), '0');
+    assert.equal(formatCount(999), '999');
+    assert.equal(formatCount(1200), '1.2K');
+    assert.equal(formatCount(3_400_000), '3.4M');
+  });
+
+  it('dar y quitar me gusta cambia el contador una sola vez', () => {
+    const v = { id: 'a', liked_by_me: false, likes_count: 3 };
+    const liked = withLike(v, true);
+    assert.deepEqual([liked.liked_by_me, liked.likes_count], [true, 4]);
+    assert.equal(withLike(liked, true), liked);
+    assert.equal(withLike(liked, false).likes_count, 3);
+  });
+
+  it('guardar no toca contadores y el enlace apunta al Reel', () => {
+    assert.equal(withSaved({ id: 'a', saved_by_me: false }, true).saved_by_me, true);
+    assert.equal(reelUrl('https://x.test', 'a b'), 'https://x.test/videos?v=a%20b');
+  });
+
+  it('traduce los errores de comentar', () => {
+    assert.match(commentErrorMessage(429), /muy rápido/);
+    assert.match(commentErrorMessage(404), /ya no está disponible/);
+    assert.equal(commentErrorMessage(400, 'Escribe algo'), 'Escribe algo');
+  });
+});
+
 describe('la pantalla y el cliente', () => {
   const screen = read('app/(tabs)/reels.tsx');
+  const slide = read('src/features/videos/ReelSlide.tsx');
   const api = read('src/features/videos/api.ts');
-  const player = read('src/features/videos/ReelPlayer.tsx');
 
   it('con el módulo apagado (404) muestra «Próximamente» como antes', () => {
     assert.match(screen, /e\.status === 404 \? 'off'/);
     assert.match(screen, /llegará pronto/);
   });
 
-  it('oculta la subida si el servidor dice que la cuenta no puede subir (D3)', () => {
-    assert.match(screen, /D3/);
-    assert.match(screen, /setUploadUnavailable\(true\)/);
-    assert.match(screen, /!uploadUnavailable/);
+  it('es un feed vertical a pantalla completa, un Reel por pantalla', () => {
+    assert.match(screen, /pagingEnabled/);
+    assert.match(screen, /snapToInterval=\{height\}/);
+  });
+
+  it('solo hay reproductores para el Reel activo y sus vecinos', () => {
+    assert.match(screen, /Math\.abs\(index - active\) <= 1/);
+    assert.match(slide, /near && playable/);
   });
 
   it('sube directo a Mux sin mandar el JWT de THERS a otro dominio', () => {
-    assert.match(api, /fetch\(uploadUrl, \{ method: 'PUT', body: file \}\)/);
+    assert.match(api, /uploadAsync\(uploadUrl, fileUri/);
+    assert.match(api, /httpMethod: 'PUT'/);
     assert.ok(!/Authorization/.test(api));
     assert.match(api, /idempotency_key: idempotencyKey/);
   });
 
-  it('el reproductor solo se monta al pulsar «Reproducir» y declara que no se probó en teléfono', () => {
-    assert.match(screen, /playing === item\.id/);
-    assert.match(player, /NO se ha probado en un teléfono/);
-  });
-
   it('no lee identificadores de Mux ni claves de almacenamiento', () => {
-    assert.ok(!/storage_key|mux_/.test(screen + api + player));
+    assert.ok(!/storage_key|mux_/.test(screen + api + slide));
   });
 });
