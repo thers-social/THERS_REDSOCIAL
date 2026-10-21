@@ -89,3 +89,39 @@ export function mergeVideos(current: ReelVideo[], incoming: ReelVideo[]): ReelVi
   const seen = new Set(current.map((v) => v.id));
   return [...current, ...incoming.filter((v) => !seen.has(v.id))];
 }
+
+// --- Pantalla completa (ADR-055) -----------------------------------------------------------------
+
+/** 1.2K, 3.4M… para los contadores del carril de acciones. */
+export function formatCount(value: number | null | undefined): string {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '0';
+  if (n < 1000) return String(Math.floor(n));
+  const compact = (divisor: number, suffix: string) => {
+    const scaled = Math.floor((n / divisor) * 10) / 10;
+    return `${Number.isInteger(scaled) ? scaled : scaled.toFixed(1)}${suffix}`;
+  };
+  return n < 1_000_000 ? compact(1000, 'K') : compact(1_000_000, 'M');
+}
+
+/** Resultado optimista de dar o quitar «me gusta»: cambia el estado y el contador una sola vez. */
+export function withLike(video: ReelVideo, liked: boolean): ReelVideo {
+  if (!!video.liked_by_me === liked) return video;
+  return { ...video, liked_by_me: liked, likes_count: Math.max(0, (video.likes_count ?? 0) + (liked ? 1 : -1)) };
+}
+
+export function withSaved(video: ReelVideo, saved: boolean): ReelVideo {
+  return { ...video, saved_by_me: saved };
+}
+
+/** Enlace para compartir un Reel: el mismo que la web, que abre ese Reel primero. */
+export function reelUrl(origin: string, id: string): string {
+  return `${origin}/videos?v=${encodeURIComponent(id)}`;
+}
+
+export function commentErrorMessage(status: number | undefined, serverMessage?: string): string {
+  if (status === 429) return 'Estás comentando muy rápido. Espera un momento.';
+  if (status === 404) return 'Este Reel ya no está disponible.';
+  if (status === 400 && serverMessage) return serverMessage;
+  return 'No se pudo publicar el comentario.';
+}

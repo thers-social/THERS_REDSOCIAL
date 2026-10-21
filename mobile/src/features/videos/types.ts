@@ -4,12 +4,23 @@ export type ReelStatus = 'pending' | 'uploading' | 'processing' | 'ready' | 'fai
 
 export type ReelVideo = {
   id: string;
-  author: { id: string; username: string; name: string; avatar_url: string | null };
+  author: {
+    id: string;
+    username: string;
+    name: string;
+    avatar_url: string | null;
+    is_following?: boolean;
+    follow_pending?: boolean;
+  };
   caption: string | null;
   duration_ms: number | null;
   width: number | null;
   height: number | null;
   created_at: string;
+  likes_count?: number;
+  comments_count?: number;
+  liked_by_me?: boolean;
+  saved_by_me?: boolean;
   /** HLS firmado y de vida corta, solo si está listo Y aprobado. */
   playback: { hls_url: string; expires_in: number } | null;
   // Solo para su dueño:
@@ -21,3 +32,12 @@ export type ReelVideo = {
 export type ReelFeed = { videos: ReelVideo[]; has_more: boolean };
 
 export type UploadReservation = { id: string; status: ReelStatus; upload_url: string | null };
+
+export type ReelComment = {
+  id: string;
+  video_id: string;
+  content: string;
+  created_at: string;
+  author: { id: string; username: string; name: string; avatar_url: string | null };
+  can_delete: boolean;
+};

@@ -43,6 +43,8 @@ export type IconName =
   | 'play'
   | 'pause'
   | 'stop'
+  | 'volume'
+  | 'volumeOff'
   | 'close'
   | 'check';
 
@@ -262,6 +264,18 @@ export function Icon({ name, size = 24, color, filled = false }: Props) {
         </>
       ) : null}
       {name === 'stop' ? <Rect x="6" y="6" width="12" height="12" rx="2" {...stroke} fill={tint} /> : null}
+      {name === 'volume' ? (
+        <>
+          <Path d="M11 5 6 9H3v6h3l5 4z" {...line} />
+          <Path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" {...line} />
+        </>
+      ) : null}
+      {name === 'volumeOff' ? (
+        <>
+          <Path d="M11 5 6 9H3v6h3l5 4z" {...line} />
+          <Path d="m16 9 5 6M21 9l-5 6" {...line} />
+        </>
+      ) : null}
       {name === 'close' ? <Path d="M6 6l12 12M18 6 6 18" {...line} /> : null}
     </Svg>
   );
