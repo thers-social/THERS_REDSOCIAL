@@ -34,6 +34,20 @@
     "messagesUnread": "Messages, {{count}} unread",
     "places": "Places"
   },
+  "install": {
+    "button": "Install app",
+    "close": "Close",
+    "desktopTitle": "Take THERS on your phone",
+    "desktopHint": "Open your phone's camera, scan this code and download the app.",
+    "qrAlt": "QR code to install the THERS app",
+    "qrPending": "The QR code will go here",
+    "androidTitle": "Install THERS on your Android",
+    "androidHint": "Download the app file and open it to install. Your phone may ask for permission to install from the browser.",
+    "androidDownload": "Download the app",
+    "androidPending": "The download will be available very soon.",
+    "iosTitle": "Android app",
+    "iosHint": "For now the THERS app is Android only. You can keep using THERS from your browser."
+  },
   "auth": {
     "close": "Close",
     "or": "or",

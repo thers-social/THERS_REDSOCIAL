@@ -34,6 +34,20 @@
     "messagesUnread": "Mensajes, {{count}} sin leer",
     "places": "Lugares"
   },
+  "install": {
+    "button": "Instalar aplicación",
+    "close": "Cerrar",
+    "desktopTitle": "Lleva THERS en tu celular",
+    "desktopHint": "Abre la cámara de tu celular, escanea este código y descarga la aplicación.",
+    "qrAlt": "Código QR para instalar la aplicación de THERS",
+    "qrPending": "Aquí irá el código QR",
+    "androidTitle": "Instalar THERS en tu Android",
+    "androidHint": "Descarga el archivo de la aplicación y ábrelo para instalarla. Tu teléfono puede pedirte permiso para instalar desde el navegador.",
+    "androidDownload": "Descargar la aplicación",
+    "androidPending": "La descarga estará disponible muy pronto.",
+    "iosTitle": "Aplicación para Android",
+    "iosHint": "Por ahora la aplicación de THERS es solo para Android. Puedes seguir usando THERS desde el navegador."
+  },
   "auth": {
     "close": "Cerrar",
     "or": "o",

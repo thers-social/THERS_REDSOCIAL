@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import collage from "@/assets/collage.png";
 import logo from "@/assets/logo_oficial.jpeg";
 import { useAuth } from "@features/auth";
+import { InstallAppButton } from "@features/install";
 import { getErrorMessage } from "@shared/lib/api";
 import { Footer } from "@shared/components/Footer";
 import { useToast } from "@shared/components/Toast";
@@ -42,19 +43,23 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white relative">
+    <div className="min-h-[100dvh] flex flex-col bg-white relative">
 
-      <div className="absolute top-5 left-5 z-10 bg-white/10 backdrop-blur-md p-2 rounded-full shadow-lg">
-        <img
-          src={logo}
-          alt="THERS"
-          className="w-12 h-12 rounded-full object-cover"
-        />
-      </div>
+      {/* En el celular el logo y el idioma son una fila normal arriba: antes flotaban (absolute)
+          encima del título. Desde `md`, con el collage a la izquierda, vuelven a flotar sobre él. */}
+      <header className="flex items-center justify-between px-5 pt-5 md:pointer-events-none md:absolute md:inset-x-0 md:top-0 md:z-10">
+        <div className="bg-white/10 backdrop-blur-md p-1.5 md:p-2 rounded-full shadow-lg md:pointer-events-auto">
+          <img
+            src={logo}
+            alt="THERS"
+            className="w-11 h-11 md:w-12 md:h-12 rounded-full object-cover"
+          />
+        </div>
 
-      <div className="absolute top-5 right-5 z-10">
-        <LanguageSwitcher />
-      </div>
+        <div className="md:pointer-events-auto">
+          <LanguageSwitcher />
+        </div>
+      </header>
 
       <div className="flex-1 flex">
         {/* IZQUIERDA */}
@@ -77,13 +82,13 @@ export default function AuthPage() {
         </div>
 
         {/* DERECHA */}
-        <div className="w-full md:w-1/2 flex flex-col justify-center px-10 max-w-md mx-auto">
+        <div className="w-full md:w-1/2 flex flex-col justify-center px-6 sm:px-10 py-8 max-w-md mx-auto">
 
-          <h1 className="text-5xl font-extrabold mb-6 leading-tight">
+          <h1 className="text-4xl sm:text-5xl font-extrabold mb-4 sm:mb-6 leading-tight">
             {t("auth.landing.title")}
           </h1>
 
-          <h2 className="text-2xl font-bold mb-6">
+          <h2 className="text-xl sm:text-2xl font-bold mb-5 sm:mb-6">
             {t("auth.landing.subtitle")}
           </h2>
 
@@ -120,7 +125,7 @@ export default function AuthPage() {
             </Link>.
           </p>
 
-          <div className="mt-10 text-sm font-semibold flex justify-center gap-2 items-center">
+          <div className="mt-8 text-sm font-semibold flex flex-wrap justify-center gap-2 items-center">
             <span className="font-bold">{t("auth.landing.alreadyHaveAccount")}</span>
 
             <button
@@ -129,6 +134,11 @@ export default function AuthPage() {
             >
               {t("auth.landing.login")}
             </button>
+          </div>
+
+          {/* QR en computadora, descarga del APK en Android (features/install). */}
+          <div className="mt-6">
+            <InstallAppButton />
           </div>
 
         </div>
