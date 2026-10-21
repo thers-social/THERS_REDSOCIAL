@@ -1,0 +1,169 @@
+---
+code: "ARC-003"
+title: "Llamadas y videollamadas"
+status: "draft"
+version: "0.1"
+author: "Fernando Escalante"
+description: "Cómo funcionan las llamadas 1 a 1 con LiveKit Cloud: piezas, flujo, estados, reglas y límites."
+---
+
+import Callout from '@ui/Callout'
+
+<Callout variant="nota" title="Decisión sin ADR">
+  El equipo eligió LiveKit Cloud el 2026-10-20 **sin redactar un ADR**, por falta de tiempo. Este documento describe lo implementado; la decisión debería ratificarse después como ADR (`HB-001` §11–12).
+</Callout>
+
+## Resumen
+
+Desde un chat directo, una persona puede llamar o videollamar a otra. La API **no toca el audio ni el video**: solo registra la llamada y entrega un pase de acceso a una sala. El sonido y la imagen viajan directo entre los dispositivos, a través de LiveKit Cloud.
+
+| Pieza | Responsabilidad |
+|---|---|
+| **API (Flask)** | Crea la llamada, aplica las reglas, cambia su estado y firma el pase (token) de la sala. |
+| **LiveKit Cloud** | Mueve el audio y el video entre los dos dispositivos. |
+| **Web y app** | Botones en el chat, pantallas de llamada y conexión a la sala con el pase recibido. |
+
+El secreto de LiveKit (`LIVEKIT_API_SECRET`) existe **solo en el servidor**. Los clientes únicamente reciben un pase temporal para una sala concreta.
+
+## Flujo de una llamada
+
+export const Secuencia = () => (
+  <svg viewBox="0 0 760 560" role="img" aria-label="Secuencia de una llamada entre A y B, con la API y LiveKit" style={{ width: '100%', height: 'auto', maxWidth: 760 }}>
+    <style>{`
+      .sq-h { fill: var(--color-surface-raised); stroke: var(--color-border-strong); stroke-width: 1.5; }
+      .sq-life { stroke: var(--color-border-strong); stroke-width: 1.5; stroke-dasharray: 5 4; }
+      .sq-t { fill: var(--color-text-primary); font: 600 18px Inter, sans-serif; }
+      .sq-s { fill: var(--color-text-secondary); font: 400 16px Inter, sans-serif; }
+      .sq-m { stroke: var(--color-primary); stroke-width: 1.8; fill: none; marker-end: url(#sq-arrow); }
+      .sq-d { stroke: var(--color-secondary); stroke-width: 1.8; fill: none; marker-end: url(#sq-arrow2); }
+      .sq-a { fill: var(--color-primary); }
+      .sq-a2 { fill: var(--color-secondary); }
+    `}</style>
+    <defs>
+      <marker id="sq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" className="sq-a" /></marker>
+      <marker id="sq-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" className="sq-a2" /></marker>
+    </defs>
+
+    <rect className="sq-h" x="30" y="10" width="110" height="38" rx="8" /><text className="sq-t" x="85" y="34" textAnchor="middle">Persona A</text>
+    <rect className="sq-h" x="230" y="10" width="110" height="38" rx="8" /><text className="sq-t" x="285" y="34" textAnchor="middle">API</text>
+    <rect className="sq-h" x="420" y="10" width="110" height="38" rx="8" /><text className="sq-t" x="475" y="34" textAnchor="middle">LiveKit</text>
+    <rect className="sq-h" x="620" y="10" width="110" height="38" rx="8" /><text className="sq-t" x="675" y="34" textAnchor="middle">Persona B</text>
+
+    <line className="sq-life" x1="85" y1="48" x2="85" y2="540" />
+    <line className="sq-life" x1="285" y1="48" x2="285" y2="540" />
+    <line className="sq-life" x1="475" y1="48" x2="475" y2="540" />
+    <line className="sq-life" x1="675" y1="48" x2="675" y2="540" />
+
+    <path className="sq-m" d="M85,90 L283,90" />
+    <text className="sq-s" x="92" y="82">1 · POST /api/calls (B, audio o video)</text>
+    <path className="sq-m" d="M283,120 L87,120" />
+    <text className="sq-s" x="92" y="140">2 · llamada «sonando» + pase de sala</text>
+
+    <path className="sq-m" d="M675,175 L287,175" />
+    <text className="sq-s" x="300" y="167">3 · B consulta /incoming (cada ~4 s)</text>
+    <path className="sq-m" d="M287,200 L673,200" />
+    <text className="sq-s" x="300" y="220">4 · hay una llamada entrante → suena</text>
+
+    <path className="sq-m" d="M675,265 L287,265" />
+    <text className="sq-s" x="300" y="257">5 · B contesta: POST /accept</text>
+    <path className="sq-m" d="M287,290 L673,290" />
+    <text className="sq-s" x="300" y="310">6 · estado «activa» + pase de B</text>
+
+    <path className="sq-d" d="M87,355 L473,355" />
+    <text className="sq-s" x="110" y="347">7 · A entra a la sala (pase 2)</text>
+    <path className="sq-d" d="M673,385 L477,385" />
+    <text className="sq-s" x="560" y="377">8 · B entra a la sala</text>
+    <path className="sq-d" d="M87,425 L473,425" />
+    <path className="sq-d" d="M473,425 L673,425" />
+    <text className="sq-s" x="150" y="445">9 · audio y video directos (no pasan por la API)</text>
+
+    <path className="sq-m" d="M85,490 L283,490" />
+    <text className="sq-s" x="92" y="482">10 · cuelga: POST /end</text>
+    <path className="sq-m" d="M287,515 L673,515" />
+    <text className="sq-s" x="300" y="535">11 · B ve «terminada» y se cierra</text>
+  </svg>
+)
+
+<Secuencia />
+
+1. La persona que llama envía `POST /api/calls` con a quién y de qué tipo (`audio` o `video`).
+2. La API crea la llamada en estado **sonando** y devuelve un pase de sala para quien llama.
+3. La otra persona consulta `GET /api/calls/incoming` cada pocos segundos. **No hay tiempo real en el servidor.**
+4. Al aparecer la llamada, suena la pantalla de llamada entrante.
+5. Si contesta, `POST /api/calls/<id>/accept` la pasa a **activa** y le da su propio pase.
+6. Ambas personas entran a la misma sala de LiveKit y el audio y el video fluyen directo.
+7. Al colgar, `POST /api/calls/<id>/end` la marca **terminada**; la otra pantalla se cierra al consultar el estado o al detectar que la persona salió de la sala.
+
+## Estados de una llamada
+
+export const Estados = () => (
+  <svg viewBox="0 0 760 300" role="img" aria-label="Estados de una llamada: sonando pasa a activa, rechazada, cancelada o perdida; activa pasa a terminada" style={{ width: '100%', height: 'auto', maxWidth: 760 }}>
+    <style>{`
+      .st-b { fill: var(--color-surface-raised); stroke: var(--color-border-strong); stroke-width: 1.5; }
+      .st-ok { fill: var(--color-surface-raised); stroke: var(--color-success); stroke-width: 2; }
+      .st-no { fill: var(--color-surface-raised); stroke: var(--color-danger); stroke-width: 2; }
+      .st-t { fill: var(--color-text-primary); font: 600 18px Inter, sans-serif; }
+      .st-s { fill: var(--color-text-secondary); font: 400 16px Inter, sans-serif; }
+      .st-l { stroke: var(--color-text-secondary); stroke-width: 1.6; fill: none; marker-end: url(#st-arrow); }
+      .st-a { fill: var(--color-text-secondary); }
+    `}</style>
+    <defs>
+      <marker id="st-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" className="st-a" /></marker>
+    </defs>
+
+    <rect className="st-b" x="30" y="115" width="130" height="50" rx="25" /><text className="st-t" x="95" y="145" textAnchor="middle">sonando</text>
+    <rect className="st-ok" x="300" y="40" width="130" height="50" rx="25" /><text className="st-t" x="365" y="70" textAnchor="middle">activa</text>
+    <rect className="st-b" x="620" y="40" width="130" height="50" rx="25" /><text className="st-t" x="685" y="70" textAnchor="middle">terminada</text>
+    <rect className="st-no" x="300" y="150" width="130" height="44" rx="22" /><text className="st-t" x="365" y="177" textAnchor="middle">rechazada</text>
+    <rect className="st-no" x="300" y="205" width="130" height="44" rx="22" /><text className="st-t" x="365" y="232" textAnchor="middle">cancelada</text>
+    <rect className="st-no" x="300" y="260" width="130" height="36" rx="18" /><text className="st-t" x="365" y="284" textAnchor="middle">perdida</text>
+
+    <path className="st-l" d="M160,128 L298,70" />
+    <text className="st-s" x="170" y="88">B contesta</text>
+    <path className="st-l" d="M160,145 L298,170" />
+    <text className="st-s" x="170" y="168">B rechaza</text>
+    <path className="st-l" d="M150,165 L298,226" />
+    <text className="st-s" x="178" y="215">A cancela</text>
+    <path className="st-l" d="M115,165 L298,278" />
+    <text className="st-s" x="130" y="262">nadie contesta (30 s)</text>
+    <path className="st-l" d="M430,65 L618,65" />
+    <text className="st-s" x="448" y="88">cualquiera cuelga</text>
+    <path className="st-l" d="M420,58 C480,15 570,15 622,50" strokeDasharray="4 4" />
+    <text className="st-s" x="470" y="22">o pasan 4 h</text>
+  </svg>
+)
+
+<Estados />
+
+Los estados terminales son `declined`, `cancelled`, `missed` y `ended`. Las transiciones se hacen con una actualización condicional en la base de datos, así que dos acciones simultáneas (por ejemplo, contestar y cancelar a la vez) no dejan la llamada en un estado inconsistente. Colgar una llamada ya terminada no da error.
+
+## Reglas
+
+- **Quién puede llamar:** las mismas reglas que un mensaje directo. Si hay un bloqueo entre las dos personas, o la privacidad de «quién puede escribirme» no lo permite, la llamada se rechaza.
+- **Una llamada a la vez:** si la otra persona ya está en una llamada, la API responde `409 busy`.
+- **No contesta:** a los 30 segundos (`CALL_RING_SECONDS`) pasa a **perdida**.
+- **Duración máxima:** una llamada activa termina sola a las 4 horas.
+- **Límite de uso:** 30 llamadas iniciadas por hora y persona.
+- **Pase de sala:** vale 2 horas y solo da acceso a la sala de esa llamada.
+- **Apagado por defecto:** sin `CALLS_ENABLED` y las tres variables `LIVEKIT_*`, `POST /api/calls` responde `503 calls_disabled`.
+
+## Qué no hace todavía
+
+<Callout variant="advertencia" title="Límites de esta primera versión">
+  - **No suena con la app o el navegador cerrados.** Haría falta una notificación push y, en Android, una pantalla de llamada entrante a pantalla completa.
+  - Sin llamadas de grupo, grabación, compartir pantalla ni historial de llamadas.
+  - Sin mensaje de «llamada perdida» en el chat.
+  - La sesión de la web dura 15 minutos y no usa refresh token, así que pasado ese tiempo la web deja de consultar llamadas entrantes hasta volver a iniciar sesión.
+</Callout>
+
+## Dónde está en el código
+
+| Qué | Dónde |
+|---|---|
+| Contrato HTTP | `docs/architecture/API_CONTRACT.md` §4.48 |
+| Puesta en marcha (LiveKit, Render, APK) y prueba de humo | `docs/CALLS_LIVEKIT_SETUP.md` |
+| Casos de uso y reglas | `backend/app/application/calls/` |
+| Rutas | `backend/app/interfaces/routes/call_routes.py` |
+| Tabla `calls` | migración `e5a8c2d4f6b1` |
+| Web | `Frontend/src/features/calls/` |
+| App | `mobile/src/features/calls/` |
